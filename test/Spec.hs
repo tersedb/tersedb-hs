@@ -33,6 +33,7 @@ import Lib.Types.Store.Space (Space (..))
 import Lib.Types.Group
   ( storeGroup
   , linkGroups
+  , unlinkGroups
   , resetTabulation
   , initTabulatedPermissionsForGroup
   , adjustUniversePermission
@@ -40,12 +41,13 @@ import Lib.Types.Group
   )
 
 import qualified Data.Aeson as Aeson
+import Data.HashSet (HashSet)
 import qualified Data.HashSet as HS
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HM
 import Data.Foldable (traverse_, for_)
 import qualified Data.Text.Lazy as LT
-import Data.Maybe (isNothing)
+import Data.Maybe (isNothing, fromJust)
 import Text.Read (readMaybe)
 import Text.Pretty.Simple (pShowNoColor)
 import Topograph (pairs)
@@ -96,13 +98,6 @@ main = sydTest $ do
         if length xs <= 1 then True `shouldBe` True
         else hasCycle (loadCycle xs) `shouldBe` Just (xs !! 0 : reverse xs)
   describe "Store" $ do
-    it "tabulating while linking is the same as tabulating after linking" $
-      property $ \(xs :: SampleGroupTree ()) ->
-        loadSampleTree xs `shouldBe` execState resetTabulation (loadSampleTreeNoTab xs)
-    it "resetting tabulation is idempotent" $
-      property $ \(xs :: SampleGroupTree ()) ->
-        execState (resetTabulation >> resetTabulation) (loadSampleTreeNoTab xs)
-          `shouldBe` execState resetTabulation (loadSampleTreeNoTab xs)
     let testPermissionInheritance root cs store =
           let tabs = store ^. toTabulatedPermissions
               descendants =
@@ -117,17 +112,49 @@ main = sydTest $ do
                       (Just r, Just d) ->
                         (store, r, d) `shouldSatisfy` (\_ -> r `hasLessOrEqualPermissionsTo` d)
                       tabs -> error $ "Tab wasn't found " <> show tabs
-    describe "total vs. incremental tabulation" $ do
-      let testsPerStoreBuild buildStore = do
-            it "all descendants are supersets of roots - only universal permission" $
-              property $ \(xs :: SampleGroupTree ()) ->
-                testPermissionInheritance (current xs) (children xs) (buildStore xs)
-      describe "total" . testsPerStoreBuild $ execState resetTabulation . loadSampleTreeNoTab
-      describe "incremental" $ testsPerStoreBuild loadSampleTree
-    it "all descendants are supersets of roots - universal and space permissions" $
-      property $ \(xs :: SampleStore) ->
-        let groups = sampleGroups xs
-        in  testPermissionInheritance (current groups) (children groups) (loadSample xs)
+    describe "Group Inheritance" $ do
+      it "tabulating while linking is the same as tabulating after linking" $
+        property $ \(xs :: SampleGroupTree ()) ->
+          loadSampleTree xs `shouldBe` execState resetTabulation (loadSampleTreeNoTab xs)
+      it "resetting tabulation is idempotent" $
+        property $ \(xs :: SampleGroupTree ()) ->
+          execState (resetTabulation >> resetTabulation) (loadSampleTreeNoTab xs)
+            `shouldBe` execState resetTabulation (loadSampleTreeNoTab xs)
+      it "unlinking causes disjoint trees" $
+        property $ \(xs :: SampleGroupTree ()) ->
+          let store = loadSampleTree xs
+              createdEdges = store ^. toGroups . edges
+          in if null createdEdges
+          then property True
+          else forAll (elements (HS.toList createdEdges)) $ \(from, to) ->
+            let newStore = execState (unlinkGroups from to) store
+                newGroups = newStore ^. toGroups
+                rootsWithoutTo = HS.delete to (newGroups ^. roots)
+                descendants :: GroupId -> HashSet GroupId
+                descendants gId =
+                  let children = fromJust (HM.lookup gId (newGroups ^. nodes)) ^. next
+                  in  HS.insert gId (HS.unions (map descendants (HS.toList children)))
+            in  (newStore, from, to) `shouldSatisfy` (\_ ->
+                  to `HS.member` (newStore ^. toGroups . roots)
+                  && all
+                    (\descendantOfTo ->
+                       not . HS.member descendantOfTo . HS.unions . map descendants $ HS.toList rootsWithoutTo
+                    )
+                    (HS.toList (descendants to))
+                )
+          
+      describe "total vs. incremental tabulation" $ do
+        let testsPerStoreBuild buildStore = do
+              it "all descendants are supersets of roots - only universal permission" $
+                property $ \(xs :: SampleGroupTree ()) ->
+                  testPermissionInheritance (current xs) (children xs) (buildStore xs)
+        describe "total" . testsPerStoreBuild $ execState resetTabulation . loadSampleTreeNoTab
+        describe "incremental" $ testsPerStoreBuild loadSampleTree
+    describe "Full Store" $ do
+      it "all descendants are supersets of roots - universal and space permissions" $
+        property $ \(xs :: SampleStore) ->
+          let groups = sampleGroups xs
+          in  testPermissionInheritance (current groups) (children groups) (loadSample xs)
 
 data SampleGroupTree a = SampleGroupTree
   { current :: GroupId
