@@ -11,16 +11,21 @@
 
 module Lib.Types.Group where
 
-import Lib.Types.Id (GroupId, SpaceId)
+import Lib.Types.Id (GroupId, SpaceId, EntityId)
 import Lib.Types.Permission (Permission (Blind))
 import Lib.Types.Monad (SheepdogM)
 import Lib.Types.Store
   ( Store
   , toGroups
+  , toSpaces
+  , toEntities
   , toTabulatedPermissions
   , toSpacePermissions
+  , toEntityPermissions
   , TabulatedPermissionsForGroup (..)
   )
+import Lib.Types.Store.Space (entities)
+import Lib.Types.Store.Entity (Entity (..))
 import Lib.Types.Store.Groups
   ( hasCycle
   , emptyGroup
@@ -42,7 +47,6 @@ import System.Random.Stateful (globalStdGen, Uniform (uniformM))
 import Control.Lens ((&), (^.), (.~), (%~))
 import Control.Monad.State (MonadState (get, put), modify)
 
--- TODO make a tabulation type, then update it when adjusting groups, etc.
 
 newGroup :: SheepdogM GroupId
 newGroup = do
@@ -50,11 +54,35 @@ newGroup = do
   storeGroup gId
   pure gId
 
+-- | Sets the group to empty
 storeGroup :: MonadState Store m => GroupId -> m ()
 storeGroup gId = do
   modify $ toGroups . nodes %~ HM.insert gId emptyGroup
   modify $ toGroups . roots %~ HS.insert gId
-  -- FIXME does a singleton count as an out as well?
+
+newSpace :: SheepdogM SpaceId
+newSpace = do
+  sId <- uniformM globalStdGen
+  storeSpace sId
+  pure sId
+
+-- | Sets the space to empty
+storeSpace :: MonadState Store m => SpaceId -> m ()
+storeSpace sId = do
+  modify $ toSpaces %~ HM.insert sId mempty
+
+newEntity :: SpaceId -> SheepdogM EntityId
+newEntity sId = do
+  eId <- uniformM globalStdGen
+  storeEntity eId (sId)
+  pure eId
+
+storeEntity :: MonadState Store m => EntityId -> (SpaceId) -> m ()
+storeEntity eId sId = do
+  modify $ toEntities %~ HM.insert eId Entity
+    { entitySpace = sId
+    }
+  modify $ toSpaces %~ HM.adjust (entities %~ HS.insert eId) sId
 
 data LinkGroupError
   = CycleDetected [GroupId]
@@ -155,4 +183,15 @@ adjustSpacePermission f gId sId = do
         where
           initF = f Blind
   modify $ toSpacePermissions %~ HM.alter adjustSpaces gId
+  updateTabulationStartingAt gId
+
+adjustEntityPermission :: MonadState Store m => (Permission -> Permission) -> GroupId -> SpaceId -> m ()
+adjustEntityPermission f gId sId = do
+  let adjustSpaces :: Maybe (HashMap SpaceId Permission) -> Maybe (HashMap SpaceId Permission)
+      adjustSpaces xs = case xs of
+        Just xs -> Just (HM.alter (maybe (Just initF) (Just . f)) sId xs)
+        Nothing -> Just (HM.singleton sId initF)
+        where
+          initF = f Blind
+  modify $ toEntityPermissions %~ HM.alter adjustSpaces gId
   updateTabulationStartingAt gId

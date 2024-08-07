@@ -6,7 +6,7 @@
   , NamedFieldPuns
   #-}
 
-import Lib.Types.Id (GroupId, SpaceId)
+import Lib.Types.Id (GroupId, SpaceId, EntityId)
 import Lib.Types.Permission (Permission)
 import Lib.Types.Store
   ( Store
@@ -14,6 +14,7 @@ import Lib.Types.Store
   , emptyStore
   , toGroups
   , toSpaces
+  , toEntities
   , toTabulatedPermissions
   , hasLessOrEqualPermissionsTo
   )
@@ -29,15 +30,19 @@ import Lib.Types.Store.Groups
   , emptyGroup
   , emptyGroups
   )
-import Lib.Types.Store.Space (Space (..))
+import Lib.Types.Store.Space (Space (..), entities)
+import Lib.Types.Store.Entity (space)
 import Lib.Types.Group
   ( storeGroup
+  , storeSpace
+  , storeEntity
   , linkGroups
   , unlinkGroups
   , resetTabulation
   , initTabulatedPermissionsForGroup
   , adjustUniversePermission
   , adjustSpacePermission
+  , adjustEntityPermission
   )
 
 import qualified Data.Aeson as Aeson
@@ -55,7 +60,16 @@ import Control.Monad (void)
 import Control.Monad.State (State, execState, modify, put, get)
 import Control.Lens ((%~), (.~), (&), (^.))
 import Test.Syd (sydTest, describe, it, shouldBe, shouldSatisfy)
-import Test.QuickCheck (Arbitrary (arbitrary, shrink), property, getSize, resize, listOf, forAll, elements)
+import Test.QuickCheck
+  ( Arbitrary (arbitrary, shrink)
+  , Gen
+  , property
+  , getSize
+  , resize
+  , listOf
+  , forAll
+  , elements
+  )
 
 import Debug.Trace (traceShow)
 
@@ -151,10 +165,24 @@ main = sydTest $ do
         describe "total" . testsPerStoreBuild $ execState resetTabulation . loadSampleTreeNoTab
         describe "incremental" $ testsPerStoreBuild loadSampleTree
     describe "Full Store" $ do
-      it "all descendants are supersets of roots - universal and space permissions" $
+      it "all descendants are supersets of roots - build all permissions" $
         property $ \(xs :: SampleStore) ->
           let groups = sampleGroups xs
           in  testPermissionInheritance (current groups) (children groups) (loadSample xs)
+      it "all spaces are disjoint" $
+        property $ \(xs :: SampleStore) ->
+          let store = loadSample xs
+          in  foldr HS.intersection mempty (fmap (^. entities) (store ^. toSpaces))
+                `shouldBe` mempty
+      it "all elements exist in their space" $
+        property $ \(xs :: SampleStore) ->
+          let store = loadSample xs
+          in  if null (store ^. toEntities)
+              then property True
+              else forAll (elements . HM.toList $ store ^. toEntities) $ \(eId, e) ->
+                    (store, eId, HM.lookup (e ^. space) (store ^. toSpaces)) `shouldSatisfy` (\(_,_,mSpace) ->
+                      maybe False (\space -> HS.member eId (space ^. entities)) mSpace
+                    )
 
 data SampleGroupTree a = SampleGroupTree
   { current :: GroupId
@@ -195,34 +223,49 @@ instance Arbitrary (SampleGroupTree ()) where
 
 
 data SampleStore = SampleStore
-  { sampleSpaces :: HashMap SpaceId Space
-  , sampleGroups :: SampleGroupTree (HashMap SpaceId Permission)
+  { sampleSpaces :: HashSet SpaceId
+  , sampleEntities :: HashMap EntityId (SpaceId)
+  , sampleGroups :: SampleGroupTree (HashMap SpaceId Permission, HashMap SpaceId Permission)
   } deriving (Eq, Show, Read)
 
 instance Arbitrary SampleStore where
   arbitrary = do
-    spaces <- resize 50 . fmap HM.fromList . listOf $ (,) <$> arbitrary <*> (Space <$> arbitrary)
+    spaces <- resize 50 arbitrary
     -- FIXME sample entityId's from set
+    entities <- resize 100 $ if null spaces then pure mempty else do
+      fmap HM.fromList . listOf $ do
+        entity <- arbitrary
+        space <- elements (HS.toList spaces)
+        pure (entity, (space))
     (groupsStructure :: SampleGroupTree ()) <- arbitrary
-    let fromSpaces =
-          if null spaces
-          then pure mempty
-          else fmap HM.fromList . listOf $ (,) <$> elements (HM.keys spaces) <*> arbitrary
+    let fromSpaces :: Gen (HashMap SpaceId Permission, HashMap SpaceId Permission)
+        fromSpaces =
+          let relevantPermissions =
+                if null spaces
+                then pure mempty
+                else fmap HM.fromList . listOf $ (,) <$> elements (HS.toList spaces) <*> arbitrary
+          in  (,) <$> relevantPermissions <*> relevantPermissions
     groups <- sequenceA $ fmap (const fromSpaces) groupsStructure
     pure SampleStore
       { sampleSpaces = spaces
+      , sampleEntities = entities
       , sampleGroups = groups
       }
 
 
 loadSample :: SampleStore -> Store
 loadSample SampleStore{..} = flip execState (loadSampleTree sampleGroups) $ do
-  modify $ toSpaces .~ sampleSpaces
-  let loadSpacePermissions SampleGroupTree{current, auxPerGroup, children} = do
-        for_ (HM.toList auxPerGroup) $ \(space, permission) -> do
+  for_ (HS.toList sampleSpaces) $ \sId -> do
+    storeSpace sId
+  for_ (HM.toList sampleEntities) $ \(eId, (sId)) -> do
+    storeEntity eId (sId)
+  let loadPermissions SampleGroupTree{current, auxPerGroup = (spacesPerms, entityPerms), children} = do
+        for_ (HM.toList spacesPerms) $ \(space, permission) -> do
           adjustSpacePermission (const permission) current space
-        traverse_ loadSpacePermissions children
-  loadSpacePermissions sampleGroups
+        for_ (HM.toList entityPerms) $ \(space, permission) -> do
+          adjustEntityPermission (const permission) current space
+        traverse_ loadPermissions children
+  loadPermissions sampleGroups
 
 
 loadSampleTree :: SampleGroupTree a -> Store

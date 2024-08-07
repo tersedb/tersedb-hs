@@ -31,6 +31,7 @@ library
       Lib.Types.Monad
       Lib.Types.Permission
       Lib.Types.Store
+      Lib.Types.Store.Entity
       Lib.Types.Store.Groups
       Lib.Types.Store.Space
   other-modules:
