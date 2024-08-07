@@ -70,6 +70,7 @@ tests:
       - -with-rtsopts=-N
     dependencies:
       - sheepdogdb
+      - pretty-simple
       - sydtest
       - topograph
       - QuickCheck

@@ -57,7 +57,7 @@ data Groups = Groups
   { groupsHashMap :: HashMap GroupId Group
   , groupsRoots :: HashSet GroupId -- FIXME roots are just the complement of outs?
   , groupsEdges :: HashSet (GroupId, GroupId)
-  , groupsOuts :: HashSet GroupId
+  , groupsOuts :: HashSet GroupId -- FIXME rename to "has parent"
   } deriving (Eq, Generic, Show, Read)
 makeLensesFor
   [ ("groupsHashMap", "nodes")

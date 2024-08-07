@@ -59,6 +59,15 @@ instance Arbitrary TabulatedPermissionsForGroup where
     es <- arbitrary
     pure (TabulatedPermissionsForGroup u ss es)
 
+hasLessOrEqualPermissionsTo
+  :: TabulatedPermissionsForGroup
+  -> TabulatedPermissionsForGroup
+  -> Bool
+hasLessOrEqualPermissionsTo
+  (TabulatedPermissionsForGroup xu xs xe)
+  (TabulatedPermissionsForGroup yu ys ye) =
+    xu <= yu && HM.isSubmapOfBy (<=) xs ys && HM.isSubmapOfBy (<=) xe ye
+
 type SpacePermissions = HashMap (GroupId, SpaceId) Permission
 
 type EntityPermissions = HashMap (GroupId, SpaceId) Permission

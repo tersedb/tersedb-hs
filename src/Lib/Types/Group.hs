@@ -30,9 +30,9 @@ import Lib.Types.Store.Groups
 import qualified Data.HashMap.Strict as HM
 import qualified Data.HashSet as HS
 import Data.Maybe (fromJust)
+import Data.Foldable (traverse_)
 import System.Random.Stateful (globalStdGen, Uniform (uniformM))
 import Control.Lens ((&), (^.), (.~), (%~))
-import Control.Monad (void)
 import Control.Monad.State (MonadState (get, put), modify)
 
 -- TODO make a tabulation type, then update it when adjusting groups, etc.
@@ -45,13 +45,9 @@ newGroup = do
 
 storeGroup :: MonadState Store m => GroupId -> m ()
 storeGroup gId = do
-  s <- get
-  let groups = s ^. toGroups
-  let newNodes = HM.insert gId emptyGroup (groups ^. nodes)
-      newRoots = HS.insert gId (groups ^. roots)
-  put $
-    s & toGroups . nodes .~ newNodes
-      & toGroups . roots .~ newRoots
+  modify $ toGroups . nodes %~ HM.insert gId emptyGroup
+  modify $ toGroups . roots %~ HS.insert gId
+  -- FIXME does a singleton count as an out as well?
 
 data LinkGroupError
   = CycleDetected [GroupId]
@@ -74,30 +70,32 @@ initTabulatedPermissionsForGroup gId = do
         , tabulatedPermissionsForGroupEntities = mempty
         }
 
--- | Partial - assumes that if a prev group exists, that its record in the tabulation
--- already exists as well
+-- | updates the tab with a possibly erroneous cache for the parent if its missing
+-- - would only work if the parent happened to be the root node.
 updateTabulationStartingAt :: MonadState Store m => GroupId -> m ()
 updateTabulationStartingAt gId = do
   initTab <- initTabulatedPermissionsForGroup gId
   s <- get
   -- doing fromJust because initTabulatedPermissionsForGroup already checks
   let group = fromJust $ HM.lookup gId (s ^. toGroups . nodes)
-      parentTab :: TabulatedPermissionsForGroup
-      parentTab = case group ^. prev of
-        Nothing -> mempty -- root node
-        Just parent -> case HM.lookup parent (s ^. toTabulatedPermissions) of
-          Nothing -> error $ "Parent group " <> show parent <> " doesn't exist in tabulation"
-          Just t -> t
+  parentTab <- case group ^. prev of
+    Nothing -> pure mempty -- root node
+    Just parent -> case HM.lookup parent (s ^. toTabulatedPermissions) of
+      Nothing -> do
+        t <- initTabulatedPermissionsForGroup parent
+        modify $ toTabulatedPermissions %~ HM.insert parent t
+        pure t
+      Just t -> pure t
   modify (toTabulatedPermissions %~ HM.insert gId (parentTab <> initTab))
-  void . traverse updateTabulationStartingAt . HS.toList $ group ^. next
+  traverse_ updateTabulationStartingAt . HS.toList $ group ^. next
 
 
 resetTabulation :: MonadState Store m => m ()
 resetTabulation = do
   s <- get
-  void . traverse updateTabulationStartingAt . HS.toList $ s ^. toGroups . roots
+  traverse_ updateTabulationStartingAt . HS.toList $ s ^. toGroups . roots
 
-
+-- | Loads the parent's untabulated permissions if it's not already tabulated!
 linkGroups :: MonadState Store m => GroupId -> GroupId -> m (Either LinkGroupError ())
 linkGroups from to = do
   s <- get
@@ -108,41 +106,31 @@ linkGroups from to = do
   then pure (Left (MultiParent to))
   else
     let newGroups = groups
-          & edges .~ HS.insert (from,to) (groups ^. edges)
-          & outs .~ (groups ^. outs & HS.insert to . HS.delete from)
-          & roots .~ HS.delete to (groups ^. roots)
+          & edges %~ HS.insert (from,to)
+          & outs %~ (HS.insert to . HS.delete from)
+          & roots %~ HS.delete to
+          & nodes %~ (HM.adjust (next %~ HS.insert to) from . HM.adjust (prev .~ Just from) to)
     in case hasCycle newGroups of
         Just cycle -> pure . Left $ CycleDetected cycle
         Nothing -> do
-          tabPermsForFrom <- case HM.lookup from (s ^. toTabulatedPermissions) of
-            Nothing -> do
-              t <- initTabulatedPermissionsForGroup from
-              put $ s & toTabulatedPermissions %~ HM.insert from t
-              pure t
-            Just t -> pure t
-          solePermsForTo <- initTabulatedPermissionsForGroup to
-          let tabPermsForTo = tabPermsForFrom <> solePermsForTo
-          put $ 
-            s & toGroups .~ newGroups
-              & toTabulatedPermissions %~ HM.insert to tabPermsForTo
+          modify $ toGroups .~ newGroups
           updateTabulationStartingAt to
           pure (Right ())
 
--- TODO remove from tabulation
 unlinkGroups :: MonadState Store m => GroupId -> GroupId -> m ()
 unlinkGroups from to = do
   s <- get
   let groups = s ^. toGroups
       newGroups = groups
-        & edges .~ HS.delete (from,to) (groups ^. edges)
-        & outs .~ HS.delete to (groups ^. outs)
-        & roots .~ HS.insert to (groups ^. roots)
-  put (s & toGroups .~ newGroups)
+        & edges %~ HS.delete (from,to) 
+        & outs %~ (HS.delete to . HS.insert from)
+        & roots %~ HS.insert to
+        & nodes %~ (HM.adjust (next %~ HS.delete to) from . HM.adjust (prev .~ Nothing) to)
+  put $ s
+      & toGroups .~ newGroups
+  updateTabulationStartingAt to
 
 -- TODO update tablulation
 adjustUniversePermission :: MonadState Store m => (Permission -> Permission) -> GroupId -> m ()
-adjustUniversePermission f gId = do
-  s <- get
-  let groups = s ^. toGroups
-      newNodes = HM.adjust (universePermission %~ f) gId (groups ^. nodes)
-  put (s & toGroups . nodes .~ newNodes)
+adjustUniversePermission f gId =
+  modify $ toGroups . nodes %~ HM.adjust (universePermission %~ f) gId

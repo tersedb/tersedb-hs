@@ -48,3 +48,7 @@ instance Monoid Permission where
 
 instance Arbitrary Permission where
   arbitrary = elements [Blind, Read, Create, Update, Delete]
+
+instance Bounded Permission where
+  minBound = Blind
+  maxBound = Delete
