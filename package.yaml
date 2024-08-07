@@ -71,4 +71,5 @@ tests:
     dependencies:
       - sheepdogdb
       - sydtest
+      - topograph
       - QuickCheck

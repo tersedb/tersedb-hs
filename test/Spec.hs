@@ -11,7 +11,18 @@ import Lib.Types.Store
   , toGroups
   , toTabulatedPermissions
   )
-import Lib.Types.Store.Groups (edges, roots, outs)
+import Lib.Types.Store.Groups
+  ( Groups
+  , nodes
+  , edges
+  , roots
+  , outs
+  , next
+  , prev
+  , hasCycle
+  , emptyGroup
+  , emptyGroups
+  )
 import Lib.Types.Group
   ( storeGroup
   , linkGroups
@@ -20,7 +31,7 @@ import Lib.Types.Group
   )
 
 import Test.Syd (sydTest, describe, it, shouldBe)
-import Test.QuickCheck (Arbitrary (arbitrary), property, getSize, resize, listOf)
+import Test.QuickCheck (Arbitrary (arbitrary, shrink), property, getSize, resize, listOf)
 import qualified Data.Aeson as Aeson
 import qualified Data.HashSet as HS
 import qualified Data.HashMap.Strict as HM
@@ -28,6 +39,9 @@ import Text.Read (readMaybe)
 import Control.Monad (void)
 import Control.Monad.State (State, execState, modify, put, get)
 import Control.Lens ((%~), (.~), (&), (^.))
+import Topograph (pairs)
+
+
 
 main :: IO ()
 main = sydTest $ do
@@ -53,6 +67,11 @@ main = sydTest $ do
     it "commutes" $
       property $ \(x :: TabulatedPermissionsForGroup) y ->
         (x <> y) `shouldBe` (y <> x)
+  describe "Groups" $ do
+    it "cycles are detected" $
+      property $ \(xs :: [GroupId]) ->
+        if length xs <= 1 then True `shouldBe` True
+        else hasCycle (loadCycle xs) `shouldBe` Just (xs !! 0 : reverse xs)
   describe "Store" $ do
     it "tabulating while linking is the same as tabulating after linking" $
       property $ \(xs :: SampleGroupTree) ->
@@ -69,6 +88,9 @@ instance Arbitrary SampleGroupTree where
         s <- getSize
         children <- resize (s `div` 2) (listOf go)
         pure (SampleGroupTree current children)
+  shrink (SampleGroupTree current children) =
+    [ SampleGroupTree current []
+    ] ++ [ SampleGroupTree current children' | children' <- shrink children ]
 
 loadSample :: SampleGroupTree -> Store
 loadSample xs = execState (go xs) emptyStore
@@ -98,7 +120,7 @@ loadSampleNoTab xs = execState (go xs) emptyStore
       let groups = s ^. toGroups
           newGroups = groups
             & edges %~ HS.insert (from, to)
-            & outs %~ HS.insert to
+            & outs %~ (HS.insert to . HS.delete from)
             & roots %~ HS.delete to
       put $ s & toGroups .~ newGroups
 
@@ -110,3 +132,24 @@ loadSampleNoTab xs = execState (go xs) emptyStore
       void $ traverse storeGroup children'
       void $ traverse (\child -> addLink current child) children'
       void $ traverse go children
+
+loadCycle :: [GroupId] -> Groups
+loadCycle gs = execState go emptyGroups
+  where
+    addGroup :: GroupId -> State Groups ()
+    addGroup gId = modify (nodes %~ HM.insert gId emptyGroup)
+
+    addSingleLink :: (GroupId, GroupId) -> State Groups ()
+    addSingleLink (from, to) =
+      modify $
+        nodes %~ (HM.adjust (next .~ HS.singleton to) from . HM.adjust (prev .~ Just from) to)
+
+    go :: State Groups ()
+    go = do
+      void $ traverse addGroup gs
+      if length gs <= 1
+      then pure ()
+      else do
+        modify (roots .~ HS.singleton (gs !! 0))
+        void $ traverse addSingleLink (pairs gs)
+        addSingleLink (gs !! (length gs - 1), gs !! 0)

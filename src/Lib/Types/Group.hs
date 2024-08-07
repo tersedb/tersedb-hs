@@ -54,7 +54,7 @@ storeGroup gId = do
       & toGroups . roots .~ newRoots
 
 data LinkGroupError
-  = CycleDetected
+  = CycleDetected [GroupId]
   | DuplicateEdge GroupId GroupId
   | MultiParent GroupId
   deriving (Eq, Show, Read)
@@ -109,24 +109,24 @@ linkGroups from to = do
   else
     let newGroups = groups
           & edges .~ HS.insert (from,to) (groups ^. edges)
-          & outs .~ HS.insert to (groups ^. outs)
+          & outs .~ (groups ^. outs & HS.insert to . HS.delete from)
           & roots .~ HS.delete to (groups ^. roots)
-    in if hasCycle newGroups
-      then pure (Left CycleDetected)
-      else do
-        tabPermsForFrom <- case HM.lookup from (s ^. toTabulatedPermissions) of
-          Nothing -> do
-            t <- initTabulatedPermissionsForGroup from
-            put $ s & toTabulatedPermissions %~ HM.insert from t
-            pure t
-          Just t -> pure t
-        solePermsForTo <- initTabulatedPermissionsForGroup to
-        let tabPermsForTo = tabPermsForFrom <> solePermsForTo
-        put $ 
-          s & toGroups .~ newGroups
-            & toTabulatedPermissions %~ HM.insert to tabPermsForTo
-        updateTabulationStartingAt to
-        pure (Right ())
+    in case hasCycle newGroups of
+        Just cycle -> pure . Left $ CycleDetected cycle
+        Nothing -> do
+          tabPermsForFrom <- case HM.lookup from (s ^. toTabulatedPermissions) of
+            Nothing -> do
+              t <- initTabulatedPermissionsForGroup from
+              put $ s & toTabulatedPermissions %~ HM.insert from t
+              pure t
+            Just t -> pure t
+          solePermsForTo <- initTabulatedPermissionsForGroup to
+          let tabPermsForTo = tabPermsForFrom <> solePermsForTo
+          put $ 
+            s & toGroups .~ newGroups
+              & toTabulatedPermissions %~ HM.insert to tabPermsForTo
+          updateTabulationStartingAt to
+          pure (Right ())
 
 -- TODO remove from tabulation
 unlinkGroups :: MonadState Store m => GroupId -> GroupId -> m ()

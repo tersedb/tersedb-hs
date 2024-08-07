@@ -4,7 +4,7 @@
   , DeriveGeneric
   #-}
 
-module Lib.Types.Id (GroupId, SpaceId) where
+module Lib.Types.Id (GroupId, SpaceId, ActorId) where
 
 import Data.Hashable (Hashable)
 import qualified Data.ByteString as BS
@@ -80,3 +80,10 @@ newtype SpaceId = SpaceId
 
 instance Uniform SpaceId where
   uniformM gen = SpaceId <$> uniformM gen
+
+newtype ActorId = ActorId
+  { getActorId :: Id
+  } deriving (Generic, Eq, Ord, Hashable, ToJSON, FromJSON, Show, Read, Arbitrary)
+
+instance Uniform ActorId where
+  uniformM gen = ActorId <$> uniformM gen

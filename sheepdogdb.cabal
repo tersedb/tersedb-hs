@@ -109,5 +109,6 @@ test-suite sheepdogdb-test
     , sheepdogdb
     , sydtest
     , text
+    , topograph
     , unordered-containers
   default-language: Haskell2010
