@@ -11,10 +11,16 @@
 
 module Lib.Types.Group where
 
-import Lib.Types.Id (GroupId)
-import Lib.Types.Permission (Permission)
+import Lib.Types.Id (GroupId, SpaceId)
+import Lib.Types.Permission (Permission (Blind))
 import Lib.Types.Monad (SheepdogM)
-import Lib.Types.Store (Store, toGroups, toTabulatedPermissions, TabulatedPermissionsForGroup (..))
+import Lib.Types.Store
+  ( Store
+  , toGroups
+  , toTabulatedPermissions
+  , toSpacePermissions
+  , TabulatedPermissionsForGroup (..)
+  )
 import Lib.Types.Store.Groups
   ( hasCycle
   , emptyGroup
@@ -27,9 +33,10 @@ import Lib.Types.Store.Groups
   , prev
   )
 
+import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HM
 import qualified Data.HashSet as HS
-import Data.Maybe (fromJust)
+import Data.Maybe (fromJust, fromMaybe)
 import Data.Foldable (traverse_)
 import System.Random.Stateful (globalStdGen, Uniform (uniformM))
 import Control.Lens ((&), (^.), (.~), (%~))
@@ -62,11 +69,11 @@ initTabulatedPermissionsForGroup gId = do
   s <- get
   case HM.lookup gId (s ^. toGroups . nodes) of
     Nothing -> error $ "Group " <> show gId <> " doesn't exist in groups store"
-    Just group -> -- TODO fetch all relevant spaces & entities as well 
-      -- FIXME make a multihashmap? that way I can just `intersect` the spaces hashsets?
+    Just group -> do
+      -- TODO fetch all relevant spaces & entities as well 
       pure TabulatedPermissionsForGroup
         { tabulatedPermissionsForGroupUniverse = group ^. universePermission
-        , tabulatedPermissionsForGroupSpaces = mempty
+        , tabulatedPermissionsForGroupSpaces = fromMaybe mempty $ HM.lookup gId (s ^. toSpacePermissions)
         , tabulatedPermissionsForGroupEntities = mempty
         }
 
@@ -74,9 +81,8 @@ initTabulatedPermissionsForGroup gId = do
 -- - would only work if the parent happened to be the root node.
 updateTabulationStartingAt :: MonadState Store m => GroupId -> m ()
 updateTabulationStartingAt gId = do
-  initTab <- initTabulatedPermissionsForGroup gId
   s <- get
-  -- doing fromJust because initTabulatedPermissionsForGroup already checks
+  initTab <- initTabulatedPermissionsForGroup gId
   let group = fromJust $ HM.lookup gId (s ^. toGroups . nodes)
   parentTab <- case group ^. prev of
     Nothing -> pure mempty -- root node
@@ -86,8 +92,13 @@ updateTabulationStartingAt gId = do
         modify $ toTabulatedPermissions %~ HM.insert parent t
         pure t
       Just t -> pure t
-  modify (toTabulatedPermissions %~ HM.insert gId (parentTab <> initTab))
-  traverse_ updateTabulationStartingAt . HS.toList $ group ^. next
+  let newTab = parentTab <> initTab
+  case HM.lookup gId (s ^. toTabulatedPermissions) of
+    Just oldTab | newTab == oldTab -> pure ()
+    _ -> do
+      -- doing fromJust because initTabulatedPermissionsForGroup already checks
+      modify (toTabulatedPermissions %~ HM.insert gId newTab)
+      traverse_ updateTabulationStartingAt . HS.toList $ group ^. next
 
 
 resetTabulation :: MonadState Store m => m ()
@@ -130,7 +141,18 @@ unlinkGroups from to = do
       & toGroups .~ newGroups
   updateTabulationStartingAt to
 
--- TODO update tablulation
 adjustUniversePermission :: MonadState Store m => (Permission -> Permission) -> GroupId -> m ()
-adjustUniversePermission f gId =
+adjustUniversePermission f gId = do
   modify $ toGroups . nodes %~ HM.adjust (universePermission %~ f) gId
+  updateTabulationStartingAt gId
+
+adjustSpacePermission :: MonadState Store m => (Permission -> Permission) -> GroupId -> SpaceId -> m ()
+adjustSpacePermission f gId sId = do
+  let adjustSpaces :: Maybe (HashMap SpaceId Permission) -> Maybe (HashMap SpaceId Permission)
+      adjustSpaces xs = case xs of
+        Just xs -> Just (HM.alter (maybe (Just initF) (Just . f)) sId xs)
+        Nothing -> Just (HM.singleton sId initF)
+        where
+          initF = f Blind
+  modify $ toSpacePermissions %~ HM.alter adjustSpaces gId
+  updateTabulationStartingAt gId

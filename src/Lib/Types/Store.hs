@@ -12,6 +12,7 @@
 module Lib.Types.Store where
 
 import Lib.Types.Store.Groups (Groups, emptyGroups)
+import Lib.Types.Store.Space (Space)
 import Lib.Types.Id (GroupId, SpaceId)
 import Lib.Types.Permission (Permission)
 
@@ -68,20 +69,16 @@ hasLessOrEqualPermissionsTo
   (TabulatedPermissionsForGroup yu ys ye) =
     xu <= yu && HM.isSubmapOfBy (<=) xs ys && HM.isSubmapOfBy (<=) xe ye
 
-type SpacePermissions = HashMap (GroupId, SpaceId) Permission
-
-type EntityPermissions = HashMap (GroupId, SpaceId) Permission
-
-type TabulatedPermissions = HashMap GroupId TabulatedPermissionsForGroup
-
 data Store = Store
   { storeGroups :: Groups
-  , storeSpacePermissions :: SpacePermissions
-  , storeEntityPermissions :: EntityPermissions
-  , storeTabulatedPermissions :: TabulatedPermissions
+  , storeSpaces :: HashMap SpaceId Space
+  , storeSpacePermissions :: HashMap GroupId (HashMap SpaceId Permission)
+  , storeEntityPermissions :: HashMap GroupId (HashMap SpaceId Permission)
+  , storeTabulatedPermissions :: HashMap GroupId TabulatedPermissionsForGroup 
   } deriving (Eq, Show, Read)
 makeLensesFor
   [ ("storeGroups", "toGroups")
+  , ("storeSpaces", "toSpaces")
   , ("storeSpacePermissions", "toSpacePermissions")
   , ("storeEntityPermissions", "toEntityPermissions")
   , ("storeTabulatedPermissions", "toTabulatedPermissions")
@@ -90,6 +87,7 @@ makeLensesFor
 emptyStore :: Store
 emptyStore = Store
   { storeGroups = emptyGroups
+  , storeSpaces = mempty
   , storeSpacePermissions = mempty
   , storeEntityPermissions = mempty
   , storeTabulatedPermissions = mempty

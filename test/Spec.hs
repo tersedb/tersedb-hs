@@ -3,15 +3,17 @@
   , FlexibleContexts
   , RecordWildCards
   , FlexibleInstances
+  , NamedFieldPuns
   #-}
 
-import Lib.Types.Id (GroupId)
+import Lib.Types.Id (GroupId, SpaceId)
 import Lib.Types.Permission (Permission)
 import Lib.Types.Store
   ( Store
   , TabulatedPermissionsForGroup
   , emptyStore
   , toGroups
+  , toSpaces
   , toTabulatedPermissions
   , hasLessOrEqualPermissionsTo
   )
@@ -27,18 +29,21 @@ import Lib.Types.Store.Groups
   , emptyGroup
   , emptyGroups
   )
+import Lib.Types.Store.Space (Space (..))
 import Lib.Types.Group
   ( storeGroup
   , linkGroups
   , resetTabulation
   , initTabulatedPermissionsForGroup
   , adjustUniversePermission
+  , adjustSpacePermission
   )
 
 import qualified Data.Aeson as Aeson
 import qualified Data.HashSet as HS
+import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HM
-import Data.Foldable (traverse_)
+import Data.Foldable (traverse_, for_)
 import qualified Data.Text.Lazy as LT
 import Data.Maybe (isNothing)
 import Text.Read (readMaybe)
@@ -93,32 +98,36 @@ main = sydTest $ do
   describe "Store" $ do
     it "tabulating while linking is the same as tabulating after linking" $
       property $ \(xs :: SampleGroupTree ()) ->
-        loadSample xs `shouldBe` execState resetTabulation (loadSampleNoTab xs)
+        loadSampleTree xs `shouldBe` execState resetTabulation (loadSampleTreeNoTab xs)
     it "resetting tabulation is idempotent" $
       property $ \(xs :: SampleGroupTree ()) ->
-        execState (resetTabulation >> resetTabulation) (loadSampleNoTab xs)
-          `shouldBe` execState resetTabulation (loadSampleNoTab xs)
+        execState (resetTabulation >> resetTabulation) (loadSampleTreeNoTab xs)
+          `shouldBe` execState resetTabulation (loadSampleTreeNoTab xs)
+    let testPermissionInheritance root cs store =
+          let tabs = store ^. toTabulatedPermissions
+              descendants =
+                let go (SampleGroupTree x _ _ xs) = do
+                      modify (x:)
+                      traverse_ go xs
+                in  execState (traverse_ go cs) []
+          in  if null descendants
+              then property True
+              else forAll (elements descendants) $ \descendant ->
+                    case (HM.lookup root tabs, HM.lookup descendant tabs) of
+                      (Just r, Just d) ->
+                        (store, r, d) `shouldSatisfy` (\_ -> r `hasLessOrEqualPermissionsTo` d)
+                      tabs -> error $ "Tab wasn't found " <> show tabs
     describe "total vs. incremental tabulation" $ do
       let testsPerStoreBuild buildStore = do
-            it "all descendants are supersets of roots" $
+            it "all descendants are supersets of roots - only universal permission" $
               property $ \(xs :: SampleGroupTree ()) ->
-                let store = buildStore xs
-                    tabs = store ^. toTabulatedPermissions
-                    root = current xs
-                    descendants =
-                      let go (SampleGroupTree x _ _ xs) = do
-                            modify (x:)
-                            traverse_ go xs
-                      in  execState (traverse_ go (children xs)) []
-                in  if null descendants
-                    then property True
-                    else forAll (elements descendants) $ \descendant ->
-                          case (HM.lookup root tabs, HM.lookup descendant tabs) of
-                            (Just r, Just d) ->
-                              (store, r, d) `shouldSatisfy` (\_ -> r `hasLessOrEqualPermissionsTo` d)
-                            tabs -> error $ "Tab wasn't found " <> show tabs
-      describe "total" . testsPerStoreBuild $ execState resetTabulation . loadSampleNoTab
-      describe "incremental" $ testsPerStoreBuild loadSample
+                testPermissionInheritance (current xs) (children xs) (buildStore xs)
+      describe "total" . testsPerStoreBuild $ execState resetTabulation . loadSampleTreeNoTab
+      describe "incremental" $ testsPerStoreBuild loadSampleTree
+    it "all descendants are supersets of roots - universal and space permissions" $
+      property $ \(xs :: SampleStore) ->
+        let groups = sampleGroups xs
+        in  testPermissionInheritance (current groups) (children groups) (loadSample xs)
 
 data SampleGroupTree a = SampleGroupTree
   { current :: GroupId
@@ -157,8 +166,40 @@ instance Arbitrary (SampleGroupTree ()) where
     [ SampleGroupTree current univ' () children'
     | (univ', children') <- shrink (univ, children) ]
 
-loadSample :: SampleGroupTree a -> Store
-loadSample xs = flip execState emptyStore $ do
+
+data SampleStore = SampleStore
+  { sampleSpaces :: HashMap SpaceId Space
+  , sampleGroups :: SampleGroupTree (HashMap SpaceId Permission)
+  } deriving (Eq, Show, Read)
+
+instance Arbitrary SampleStore where
+  arbitrary = do
+    spaces <- resize 50 . fmap HM.fromList . listOf $ (,) <$> arbitrary <*> (Space <$> arbitrary)
+    -- FIXME sample entityId's from set
+    (groupsStructure :: SampleGroupTree ()) <- arbitrary
+    let fromSpaces =
+          if null spaces
+          then pure mempty
+          else fmap HM.fromList . listOf $ (,) <$> elements (HM.keys spaces) <*> arbitrary
+    groups <- sequenceA $ fmap (const fromSpaces) groupsStructure
+    pure SampleStore
+      { sampleSpaces = spaces
+      , sampleGroups = groups
+      }
+
+
+loadSample :: SampleStore -> Store
+loadSample SampleStore{..} = flip execState (loadSampleTree sampleGroups) $ do
+  modify $ toSpaces .~ sampleSpaces
+  let loadSpacePermissions SampleGroupTree{current, auxPerGroup, children} = do
+        for_ (HM.toList auxPerGroup) $ \(space, permission) -> do
+          adjustSpacePermission (const permission) current space
+        traverse_ loadSpacePermissions children
+  loadSpacePermissions sampleGroups
+
+
+loadSampleTree :: SampleGroupTree a -> Store
+loadSampleTree xs = flip execState emptyStore $ do
   modify $ toGroups . roots %~ HS.insert (current xs)
   go xs
   where
@@ -184,8 +225,8 @@ loadSample xs = flip execState emptyStore $ do
       traverse_ linkChild children
       traverse_ go children
 
-loadSampleNoTab :: SampleGroupTree a -> Store
-loadSampleNoTab xs = flip execState emptyStore $ do
+loadSampleTreeNoTab :: SampleGroupTree a -> Store
+loadSampleTreeNoTab xs = flip execState emptyStore $ do
   modify $ toGroups . roots %~ HS.insert (current xs)
   go xs
   where

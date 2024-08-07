@@ -32,6 +32,7 @@ library
       Lib.Types.Permission
       Lib.Types.Store
       Lib.Types.Store.Groups
+      Lib.Types.Store.Space
   other-modules:
       Paths_sheepdogdb
   autogen-modules:
