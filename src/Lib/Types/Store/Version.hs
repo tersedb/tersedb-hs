@@ -9,9 +9,15 @@
   , FlexibleContexts
   #-}
 
-module Lib.Types.Store.Entity (Entity, space, versions, initEntity, addVersion) where
+module Lib.Types.Store.Version 
+  ( Version
+  , genesisVersion
+  , forkVersion
+  , entity
+  , prevVersion
+  ) where
 
-import Lib.Types.Id (SpaceId, VersionId)
+import Lib.Types.Id (EntityId, VersionId)
 
 import Data.Aeson (ToJSON, FromJSON)
 import Deriving.Aeson.Stock (PrefixedSnake, Generic, CustomJSON (..))
@@ -20,29 +26,32 @@ import qualified Data.HashMap.Strict as HM
 import Data.HashSet (HashSet)
 import qualified Data.HashSet as HS
 import Data.Monoid (First (..))
-import Data.List.NonEmpty (NonEmpty (..), (<|))
+import Data.List (uncons)
 import Control.Lens ((^.))
 import Control.Lens.TH (makeLensesFor)
 import Control.Monad.State (MonadState (get, put), modify, evalState)
 import Control.Monad.Extra (mconcatMapM)
 
 
-data Entity = Entity
-  { entitySpace :: SpaceId
-  , entityVersions :: NonEmpty VersionId
+data Version = Version
+  { versionEntity :: EntityId
+  , versionPrev :: Maybe VersionId -- Only allow for back-linking to facilitate forks
   } deriving (Eq, Generic, Show, Read)
   deriving (ToJSON, FromJSON)
-  via PrefixedSnake "entity" Entity
+  via PrefixedSnake "version" Version
 makeLensesFor
-  [ ("entitySpace", "space")
-  , ("entityVersions", "versions")
-  ] ''Entity
+  [ ("versionEntity", "entity")
+  , ("versionPrev", "prevVersion")
+  ] ''Version
 
-initEntity :: SpaceId -> VersionId -> Entity
-initEntity sId vId = Entity
-  { entitySpace = sId
-  , entityVersions = vId :| []
+genesisVersion :: EntityId -> Version
+genesisVersion eId = Version
+  { versionEntity = eId
+  , versionPrev = Nothing
   }
 
-addVersion :: Entity -> VersionId -> Entity
-addVersion x vId = x { entityVersions = vId <| entityVersions x }
+forkVersion :: EntityId -> VersionId -> Version
+forkVersion eId vId = Version
+  { versionEntity = eId
+  , versionPrev = Just vId
+  }

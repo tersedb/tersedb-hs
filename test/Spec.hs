@@ -6,7 +6,7 @@
   , NamedFieldPuns
   #-}
 
-import Lib.Types.Id (GroupId, SpaceId, EntityId)
+import Lib.Types.Id (GroupId, SpaceId, EntityId, VersionId)
 import Lib.Types.Permission (Permission)
 import Lib.Types.Store
   ( Store
@@ -32,10 +32,12 @@ import Lib.Types.Store.Groups
   )
 import Lib.Types.Store.Space (Space (..), entities)
 import Lib.Types.Store.Entity (space)
+import Lib.Types.Store.Version (genesisVersion, forkVersion)
 import Lib.Types.Group
   ( storeGroup
   , storeSpace
   , storeEntity
+  , storeVersion
   , linkGroups
   , unlinkGroups
   , resetTabulation
@@ -50,9 +52,10 @@ import Data.HashSet (HashSet)
 import qualified Data.HashSet as HS
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HM
-import Data.Foldable (traverse_, for_)
+import Data.Foldable (traverse_, for_, foldlM)
 import qualified Data.Text.Lazy as LT
 import Data.Maybe (isNothing, fromJust)
+import Data.List.NonEmpty (NonEmpty, uncons)
 import Text.Read (readMaybe)
 import Text.Pretty.Simple (pShowNoColor)
 import Topograph (pairs)
@@ -224,7 +227,7 @@ instance Arbitrary (SampleGroupTree ()) where
 
 data SampleStore = SampleStore
   { sampleSpaces :: HashSet SpaceId
-  , sampleEntities :: HashMap EntityId (SpaceId)
+  , sampleEntities :: HashMap EntityId (SpaceId, NonEmpty VersionId)
   , sampleGroups :: SampleGroupTree (HashMap SpaceId Permission, HashMap SpaceId Permission)
   } deriving (Eq, Show, Read)
 
@@ -236,7 +239,8 @@ instance Arbitrary SampleStore where
       fmap HM.fromList . listOf $ do
         entity <- arbitrary
         space <- elements (HS.toList spaces)
-        pure (entity, (space))
+        versions <- arbitrary
+        pure (entity, (space, versions))
     (groupsStructure :: SampleGroupTree ()) <- arbitrary
     let fromSpaces :: Gen (HashMap SpaceId Permission, HashMap SpaceId Permission)
         fromSpaces =
@@ -257,8 +261,14 @@ loadSample :: SampleStore -> Store
 loadSample SampleStore{..} = flip execState (loadSampleTree sampleGroups) $ do
   for_ (HS.toList sampleSpaces) $ \sId -> do
     storeSpace sId
-  for_ (HM.toList sampleEntities) $ \(eId, (sId)) -> do
-    storeEntity eId (sId)
+  for_ (HM.toList sampleEntities) $ \(eId, (sId, vIds)) -> do
+    let (vId, vIdsTail) = uncons vIds
+    storeEntity eId sId vId genesisVersion
+    case vIdsTail of
+      Nothing -> pure ()
+      Just vIdsTail -> void . (\f -> foldlM f vId vIdsTail) $ \prevVId vId -> do
+        storeVersion eId vId (\eId -> forkVersion eId vId)
+        pure vId
   let loadPermissions SampleGroupTree{current, auxPerGroup = (spacesPerms, entityPerms), children} = do
         for_ (HM.toList spacesPerms) $ \(space, permission) -> do
           adjustSpacePermission (const permission) current space

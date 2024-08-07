@@ -11,7 +11,7 @@
 
 module Lib.Types.Group where
 
-import Lib.Types.Id (GroupId, SpaceId, EntityId)
+import Lib.Types.Id (GroupId, SpaceId, EntityId, VersionId)
 import Lib.Types.Permission (Permission (Blind))
 import Lib.Types.Monad (SheepdogM)
 import Lib.Types.Store
@@ -19,18 +19,22 @@ import Lib.Types.Store
   , toGroups
   , toSpaces
   , toEntities
+  , toVersions
   , toTabulatedPermissions
   , toSpacePermissions
   , toEntityPermissions
+  , toGroupPermissions
   , TabulatedPermissionsForGroup (..)
   )
 import Lib.Types.Store.Space (entities)
-import Lib.Types.Store.Entity (Entity (..))
+import Lib.Types.Store.Entity (Entity, initEntity, addVersion)
+import Lib.Types.Store.Version (Version, genesisVersion)
 import Lib.Types.Store.Groups
   ( hasCycle
   , emptyGroup
   , nodes
   , universePermission
+  , organizationPermission
   , roots
   , outs
   , edges
@@ -71,18 +75,29 @@ storeSpace :: MonadState Store m => SpaceId -> m ()
 storeSpace sId = do
   modify $ toSpaces %~ HM.insert sId mempty
 
-newEntity :: SpaceId -> SheepdogM EntityId
+newEntity :: SpaceId -> SheepdogM (EntityId, VersionId)
 newEntity sId = do
   eId <- uniformM globalStdGen
-  storeEntity eId (sId)
-  pure eId
+  vId <- newVersion eId genesisVersion
+  storeEntity eId sId vId genesisVersion
+  pure (eId, vId)
 
-storeEntity :: MonadState Store m => EntityId -> (SpaceId) -> m ()
-storeEntity eId sId = do
-  modify $ toEntities %~ HM.insert eId Entity
-    { entitySpace = sId
-    }
+storeEntity :: MonadState Store m => EntityId -> SpaceId -> VersionId -> (EntityId -> Version) -> m ()
+storeEntity eId sId vId buildVersion = do
+  modify $ toEntities %~ HM.insert eId (initEntity sId vId)
   modify $ toSpaces %~ HM.adjust (entities %~ HS.insert eId) sId
+  modify $ toVersions %~ HM.insert vId (buildVersion eId)
+
+newVersion :: EntityId -> (EntityId -> Version) -> SheepdogM VersionId
+newVersion eId buildVersion = do
+  vId <- uniformM globalStdGen
+  storeVersion eId vId buildVersion
+  pure vId
+
+storeVersion :: MonadState Store m => EntityId -> VersionId -> (EntityId -> Version) -> m ()
+storeVersion eId vId buildVersion = do
+  modify $ toEntities %~ HM.adjust (flip addVersion vId) eId
+  modify $ toVersions %~ HM.insert vId (buildVersion eId)
 
 data LinkGroupError
   = CycleDetected [GroupId]
@@ -101,8 +116,10 @@ initTabulatedPermissionsForGroup gId = do
       -- TODO fetch all relevant spaces & entities as well 
       pure TabulatedPermissionsForGroup
         { tabulatedPermissionsForGroupUniverse = group ^. universePermission
+        , tabulatedPermissionsForGroupOrganization = group ^. organizationPermission
         , tabulatedPermissionsForGroupSpaces = fromMaybe mempty $ HM.lookup gId (s ^. toSpacePermissions)
-        , tabulatedPermissionsForGroupEntities = mempty
+        , tabulatedPermissionsForGroupEntities = fromMaybe mempty $ HM.lookup gId (s ^. toEntityPermissions)
+        , tabulatedPermissionsForGroupGroups = fromMaybe mempty $ HM.lookup gId (s ^. toGroupPermissions)
         }
 
 -- | updates the tab with a possibly erroneous cache for the parent if its missing

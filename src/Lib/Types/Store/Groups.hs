@@ -33,6 +33,7 @@ data Group = Group
   { groupPrev :: Maybe GroupId
   , groupNext :: HashSet GroupId
   , groupUniversePermission :: Permission
+  , groupOrganizationPermission :: Permission
   , groupMembers :: HashSet ActorId
   } deriving (Eq, Generic, Show, Read)
   deriving (ToJSON, FromJSON)
@@ -41,6 +42,7 @@ makeLensesFor
   [ ("groupPrev", "prev")
   , ("groupNext", "next")
   , ("groupUniversePermission", "universePermission")
+  , ("groupOrganizationPermission", "organizationPermission")
   , ("groupMembers", "members")
   ] ''Group
 
@@ -49,6 +51,7 @@ emptyGroup = Group
   { groupPrev = Nothing
   , groupNext = mempty
   , groupUniversePermission = Blind
+  , groupOrganizationPermission = Blind
   , groupMembers = mempty
   }
 
