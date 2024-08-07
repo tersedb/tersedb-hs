@@ -16,6 +16,7 @@ import Data.Aeson.Types (typeMismatch)
 import GHC.Generics (Generic)
 import Text.Read (Read (readPrec))
 import Test.QuickCheck (Arbitrary (arbitrary), vectorOf)
+import Test.QuickCheck.Gen (chooseUpTo)
 import Test.QuickCheck.Instances ()
 import System.Random.Stateful (Uniform (uniformM))
 
@@ -62,7 +63,7 @@ instance Uniform Id where
 
 instance Arbitrary Id where
   arbitrary = do
-    xs :: [Word8] <- vectorOf 12 arbitrary
+    xs :: [Word8] <- vectorOf 12 (fmap (fromIntegral . (`mod` 256)) (chooseUpTo maxBound))
     pure (Id (BS.pack xs))
 
 

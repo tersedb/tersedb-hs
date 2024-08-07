@@ -11,7 +11,7 @@
 
 module Lib.Types.Store where
 
-import Lib.Types.Store.Groups (Groups)
+import Lib.Types.Store.Groups (Groups, emptyGroups)
 import Lib.Types.Id (GroupId, SpaceId)
 import Lib.Types.Permission (Permission)
 
@@ -70,10 +70,18 @@ data Store = Store
   , storeSpacePermissions :: SpacePermissions
   , storeEntityPermissions :: EntityPermissions
   , storeTabulatedPermissions :: TabulatedPermissions
-  }
+  } deriving (Eq, Show, Read)
 makeLensesFor
   [ ("storeGroups", "toGroups")
   , ("storeSpacePermissions", "toSpacePermissions")
   , ("storeEntityPermissions", "toEntityPermissions")
   , ("storeTabulatedPermissions", "toTabulatedPermissions")
   ] ''Store
+
+emptyStore :: Store
+emptyStore = Store
+  { storeGroups = emptyGroups
+  , storeSpacePermissions = mempty
+  , storeEntityPermissions = mempty
+  , storeTabulatedPermissions = mempty
+  }

@@ -32,7 +32,7 @@ data Group = Group
   { groupPrev :: Maybe GroupId
   , groupNext :: HashSet GroupId
   , groupUniversePermission :: Permission
-  } deriving (Eq, Generic)
+  } deriving (Eq, Generic, Show, Read)
   deriving (ToJSON, FromJSON)
   via PrefixedSnake "group" Group
 makeLensesFor
@@ -53,13 +53,21 @@ data Groups = Groups
   , groupsRoots :: HashSet GroupId -- FIXME roots are just the complement of outs?
   , groupsEdges :: HashSet (GroupId, GroupId)
   , groupsOuts :: HashSet GroupId
-  }
+  } deriving (Eq, Generic, Show, Read)
 makeLensesFor
   [ ("groupsHashMap", "nodes")
   , ("groupsRoots", "roots")
   , ("groupsEdges", "edges")
   , ("groupsOuts", "outs")
   ] ''Groups
+
+emptyGroups :: Groups
+emptyGroups = Groups
+  { groupsHashMap = mempty
+  , groupsRoots = mempty
+  , groupsEdges = mempty
+  , groupsOuts = mempty
+  }
 
 
 -- FIXME make Bool actually Maybe [GroupId], to represent the cycle
