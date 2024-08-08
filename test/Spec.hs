@@ -37,6 +37,8 @@ import Lib.Types.Group
   , emptyStore
   , unsafeStoreGroup
   , storeGroup
+  , unsafeStoreActor
+  , storeActor
   , unsafeStoreSpace
   , storeSpace
   , unsafeStoreEntity
@@ -44,6 +46,7 @@ import Lib.Types.Group
   , unsafeStoreVersion
   , storeVersion
   , unsafeAddMember
+  , addMember
   , unsafeStoreActor
   , linkGroups
   , unlinkGroups
@@ -261,6 +264,9 @@ instance Arbitrary (SampleGroupTree ()) where
 data SampleStore = SampleStore
   { sampleSpaces :: HashSet SpaceId
   , sampleEntities :: HashMap EntityId (SpaceId, NonEmpty VersionId)
+  , sampleActors :: HashMap ActorId (HashSet GroupId)
+  -- TODO actors
+  -- TODO versions & forks
   , sampleGroups :: SampleGroupTree (HashMap SpaceId Permission, HashMap SpaceId Permission)
   } deriving (Eq, Show, Read)
 
@@ -283,13 +289,28 @@ instance Arbitrary SampleStore where
                 else fmap HM.fromList . listOf $ (,) <$> elements (HS.toList spaces) <*> arbitrary
           in  (,) <$> relevantPermissions <*> relevantPermissions
     groups <- sequenceA $ fmap (const fromSpaces) groupsStructure
+    let allGroups =
+          let go (SampleGroupTree g _ _ _ _ gs) = HS.insert g . HS.unions $ fmap go gs
+          in  go groups
+    actors <- fmap HM.fromList . listOf $ do
+      aId <- arbitrary
+      gs <- if null allGroups
+            then pure mempty
+            else fmap HS.fromList . listOf . elements $ HS.toList allGroups
+      pure (aId, gs)
     pure SampleStore
       { sampleSpaces = spaces
       , sampleEntities = entities
+      , sampleActors = actors
       , sampleGroups = groups
       }
-  shrink (SampleStore spaces entities groups) =
-    [ SampleStore spaces entities (groups { children = [] })
+  shrink (SampleStore spaces entities actors groups) =
+    [ SampleStore 
+        { sampleSpaces = spaces
+        , sampleEntities = entities
+        , sampleActors = fmap (HS.filter (\g -> g == current groups)) actors
+        , sampleGroups = groups { children = [] }
+        }
     ]
 
 
@@ -312,6 +333,10 @@ loadSample SampleStore{..} = flip execState (loadSampleTree sampleGroups) $ do
           unsafeAdjustEntityPermission (const permission) current space
         traverse_ loadPermissions children
   loadPermissions sampleGroups
+  for_ (HM.toList sampleActors) $ \(aId, gs) -> do
+    unsafeStoreActor aId
+    for_ (HS.toList gs) $ \gId ->
+      unsafeAddMember gId aId
 
 
 storeSample :: SampleStore -> ActorId -> GroupId -> Store
@@ -349,6 +374,16 @@ storeSample SampleStore{..} adminActor adminGroup =
               error $ "Failed to set entity permission " <> show (current, space) <> " - " <> LT.unpack (pShowNoColor s)
           traverse_ loadPermissions children
     loadPermissions sampleGroups
+    for_ (HM.toList sampleActors) $ \(aId, gs) -> do
+      succeeded <- storeActor adminActor aId
+      unless succeeded $ do
+        s <- get
+        error $ "Failed to store actor " <> show aId <> " - " <> LT.unpack (pShowNoColor s)
+      for_ (HS.toList gs) $ \gId -> do
+        succeeded <- addMember adminActor gId aId
+        unless succeeded $ do
+          s <- get
+          error $ "Failed to add member " <> show (aId, gId) <> " - " <> LT.unpack (pShowNoColor s)
 
 
 loadSampleTree :: SampleGroupTree a -> Store
