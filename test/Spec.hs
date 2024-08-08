@@ -52,8 +52,10 @@ import Lib.Types.Group
   , updateTabulationStartingAt
   , unsafeAdjustUniversePermission
   , setUniversePermission
-  , unsafeAdjustRecruiterPermission
   , unsafeAdjustOrganizationPermission
+  , setOrganizationPermission
+  , unsafeAdjustRecruiterPermission
+  , setRecruiterPermission
   , unsafeAdjustSpacePermission
   , setSpacePermission
   , unsafeAdjustEntityPermission
@@ -132,7 +134,7 @@ main = sydTest $ do
     let testPermissionInheritance root cs store =
           let tabs = store ^. toTabulatedPermissions
               descendants =
-                let go (SampleGroupTree x _ _ xs) = do
+                let go (SampleGroupTree x _ _ _ _ xs) = do
                       modify (x:)
                       traverse_ go xs
                 in  execState (traverse_ go cs) []
@@ -217,6 +219,8 @@ main = sydTest $ do
 data SampleGroupTree a = SampleGroupTree
   { current :: GroupId
   , univ :: Permission
+  , org :: Permission
+  , recr :: Permission
   , auxPerGroup :: a
   , children :: [SampleGroupTree a]
   } deriving (Eq, Show, Read)
@@ -227,11 +231,11 @@ instance Functor SampleGroupTree where
     }
 -- | Breadth-first approach
 instance Foldable SampleGroupTree where
-  foldr f acc (SampleGroupTree _ _ x xs) =
+  foldr f acc (SampleGroupTree _ _ _ _ x xs) =
     foldr (\x' acc' -> foldr f acc' x') (f x acc) xs
 instance Traversable SampleGroupTree where
   sequenceA SampleGroupTree{..} =
-    (SampleGroupTree current univ)
+    (SampleGroupTree current univ org recr)
       <$> auxPerGroup
       <*> sequenceA (map sequenceA children)
 
@@ -243,13 +247,15 @@ instance Arbitrary (SampleGroupTree ()) where
         s <- getSize
         children <- resize (s `div` 2) (listOf go)
         univ <- arbitrary
-        pure (SampleGroupTree current univ () children)
-  shrink (SampleGroupTree current univ () children) =
-    [ SampleGroupTree current univ () []
+        org <- arbitrary
+        recr <- arbitrary
+        pure (SampleGroupTree current univ org recr () children)
+  shrink (SampleGroupTree current univ org recr () children) =
+    [ SampleGroupTree current univ org recr () []
     ] ++
     children ++
-    [ SampleGroupTree current univ' () children'
-    | (univ', children') <- shrink (univ, children) ]
+    [ SampleGroupTree current univ' org' recr' () children'
+    | (univ', org', recr', children') <- shrink (univ, org, recr, children) ]
 
 
 data SampleStore = SampleStore
@@ -350,19 +356,21 @@ loadSampleTree xs = flip execState unsafeEmptyStore $ do
   modify $ toGroups . roots . at (current xs) .~ Just ()
   go xs
   where
-    setupNode current univ = do
+    setupNode current univ org recr = do
       modify $ toGroups . nodes . at current %~ Just . fromMaybe emptyGroup
       unsafeAdjustUniversePermission (const univ) current
+      unsafeAdjustOrganizationPermission (const org) current
+      unsafeAdjustRecruiterPermission (const recr) current
       currentTab <- initTabulatedPermissionsForGroup current
       -- ensures that singleton maps still have loaded tabs
       modify $ toTabulatedPermissions . at current %~ Just . fromMaybe currentTab
 
     go :: SampleGroupTree a -> State Store ()
     go SampleGroupTree{..} = do
-      setupNode current univ
+      setupNode current univ org recr
       -- loads all nodes
-      let linkChild (SampleGroupTree child univChild _ _) = do
-            setupNode child univChild
+      let linkChild (SampleGroupTree child univChild orgChild recrChild _ _) = do
+            setupNode child univChild orgChild recrChild
             mE <- linkGroups current child
             case mE of
               Left e -> do
@@ -382,7 +390,7 @@ storeSampleTree xs adminActor adminGroup = flip execState (emptyStore adminActor
     error $ "Failed to store first group " <> show (current xs) <> " - " <> LT.unpack (pShowNoColor s)
   go xs
   where
-    setupNode current univ = do
+    setupNode current univ org recr = do
       succeeded <- storeGroup adminActor current -- adds current as a root
       unless succeeded $ do
         s <- get
@@ -391,16 +399,24 @@ storeSampleTree xs adminActor adminGroup = flip execState (emptyStore adminActor
       unless succeeded $ do
         s <- get
         error $ "Failed to set universe permission " <> show (univ, current) <> " - " <> LT.unpack (pShowNoColor s)
+      succeeded <- setOrganizationPermission adminActor org current
+      unless succeeded $ do
+        s <- get
+        error $ "Failed to set organization permission " <> show (org, current) <> " - " <> LT.unpack (pShowNoColor s)
+      succeeded <- setRecruiterPermission adminActor recr current
+      unless succeeded $ do
+        s <- get
+        error $ "Failed to set recruiter permission " <> show (recr, current) <> " - " <> LT.unpack (pShowNoColor s)
       currentTab <- initTabulatedPermissionsForGroup current
       -- ensures that singleton maps still have loaded tabs
       modify $ toTabulatedPermissions . at current %~ Just . fromMaybe currentTab
 
     go :: SampleGroupTree a -> State Store ()
     go SampleGroupTree{..} = do
-      setupNode current univ
+      setupNode current univ org recr
       -- loads all nodes
-      let linkChild (SampleGroupTree child univChild _ _) = do
-            setupNode child univChild
+      let linkChild (SampleGroupTree child univChild orgChild recrChild _ _) = do
+            setupNode child univChild orgChild recrChild
             mE <- linkGroups current child
             case mE of
               Left e -> do
@@ -427,15 +443,17 @@ loadSampleTreeNoTab xs = flip execState unsafeEmptyStore $ do
             & nodes . ix to . prev .~ Just from
       modify $ toGroups %~ adjustGroups
 
-    setupNode current univ = do
+    setupNode current univ org recr = do
       modify $ toGroups . nodes . at current %~ Just . fromMaybe emptyGroup
       unsafeAdjustUniversePermission (const univ) current
+      unsafeAdjustOrganizationPermission (const org) current
+      unsafeAdjustRecruiterPermission (const recr) current
 
     go :: SampleGroupTree a -> State Store ()
     go SampleGroupTree{..} = do
-      setupNode current univ
-      let linkChild (SampleGroupTree child univChild _ _) = do
-            setupNode child univChild
+      setupNode current univ org recr
+      let linkChild (SampleGroupTree child univChild orgChild recrChild _ _) = do
+            setupNode child univChild orgChild recrChild
             addLink current child
       traverse_ linkChild children
       traverse_ go children
