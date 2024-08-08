@@ -63,7 +63,7 @@ import System.Random (StdGen)
 import System.Random.Stateful (AtomicGenM, StatefulGen, globalStdGen, Uniform (uniformM))
 import Control.Lens (Lens', (&), (^.), (.~), (%~), at, non, ix)
 import Control.Monad.State (MonadState (get, put), modify, execState)
-import Control.Monad.Extra (andM, anyM, orM)
+import Control.Monad.Extra (andM, orM, when)
 
 
 -- Using this would break the system
@@ -85,6 +85,7 @@ emptyStore adminActor adminGroup = flip execState unsafeEmptyStore $ do
   unsafeStoreGroup adminGroup
   unsafeAdjustUniversePermission (const Delete) adminGroup
   unsafeAdjustOrganizationPermission (const Delete) adminGroup
+  unsafeAdjustRecruiterPermission (const Delete) adminGroup
   unsafeStoreActor adminActor
   unsafeAddMember adminGroup adminActor
   updateTabulationStartingAt adminGroup
@@ -100,13 +101,12 @@ canDo proj creator p = do
   s <- get
   pure $ case s ^. toActors . at creator of
     Just groups ->
-      any
-        (\gId -> maybe False (\g -> g ^. proj >= p) (s ^. toTabulatedPermissions . at gId))
-        (HS.toList groups)
+      let perGroup gId = s ^. toTabulatedPermissions . at gId . non mempty . proj >= p
+      in  any perGroup (HS.toList groups)
     _ -> False
 
 conditionally :: Applicative m => m () -> Bool -> m Bool
-conditionally f t = if t then t <$ f else pure t
+conditionally f t = t <$ when t f
 
 generateWithAuthority
   :: ( StatefulGen (AtomicGenM StdGen) m
@@ -122,15 +122,18 @@ newGroup :: ActorId -> SheepdogM (Maybe GroupId)
 newGroup = generateWithAuthority . storeGroup
 
 storeGroup :: MonadState Store m => ActorId -> GroupId -> m Bool
-storeGroup creator gId =
-  canDo forGroupOrganization creator Create >>=
-    conditionally (unsafeStoreGroup gId)
+storeGroup creator gId = do
+  didSucceed <- canDo forGroupOrganization creator Create
+  if not didSucceed then error "didn't succeed" else pure ()
+  conditionally (unsafeStoreGroup gId) didSucceed
 
 -- | Sets the group to empty
 unsafeStoreGroup :: MonadState Store m => GroupId -> m ()
 unsafeStoreGroup gId = do
-  modify $ toGroups . nodes . at gId .~ Just emptyGroup
-  modify $ toGroups . roots . at gId .~ Just ()
+  modify $ toGroups . nodes . at gId %~ Just . fromMaybe emptyGroup
+  s <- get
+  when (null (s ^. toGroups . nodes . at gId . non emptyGroup . prev)) $
+    modify $ toGroups . roots . at gId .~ Just ()
 
 newActor :: ActorId -> SheepdogM (Maybe ActorId)
 newActor = generateWithAuthority . storeActor
@@ -154,8 +157,8 @@ addMember creator gId aId = do
 
 unsafeAddMember :: MonadState Store m => GroupId -> ActorId -> m ()
 unsafeAddMember gId aId = do
-  modify $ toActors . at aId %~ (Just . maybe (HS.singleton gId) (HS.insert gId))
-  modify $ toGroups . nodes . ix gId . members . at aId .~ Just ()
+  modify $ toActors . at aId . non mempty . at gId .~ Just ()
+  modify $ toGroups . nodes . at gId . non emptyGroup . members . at aId .~ Just ()
 
 newSpace :: ActorId -> SheepdogM (Maybe SpaceId)
 newSpace = generateWithAuthority . storeSpace
@@ -170,7 +173,6 @@ unsafeStoreSpace :: MonadState Store m => SpaceId -> m ()
 unsafeStoreSpace sId = do
   modify $ toSpaces . at sId .~ Just mempty
 
---------------- FIXME
 newEntity :: ActorId -> SpaceId -> SheepdogM (Maybe (EntityId, VersionId))
 newEntity creator sId =
   generateWithAuthority (\(eId, vId) -> storeEntity creator eId sId vId)
@@ -182,9 +184,12 @@ storeEntity
   -> SpaceId
   -> VersionId
   -> m Bool
-storeEntity creator eId sId vId =
-  canDo (forGroupSpaces . at sId . non Blind) creator Create >>=
-    conditionally (unsafeStoreEntity eId sId vId genesisVersion)
+storeEntity creator eId sId vId = do
+  canAdjust <- orM
+    [ canDo (forGroupSpaces . at sId . non Blind) creator Create
+    , canDo forGroupUniverse creator Update -- FIXME is this correct? Just because I can update spaces, does that mean I have a right to create entities in any space?
+    ]
+  conditionally (unsafeStoreEntity eId sId vId genesisVersion) canAdjust
 
 unsafeStoreEntity
   :: MonadState Store m
@@ -198,28 +203,33 @@ unsafeStoreEntity eId sId vId buildVersion = do
   modify $ toSpaces . ix sId . entities . at eId .~ Just ()
   modify $ toVersions . at vId .~ Just (buildVersion eId)
 
--- Adds a version to an existing entity
+-- Adds a version to an existing entity -- FIXME make variant for appending on an existing entity
 newVersion
   :: ActorId
   -> EntityId
+  -> VersionId
   -> SheepdogM (Maybe VersionId)
-newVersion creator eId =
-  generateWithAuthority (\vId -> storeVersion creator eId vId)
+newVersion creator eId prevVId =
+  generateWithAuthority (\vId -> storeVersion creator eId vId prevVId)
 
 storeVersion
   :: MonadState Store m
   => ActorId
   -> EntityId
   -> VersionId
+  -> VersionId
   -> m Bool
-storeVersion creator eId vId = do
+storeVersion creator eId vId prevVId = do
   s <- get
   case s ^. toEntities . at eId of
     Nothing -> pure False
     Just e -> do
       let sId = e ^. space
-      canAdjust <- canDo (forGroupSpaces . at sId . non Blind) creator Create
-      conditionally (unsafeStoreVersion eId vId (\e -> forkVersion e vId)) canAdjust
+      canAdjust <- orM
+        [ canDo (forGroupSpaces . at sId . non Blind) creator Create
+        , canDo forGroupUniverse creator Update -- FIXME is this valid? Because I can update any space, does that mean I can create data in any space?
+        ]
+      conditionally (unsafeStoreVersion eId vId (flip forkVersion prevVId)) canAdjust
 
 unsafeStoreVersion
   :: MonadState Store m
@@ -345,7 +355,10 @@ setUniversePermission
   -> m Bool
 setUniversePermission creator p gId = do
   canAdjust <- andM
-    [ canDo (forGroupGroups . at gId . non Blind) creator Update
+    [ orM
+      [ canDo (forGroupGroups . at gId . non Blind) creator Update
+      , canDo forGroupOrganization creator Update
+      ]
     , canDo forGroupUniverse creator p
     ]
   conditionally
@@ -368,7 +381,10 @@ setOrganizationPermission
   -> m Bool
 setOrganizationPermission creator p gId = do
   canAdjust <- andM
-    [ canDo (forGroupGroups . at gId . non Blind) creator Update
+    [ orM
+      [ canDo (forGroupGroups . at gId . non Blind) creator Update
+      , canDo forGroupOrganization creator Update
+      ]
     , canDo forGroupOrganization creator p
     ]
   conditionally
@@ -391,7 +407,10 @@ setRecruiterPermission
   -> m Bool
 setRecruiterPermission creator p gId = do
   canAdjust <- andM
-    [ canDo (forGroupGroups . at gId . non Blind) creator Update
+    [ orM
+      [ canDo (forGroupGroups . at gId . non Blind) creator Update
+      , canDo forGroupOrganization creator Update
+      ]
     , canDo forGroupRecruiter creator p
     ]
   conditionally

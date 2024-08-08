@@ -7,7 +7,7 @@
   #-}
 
 import Lib.Types.Id (GroupId, SpaceId, EntityId, VersionId, ActorId)
-import Lib.Types.Permission (Permission)
+import Lib.Types.Permission (Permission (Delete))
 import Lib.Types.Store
   ( Store
   , TabulatedPermissionsForGroup
@@ -43,12 +43,17 @@ import Lib.Types.Group
   , storeEntity
   , unsafeStoreVersion
   , storeVersion
+  , unsafeAddMember
+  , unsafeStoreActor
   , linkGroups
   , unlinkGroups
   , resetTabulation
   , initTabulatedPermissionsForGroup
+  , updateTabulationStartingAt
   , unsafeAdjustUniversePermission
   , setUniversePermission
+  , unsafeAdjustRecruiterPermission
+  , unsafeAdjustOrganizationPermission
   , unsafeAdjustSpacePermission
   , setSpacePermission
   , unsafeAdjustEntityPermission
@@ -68,6 +73,7 @@ import Text.Read (readMaybe)
 import Text.Pretty.Simple (pShowNoColor)
 import Topograph (pairs)
 import Control.Monad (void)
+import Control.Monad.Extra (when, unless)
 import Control.Monad.State (State, execState, modify, put, get)
 import Control.Lens ((%~), (.~), (&), (^.), at, ix)
 import Test.Syd (sydTest, describe, it, shouldBe, shouldSatisfy)
@@ -194,6 +200,19 @@ main = sydTest $ do
                     (store, eId, HM.lookup (e ^. space) (store ^. toSpaces)) `shouldSatisfy` (\(_,_,mSpace) ->
                       maybe False (\space -> HS.member eId (space ^. entities)) mSpace
                     )
+      describe "Safe" $ do
+        it "should be identical to unsafe" $
+          property $ \(xs :: SampleStore, adminActor :: ActorId, adminGroup :: GroupId) ->
+            let safeStore = storeSample xs adminActor adminGroup
+                unsafeStore = flip execState (loadSample xs) $ do
+                  unsafeStoreGroup adminGroup
+                  unsafeAdjustUniversePermission (const Delete) adminGroup
+                  unsafeAdjustOrganizationPermission (const Delete) adminGroup
+                  unsafeAdjustRecruiterPermission (const Delete) adminGroup
+                  unsafeStoreActor adminActor
+                  unsafeAddMember adminGroup adminActor
+                  updateTabulationStartingAt adminGroup
+            in  safeStore `shouldBe` unsafeStore
 
 data SampleGroupTree a = SampleGroupTree
   { current :: GroupId
@@ -241,9 +260,9 @@ data SampleStore = SampleStore
 
 instance Arbitrary SampleStore where
   arbitrary = do
-    spaces <- resize 50 arbitrary
+    spaces <- arbitrary
     -- FIXME sample entityId's from set
-    entities <- resize 100 $ if null spaces then pure mempty else do
+    entities <- if null spaces then pure mempty else do
       fmap HM.fromList . listOf $ do
         entity <- arbitrary
         space <- elements (HS.toList spaces)
@@ -263,6 +282,9 @@ instance Arbitrary SampleStore where
       , sampleEntities = entities
       , sampleGroups = groups
       }
+  shrink (SampleStore spaces entities groups) =
+    [ SampleStore spaces entities (groups { children = [] })
+    ]
 
 
 loadSample :: SampleStore -> Store
@@ -275,7 +297,7 @@ loadSample SampleStore{..} = flip execState (loadSampleTree sampleGroups) $ do
     case vIdsTail of
       Nothing -> pure ()
       Just vIdsTail -> void . (\f -> foldlM f vId vIdsTail) $ \prevVId vId -> do
-        unsafeStoreVersion eId vId (\eId -> forkVersion eId vId)
+        unsafeStoreVersion eId vId (\eId -> forkVersion eId prevVId)
         pure vId
   let loadPermissions SampleGroupTree{current, auxPerGroup = (spacesPerms, entityPerms), children} = do
         for_ (HM.toList spacesPerms) $ \(space, permission) -> do
@@ -290,20 +312,35 @@ storeSample :: SampleStore -> ActorId -> GroupId -> Store
 storeSample SampleStore{..} adminActor adminGroup =
   flip execState (storeSampleTree sampleGroups adminActor adminGroup) $ do
     for_ (HS.toList sampleSpaces) $ \sId -> do
-      void $ storeSpace adminActor sId
+      succeeded <- storeSpace adminActor sId
+      unless succeeded $ do
+        s <- get
+        error $ "Failed to store space " <> show sId <> " - " <> LT.unpack (pShowNoColor s)
     for_ (HM.toList sampleEntities) $ \(eId, (sId, vIds)) -> do
       let (vId, vIdsTail) = uncons vIds
-      void $ storeEntity adminActor eId sId vId
+      succeeded <- storeEntity adminActor eId sId vId
+      unless succeeded $ do
+        s <- get
+        error $ "Failed to store entity " <> show (eId, sId, vId) <> " - " <> LT.unpack (pShowNoColor s)
       case vIdsTail of
         Nothing -> pure ()
         Just vIdsTail -> void . (\f -> foldlM f vId vIdsTail) $ \prevVId vId -> do
-          void $ storeVersion adminActor eId vId
+          succeeded <- storeVersion adminActor eId vId prevVId
+          unless succeeded $ do
+            s <- get
+            error $ "Failed to store version " <> show (eId, vId) <> " - " <> LT.unpack (pShowNoColor s)
           pure vId
     let loadPermissions SampleGroupTree{current, auxPerGroup = (spacesPerms, entityPerms), children} = do
           for_ (HM.toList spacesPerms) $ \(space, permission) -> do
-            void $ setSpacePermission adminActor permission current space
+            succeeded <- setSpacePermission adminActor permission current space
+            unless succeeded $ do
+              s <- get
+              error $ "Failed to set space permission " <> show (current, space) <> " - " <> LT.unpack (pShowNoColor s)
           for_ (HM.toList entityPerms) $ \(space, permission) -> do
-            void $ setEntityPermission adminActor permission current space
+            succeeded <- setEntityPermission adminActor permission current space
+            unless succeeded $ do
+              s <- get
+              error $ "Failed to set entity permission " <> show (current, space) <> " - " <> LT.unpack (pShowNoColor s)
           traverse_ loadPermissions children
     loadPermissions sampleGroups
 
@@ -338,12 +375,22 @@ loadSampleTree xs = flip execState unsafeEmptyStore $ do
 
 storeSampleTree :: SampleGroupTree a -> ActorId -> GroupId -> Store
 storeSampleTree xs adminActor adminGroup = flip execState (emptyStore adminActor adminGroup) $ do
-  modify $ toGroups . roots . at (current xs) .~ Just ()
+  -- modify $ toGroups . roots . at (current xs) .~ Just ()
+  succeeded <- storeGroup adminActor (current xs)
+  unless succeeded $ do
+    s <- get
+    error $ "Failed to store first group " <> show (current xs) <> " - " <> LT.unpack (pShowNoColor s)
   go xs
   where
     setupNode current univ = do
-      _worked <- storeGroup adminActor current -- adds current as a root
-      _worked <- setUniversePermission adminActor univ current
+      succeeded <- storeGroup adminActor current -- adds current as a root
+      unless succeeded $ do
+        s <- get
+        error $ "Failed to store group " <> show current <> " - " <> LT.unpack (pShowNoColor s)
+      succeeded <- setUniversePermission adminActor univ current
+      unless succeeded $ do
+        s <- get
+        error $ "Failed to set universe permission " <> show (univ, current) <> " - " <> LT.unpack (pShowNoColor s)
       currentTab <- initTabulatedPermissionsForGroup current
       -- ensures that singleton maps still have loaded tabs
       modify $ toTabulatedPermissions . at current %~ Just . fromMaybe currentTab
