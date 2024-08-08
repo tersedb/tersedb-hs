@@ -6,7 +6,7 @@
   , NamedFieldPuns
   #-}
 
-import Lib.Types.Id (GroupId, SpaceId, EntityId, VersionId)
+import Lib.Types.Id (GroupId, SpaceId, EntityId, VersionId, ActorId)
 import Lib.Types.Permission (Permission)
 import Lib.Types.Store
   ( Store
@@ -34,17 +34,25 @@ import Lib.Types.Store.Entity (space)
 import Lib.Types.Store.Version (genesisVersion, forkVersion)
 import Lib.Types.Group
   ( unsafeEmptyStore
+  , emptyStore
   , unsafeStoreGroup
+  , storeGroup
   , unsafeStoreSpace
+  , storeSpace
   , unsafeStoreEntity
+  , storeEntity
   , unsafeStoreVersion
+  , storeVersion
   , linkGroups
   , unlinkGroups
   , resetTabulation
   , initTabulatedPermissionsForGroup
   , unsafeAdjustUniversePermission
+  , setUniversePermission
   , unsafeAdjustSpacePermission
+  , setSpacePermission
   , unsafeAdjustEntityPermission
+  , setEntityPermission
   )
 
 import qualified Data.Aeson as Aeson
@@ -54,14 +62,14 @@ import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HM
 import Data.Foldable (traverse_, for_, foldlM)
 import qualified Data.Text.Lazy as LT
-import Data.Maybe (isNothing, fromJust)
+import Data.Maybe (isNothing, fromJust, fromMaybe)
 import Data.List.NonEmpty (NonEmpty, uncons)
 import Text.Read (readMaybe)
 import Text.Pretty.Simple (pShowNoColor)
 import Topograph (pairs)
 import Control.Monad (void)
 import Control.Monad.State (State, execState, modify, put, get)
-import Control.Lens ((%~), (.~), (&), (^.))
+import Control.Lens ((%~), (.~), (&), (^.), at, ix)
 import Test.Syd (sydTest, describe, it, shouldBe, shouldSatisfy)
 import Test.QuickCheck
   ( Arbitrary (arbitrary, shrink)
@@ -278,17 +286,39 @@ loadSample SampleStore{..} = flip execState (loadSampleTree sampleGroups) $ do
   loadPermissions sampleGroups
 
 
+storeSample :: SampleStore -> ActorId -> GroupId -> Store
+storeSample SampleStore{..} adminActor adminGroup =
+  flip execState (storeSampleTree sampleGroups adminActor adminGroup) $ do
+    for_ (HS.toList sampleSpaces) $ \sId -> do
+      void $ storeSpace adminActor sId
+    for_ (HM.toList sampleEntities) $ \(eId, (sId, vIds)) -> do
+      let (vId, vIdsTail) = uncons vIds
+      void $ storeEntity adminActor eId sId vId
+      case vIdsTail of
+        Nothing -> pure ()
+        Just vIdsTail -> void . (\f -> foldlM f vId vIdsTail) $ \prevVId vId -> do
+          void $ storeVersion adminActor eId vId
+          pure vId
+    let loadPermissions SampleGroupTree{current, auxPerGroup = (spacesPerms, entityPerms), children} = do
+          for_ (HM.toList spacesPerms) $ \(space, permission) -> do
+            void $ setSpacePermission adminActor permission current space
+          for_ (HM.toList entityPerms) $ \(space, permission) -> do
+            void $ setEntityPermission adminActor permission current space
+          traverse_ loadPermissions children
+    loadPermissions sampleGroups
+
+
 loadSampleTree :: SampleGroupTree a -> Store
 loadSampleTree xs = flip execState unsafeEmptyStore $ do
-  modify $ toGroups . roots %~ HS.insert (current xs)
+  modify $ toGroups . roots . at (current xs) .~ Just ()
   go xs
   where
     setupNode current univ = do
-      modify $ toGroups . nodes %~ HM.alter (\mg -> if isNothing mg then Just emptyGroup else mg) current
+      modify $ toGroups . nodes . at current %~ Just . fromMaybe emptyGroup
       unsafeAdjustUniversePermission (const univ) current
       currentTab <- initTabulatedPermissionsForGroup current
       -- ensures that singleton maps still have loaded tabs
-      modify $ toTabulatedPermissions %~ HM.alter (\mt -> if isNothing mt then Just currentTab else mt) current
+      modify $ toTabulatedPermissions . at current %~ Just . fromMaybe currentTab
 
     go :: SampleGroupTree a -> State Store ()
     go SampleGroupTree{..} = do
@@ -305,22 +335,53 @@ loadSampleTree xs = flip execState unsafeEmptyStore $ do
       traverse_ linkChild children
       traverse_ go children
 
+
+storeSampleTree :: SampleGroupTree a -> ActorId -> GroupId -> Store
+storeSampleTree xs adminActor adminGroup = flip execState (emptyStore adminActor adminGroup) $ do
+  modify $ toGroups . roots . at (current xs) .~ Just ()
+  go xs
+  where
+    setupNode current univ = do
+      _worked <- storeGroup adminActor current -- adds current as a root
+      _worked <- setUniversePermission adminActor univ current
+      currentTab <- initTabulatedPermissionsForGroup current
+      -- ensures that singleton maps still have loaded tabs
+      modify $ toTabulatedPermissions . at current %~ Just . fromMaybe currentTab
+
+    go :: SampleGroupTree a -> State Store ()
+    go SampleGroupTree{..} = do
+      setupNode current univ
+      -- loads all nodes
+      let linkChild (SampleGroupTree child univChild _ _) = do
+            setupNode child univChild
+            mE <- linkGroups current child
+            case mE of
+              Left e -> do
+                s <- get
+                error $ "Error detected " <> show e <> " - store: " <> LT.unpack (pShowNoColor s)
+              Right _ -> pure ()
+      traverse_ linkChild children
+      traverse_ go children
+
+
 loadSampleTreeNoTab :: SampleGroupTree a -> Store
 loadSampleTreeNoTab xs = flip execState unsafeEmptyStore $ do
-  modify $ toGroups . roots %~ HS.insert (current xs)
+  modify $ toGroups . roots . at (current xs) .~ Just ()
   go xs
   where
     addLink :: GroupId -> GroupId -> State Store ()
     addLink from to = do
       let adjustGroups groups = groups
-            & edges %~ HS.insert (from, to)
-            & outs %~ (HS.insert to . HS.delete from)
-            & roots %~ HS.delete to
-            & nodes %~ (HM.adjust (next %~ HS.insert to) from . HM.adjust (prev .~ Just from) to)
-      modify (toGroups %~ adjustGroups)
+            & edges . at (from,to) .~ Just ()
+            & outs . at to .~ Just ()
+            & outs . at from .~ Nothing
+            & roots . at to .~ Nothing
+            & nodes . ix from . next . at to .~ Just ()
+            & nodes . ix to . prev .~ Just from
+      modify $ toGroups %~ adjustGroups
 
     setupNode current univ = do
-      modify $ toGroups . nodes %~ HM.alter (\mg -> if isNothing mg then Just emptyGroup else mg) current
+      modify $ toGroups . nodes . at current %~ Just . fromMaybe emptyGroup
       unsafeAdjustUniversePermission (const univ) current
 
     go :: SampleGroupTree a -> State Store ()
@@ -336,12 +397,12 @@ loadCycle :: [GroupId] -> Groups
 loadCycle gs = execState go emptyGroups
   where
     addGroup :: GroupId -> State Groups ()
-    addGroup gId = modify (nodes %~ HM.insert gId emptyGroup)
+    addGroup gId = modify $ nodes . at gId .~ Just emptyGroup
 
     addSingleLink :: (GroupId, GroupId) -> State Groups ()
-    addSingleLink (from, to) =
-      modify $
-        nodes %~ (HM.adjust (next .~ HS.singleton to) from . HM.adjust (prev .~ Just from) to)
+    addSingleLink (from, to) = do
+      modify $ nodes . ix from . next . at to .~ Just ()
+      modify $ nodes . ix to . prev .~ Just from
 
     go :: State Groups ()
     go = do
@@ -349,6 +410,6 @@ loadCycle gs = execState go emptyGroups
       if length gs <= 1
       then pure ()
       else do
-        modify (roots .~ HS.singleton (gs !! 0))
+        modify $ roots . at (gs !! 0) .~ Just ()
         void $ traverse addSingleLink (pairs gs)
         addSingleLink (gs !! (length gs - 1), gs !! 0)
