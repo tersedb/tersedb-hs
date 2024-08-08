@@ -32,8 +32,9 @@ import Control.Monad.Extra (mconcatMapM)
 data Group = Group
   { groupPrev :: Maybe GroupId
   , groupNext :: HashSet GroupId
-  , groupUniversePermission :: Permission
-  , groupOrganizationPermission :: Permission
+  , groupUniversePermission :: Permission -- applies to BRCUD for spaces
+  , groupOrganizationPermission :: Permission -- applies to BRCUD for groups
+  , groupRecruiterPermission :: Permission -- applies to BRCUD for actors
   , groupMembers :: HashSet ActorId
   } deriving (Eq, Generic, Show, Read)
   deriving (ToJSON, FromJSON)
@@ -43,6 +44,7 @@ makeLensesFor
   , ("groupNext", "next")
   , ("groupUniversePermission", "universePermission")
   , ("groupOrganizationPermission", "organizationPermission")
+  , ("groupRecruiterPermission", "recruiterPermission")
   , ("groupMembers", "members")
   ] ''Group
 
@@ -52,6 +54,7 @@ emptyGroup = Group
   , groupNext = mempty
   , groupUniversePermission = Blind
   , groupOrganizationPermission = Blind
+  , groupRecruiterPermission = Blind
   , groupMembers = mempty
   }
 

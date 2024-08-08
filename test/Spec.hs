@@ -11,7 +11,6 @@ import Lib.Types.Permission (Permission)
 import Lib.Types.Store
   ( Store
   , TabulatedPermissionsForGroup
-  , emptyStore
   , toGroups
   , toSpaces
   , toEntities
@@ -34,17 +33,18 @@ import Lib.Types.Store.Space (Space (..), entities)
 import Lib.Types.Store.Entity (space)
 import Lib.Types.Store.Version (genesisVersion, forkVersion)
 import Lib.Types.Group
-  ( storeGroup
-  , storeSpace
-  , storeEntity
-  , storeVersion
+  ( unsafeEmptyStore
+  , unsafeStoreGroup
+  , unsafeStoreSpace
+  , unsafeStoreEntity
+  , unsafeStoreVersion
   , linkGroups
   , unlinkGroups
   , resetTabulation
   , initTabulatedPermissionsForGroup
-  , adjustUniversePermission
-  , adjustSpacePermission
-  , adjustEntityPermission
+  , unsafeAdjustUniversePermission
+  , unsafeAdjustSpacePermission
+  , unsafeAdjustEntityPermission
   )
 
 import qualified Data.Aeson as Aeson
@@ -260,32 +260,32 @@ instance Arbitrary SampleStore where
 loadSample :: SampleStore -> Store
 loadSample SampleStore{..} = flip execState (loadSampleTree sampleGroups) $ do
   for_ (HS.toList sampleSpaces) $ \sId -> do
-    storeSpace sId
+    unsafeStoreSpace sId
   for_ (HM.toList sampleEntities) $ \(eId, (sId, vIds)) -> do
     let (vId, vIdsTail) = uncons vIds
-    storeEntity eId sId vId genesisVersion
+    unsafeStoreEntity eId sId vId genesisVersion
     case vIdsTail of
       Nothing -> pure ()
       Just vIdsTail -> void . (\f -> foldlM f vId vIdsTail) $ \prevVId vId -> do
-        storeVersion eId vId (\eId -> forkVersion eId vId)
+        unsafeStoreVersion eId vId (\eId -> forkVersion eId vId)
         pure vId
   let loadPermissions SampleGroupTree{current, auxPerGroup = (spacesPerms, entityPerms), children} = do
         for_ (HM.toList spacesPerms) $ \(space, permission) -> do
-          adjustSpacePermission (const permission) current space
+          unsafeAdjustSpacePermission (const permission) current space
         for_ (HM.toList entityPerms) $ \(space, permission) -> do
-          adjustEntityPermission (const permission) current space
+          unsafeAdjustEntityPermission (const permission) current space
         traverse_ loadPermissions children
   loadPermissions sampleGroups
 
 
 loadSampleTree :: SampleGroupTree a -> Store
-loadSampleTree xs = flip execState emptyStore $ do
+loadSampleTree xs = flip execState unsafeEmptyStore $ do
   modify $ toGroups . roots %~ HS.insert (current xs)
   go xs
   where
     setupNode current univ = do
       modify $ toGroups . nodes %~ HM.alter (\mg -> if isNothing mg then Just emptyGroup else mg) current
-      adjustUniversePermission (const univ) current
+      unsafeAdjustUniversePermission (const univ) current
       currentTab <- initTabulatedPermissionsForGroup current
       -- ensures that singleton maps still have loaded tabs
       modify $ toTabulatedPermissions %~ HM.alter (\mt -> if isNothing mt then Just currentTab else mt) current
@@ -306,7 +306,7 @@ loadSampleTree xs = flip execState emptyStore $ do
       traverse_ go children
 
 loadSampleTreeNoTab :: SampleGroupTree a -> Store
-loadSampleTreeNoTab xs = flip execState emptyStore $ do
+loadSampleTreeNoTab xs = flip execState unsafeEmptyStore $ do
   modify $ toGroups . roots %~ HS.insert (current xs)
   go xs
   where
@@ -321,7 +321,7 @@ loadSampleTreeNoTab xs = flip execState emptyStore $ do
 
     setupNode current univ = do
       modify $ toGroups . nodes %~ HM.alter (\mg -> if isNothing mg then Just emptyGroup else mg) current
-      adjustUniversePermission (const univ) current
+      unsafeAdjustUniversePermission (const univ) current
 
     go :: SampleGroupTree a -> State Store ()
     go SampleGroupTree{..} = do
