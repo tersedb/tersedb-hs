@@ -43,6 +43,7 @@ import Lib.Types.Group
   , storeSpace
   , unsafeStoreEntity
   , storeEntity
+  , storeForkedEntity
   , unsafeStoreVersion
   , storeVersion
   , unsafeAddMember
@@ -74,6 +75,7 @@ import Data.Foldable (traverse_, for_, foldlM)
 import qualified Data.Text.Lazy as LT
 import Data.Maybe (isNothing, fromJust, fromMaybe)
 import Data.List.NonEmpty (NonEmpty, uncons)
+import qualified Data.List.NonEmpty as NE
 import Text.Read (readMaybe)
 import Text.Pretty.Simple (pShowNoColor)
 import Topograph (pairs)
@@ -91,6 +93,7 @@ import Test.QuickCheck
   , listOf
   , forAll
   , elements
+  , chooseInt
   )
 
 import Debug.Trace (traceShow)
@@ -263,10 +266,8 @@ instance Arbitrary (SampleGroupTree ()) where
 
 data SampleStore = SampleStore
   { sampleSpaces :: HashSet SpaceId
-  , sampleEntities :: HashMap EntityId (SpaceId, NonEmpty VersionId)
+  , sampleEntities :: HashMap EntityId (SpaceId, NonEmpty VersionId, Maybe VersionId) -- "should be forked"
   , sampleActors :: HashMap ActorId (HashSet GroupId)
-  -- TODO actors
-  -- TODO versions & forks
   , sampleGroups :: SampleGroupTree (HashMap SpaceId Permission, HashMap SpaceId Permission)
   } deriving (Eq, Show, Read)
 
@@ -275,11 +276,25 @@ instance Arbitrary SampleStore where
     spaces <- arbitrary
     -- FIXME sample entityId's from set
     entities <- if null spaces then pure mempty else do
-      fmap HM.fromList . listOf $ do
-        entity <- arbitrary
-        space <- elements (HS.toList spaces)
-        versions <- arbitrary
-        pure (entity, (space, versions))
+      let go generatedSoFar () = do
+            entity <- arbitrary
+            space <- elements (HS.toList spaces)
+            versions <- arbitrary
+            fork <- do
+              shouldBeForked <- (== 0) <$> chooseInt (0, 10)
+              if not shouldBeForked then pure Nothing else do
+                let entsAndVersions :: HashMap EntityId (HashSet VersionId) -- nonempty HashSet, too
+                    entsAndVersions = HM.fromList $
+                      map
+                        (\(k, (_, vs, _)) -> (k, HS.fromList (NE.toList vs)))
+                        generatedSoFar
+                if null entsAndVersions then pure Nothing else do
+                  (entToForkFrom :: EntityId) <- elements $ HM.keys entsAndVersions
+                  versionToForkFrom <- elements . HS.toList . fromJust $ entsAndVersions ^. at entToForkFrom
+                  pure $ Just versionToForkFrom
+            pure $ (entity, (space, versions, fork)) : generatedSoFar
+      count <- arbitrary
+      fmap HM.fromList $ foldlM go [] (replicate count ())
     (groupsStructure :: SampleGroupTree ()) <- arbitrary
     let fromSpaces :: Gen (HashMap SpaceId Permission, HashMap SpaceId Permission)
         fromSpaces =
@@ -318,13 +333,15 @@ loadSample :: SampleStore -> Store
 loadSample SampleStore{..} = flip execState (loadSampleTree sampleGroups) $ do
   for_ (HS.toList sampleSpaces) $ \sId -> do
     unsafeStoreSpace sId
-  for_ (HM.toList sampleEntities) $ \(eId, (sId, vIds)) -> do
+  for_ (HM.toList sampleEntities) $ \(eId, (sId, vIds, mFork)) -> do
     let (vId, vIdsTail) = uncons vIds
-    unsafeStoreEntity eId sId vId genesisVersion
+    case mFork of
+      Nothing -> unsafeStoreEntity eId sId vId genesisVersion
+      Just fork -> unsafeStoreEntity eId sId vId (flip forkVersion fork)
     case vIdsTail of
       Nothing -> pure ()
       Just vIdsTail -> void . (\f -> foldlM f vId vIdsTail) $ \prevVId vId -> do
-        unsafeStoreVersion eId vId (\eId -> forkVersion eId prevVId)
+        unsafeStoreVersion eId vId (flip forkVersion prevVId)
         pure vId
   let loadPermissions SampleGroupTree{current, auxPerGroup = (spacesPerms, entityPerms), children} = do
         for_ (HM.toList spacesPerms) $ \(space, permission) -> do
@@ -347,12 +364,19 @@ storeSample SampleStore{..} adminActor adminGroup =
       unless succeeded $ do
         s <- get
         error $ "Failed to store space " <> show sId <> " - " <> LT.unpack (pShowNoColor s)
-    for_ (HM.toList sampleEntities) $ \(eId, (sId, vIds)) -> do
+    for_ (HM.toList sampleEntities) $ \(eId, (sId, vIds, mFork)) -> do
       let (vId, vIdsTail) = uncons vIds
-      succeeded <- storeEntity adminActor eId sId vId
-      unless succeeded $ do
-        s <- get
-        error $ "Failed to store entity " <> show (eId, sId, vId) <> " - " <> LT.unpack (pShowNoColor s)
+      case mFork of
+        Nothing -> do
+          succeeded <- storeEntity adminActor eId sId vId
+          unless succeeded $ do
+            s <- get
+            error $ "Failed to store entity " <> show (eId, sId, vId) <> " - " <> LT.unpack (pShowNoColor s)
+        Just fork -> do
+          succeeded <- storeForkedEntity adminActor eId sId vId fork
+          unless succeeded $ do
+            s <- get
+            error $ "Failed to store forked entity " <> show (eId, sId, vId, fork) <> " - " <> LT.unpack (pShowNoColor s)
       case vIdsTail of
         Nothing -> pure ()
         Just vIdsTail -> void . (\f -> foldlM f vId vIdsTail) $ \prevVId vId -> do

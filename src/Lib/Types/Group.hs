@@ -177,6 +177,10 @@ newEntity :: ActorId -> SpaceId -> SheepdogM (Maybe (EntityId, VersionId))
 newEntity creator sId =
   generateWithAuthority (\(eId, vId) -> storeEntity creator eId sId vId)
 
+newForkedEntity :: ActorId -> SpaceId -> VersionId -> SheepdogM (Maybe (EntityId, VersionId))
+newForkedEntity creator sId prevVId =
+  generateWithAuthority (\(eId, vId) -> storeForkedEntity creator eId sId vId prevVId)
+
 storeEntity
   :: MonadState Store m
   => ActorId
@@ -190,6 +194,21 @@ storeEntity creator eId sId vId = do
     , canDo forGroupUniverse creator Update -- FIXME is this correct? Just because I can update spaces, does that mean I have a right to create entities in any space?
     ]
   conditionally (unsafeStoreEntity eId sId vId genesisVersion) canAdjust
+
+storeForkedEntity
+  :: MonadState Store m
+  => ActorId
+  -> EntityId
+  -> SpaceId
+  -> VersionId
+  -> VersionId
+  -> m Bool
+storeForkedEntity creator eId sId vId prevVId = do
+  canAdjust <- orM
+    [ canDo (forGroupSpaces . at sId . non Blind) creator Create
+    , canDo forGroupUniverse creator Update -- FIXME is this correct? Just because I can update spaces, does that mean I have a right to create entities in any space?
+    ]
+  conditionally (unsafeStoreEntity eId sId vId (flip forkVersion prevVId)) canAdjust
 
 unsafeStoreEntity
   :: MonadState Store m
