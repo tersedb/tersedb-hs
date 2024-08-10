@@ -15,16 +15,8 @@ import Lib.Types.Id (SpaceId, VersionId)
 
 import Data.Aeson (ToJSON, FromJSON)
 import Deriving.Aeson.Stock (PrefixedSnake, Generic, CustomJSON (..))
-import Data.HashMap.Strict (HashMap)
-import qualified Data.HashMap.Strict as HM
-import Data.HashSet (HashSet)
-import qualified Data.HashSet as HS
-import Data.Monoid (First (..))
 import Data.List.NonEmpty (NonEmpty (..), (<|))
-import Control.Lens ((^.))
 import Control.Lens.TH (makeLensesFor)
-import Control.Monad.State (MonadState (get, put), modify, evalState)
-import Control.Monad.Extra (mconcatMapM)
 
 
 data Entity = Entity

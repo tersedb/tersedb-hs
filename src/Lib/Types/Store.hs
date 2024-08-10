@@ -11,12 +11,16 @@
 
 module Lib.Types.Store where
 
-import Lib.Types.Store.Groups (Groups, emptyGroups)
+import Lib.Types.Store.Groups (Groups)
 import Lib.Types.Store.Space (Space)
 import Lib.Types.Store.Entity (Entity)
 import Lib.Types.Store.Version (Version)
 import Lib.Types.Id (GroupId, SpaceId, EntityId, VersionId, ActorId)
-import Lib.Types.Permission (Permission)
+import Lib.Types.Permission
+  ( CollectionPermission
+  , CollectionPermissionWithExemption
+  , SinglePermission
+  )
 
 import Data.HashSet (HashSet)
 import Data.HashMap.Strict (HashMap)
@@ -25,21 +29,25 @@ import Control.Lens.TH (makeLensesFor)
 import Test.QuickCheck (Arbitrary (arbitrary))
 
 
+-- TODO tabulate groups that actors belong to, omitting redundant groups already inherited
+
 data TabulatedPermissionsForGroup = TabulatedPermissionsForGroup
-  { tabulatedPermissionsForGroupUniverse :: Permission -- BRCUD for spaces
-  , tabulatedPermissionsForGroupOrganization :: Permission -- BRCUD for groups
-  , tabulatedPermissionsForGroupRecruiter :: Permission -- BRCUD for actors
-  , tabulatedPermissionsForGroupSpaces :: HashMap SpaceId Permission -- BRCUD for spaces that already exist - C does not apply
-  , tabulatedPermissionsForGroupEntities :: HashMap SpaceId Permission -- BRCUD for entities & versions within a space
-  , tabulatedPermissionsForGroupGroups :: HashMap GroupId Permission -- BRCUD for memberships of actors for a group - U does not apply
+  { tabulatedPermissionsForGroupUniverse :: CollectionPermissionWithExemption -- Collection of spaces
+  , tabulatedPermissionsForGroupOrganization :: CollectionPermissionWithExemption -- Collection of groups
+  , tabulatedPermissionsForGroupRecruiter :: CollectionPermission -- Collection of actors
+  , tabulatedPermissionsForGroupSpaces :: HashMap SpaceId CollectionPermission -- Single spaces, after being applied to universe. Will not reference universe when it doesn't exist
+  , tabulatedPermissionsForGroupEntities :: HashMap SpaceId CollectionPermission -- Collection of entities
+  , tabulatedPermissionsForGroupGroups :: HashMap GroupId CollectionPermission -- Single groups, after being applied to organization. Will not reference organization when it doesn't exist.
+  , tabulatedPermissionsForGroupMembers :: HashMap GroupId CollectionPermission -- Collection of memberships
   } deriving (Show, Read)
 makeLensesFor
-  [ ("tabulatedPermissionsForGroupUniverse", "forGroupUniverse")
-  , ("tabulatedPermissionsForGroupOrganization", "forGroupOrganization")
-  , ("tabulatedPermissionsForGroupRecruiter", "forGroupRecruiter")
-  , ("tabulatedPermissionsForGroupSpaces", "forGroupSpaces")
-  , ("tabulatedPermissionsForGroupEntities", "forGroupEntities")
-  , ("tabulatedPermissionsForGroupGroups", "forGroupGroups")
+  [ ("tabulatedPermissionsForGroupUniverse", "forUniverse")
+  , ("tabulatedPermissionsForGroupOrganization", "forOrganization")
+  , ("tabulatedPermissionsForGroupRecruiter", "forRecruiter")
+  , ("tabulatedPermissionsForGroupSpaces", "forSpaces")
+  , ("tabulatedPermissionsForGroupEntities", "forEntities")
+  , ("tabulatedPermissionsForGroupGroups", "forGroups")
+  , ("tabulatedPermissionsForGroupMembers", "forMembers")
   ] ''TabulatedPermissionsForGroup
 
 instance Semigroup TabulatedPermissionsForGroup where
@@ -65,6 +73,10 @@ instance Semigroup TabulatedPermissionsForGroup where
         HM.unionWith (<>)
           (tabulatedPermissionsForGroupGroups x)
           (tabulatedPermissionsForGroupGroups y)
+    , tabulatedPermissionsForGroupMembers =
+        HM.unionWith (<>)
+          (tabulatedPermissionsForGroupMembers x)
+          (tabulatedPermissionsForGroupMembers y)
     }
 instance Monoid TabulatedPermissionsForGroup where
   mempty = TabulatedPermissionsForGroup
@@ -74,11 +86,13 @@ instance Monoid TabulatedPermissionsForGroup where
     , tabulatedPermissionsForGroupSpaces = mempty
     , tabulatedPermissionsForGroupEntities = mempty
     , tabulatedPermissionsForGroupGroups = mempty
+    , tabulatedPermissionsForGroupMembers = mempty
     }
 instance Arbitrary TabulatedPermissionsForGroup where
   arbitrary =
     TabulatedPermissionsForGroup
       <$> arbitrary
+      <*> arbitrary
       <*> arbitrary
       <*> arbitrary
       <*> arbitrary
@@ -93,14 +107,15 @@ hasLessOrEqualPermissionsTo
   -> TabulatedPermissionsForGroup
   -> Bool
 hasLessOrEqualPermissionsTo
-  (TabulatedPermissionsForGroup xu xo xr xs xe xg)
-  (TabulatedPermissionsForGroup yu yo yr ys ye yg) =
+  (TabulatedPermissionsForGroup xu xo xr xs xe xg xm)
+  (TabulatedPermissionsForGroup yu yo yr ys ye yg ym) =
     xu <= yu
     && xo <= yo
     && xr <= yr
     && HM.isSubmapOfBy (<=) xs ys
     && HM.isSubmapOfBy (<=) xe ye
     && HM.isSubmapOfBy (<=) xg yg
+    && HM.isSubmapOfBy (<=) xm ym
 
 data Store = Store
   { storeGroups :: Groups
@@ -108,9 +123,10 @@ data Store = Store
   , storeSpaces :: HashMap SpaceId Space
   , storeEntities :: HashMap EntityId Entity
   , storeVersions :: HashMap VersionId Version
-  , storeSpacePermissions :: HashMap GroupId (HashMap SpaceId Permission)
-  , storeEntityPermissions :: HashMap GroupId (HashMap SpaceId Permission)
-  , storeGroupPermissions :: HashMap GroupId (HashMap GroupId Permission)
+  , storeSpacePermissions :: HashMap GroupId (HashMap SpaceId SinglePermission)
+  , storeEntityPermissions :: HashMap GroupId (HashMap SpaceId CollectionPermission)
+  , storeGroupPermissions :: HashMap GroupId (HashMap GroupId SinglePermission)
+  , storeMemberPermissions :: HashMap GroupId (HashMap GroupId CollectionPermission)
   , storeTabulatedPermissions :: HashMap GroupId TabulatedPermissionsForGroup 
   } deriving (Eq, Show, Read)
 makeLensesFor
@@ -122,6 +138,7 @@ makeLensesFor
   , ("storeSpacePermissions", "toSpacePermissions")
   , ("storeEntityPermissions", "toEntityPermissions")
   , ("storeGroupPermissions", "toGroupPermissions")
+  , ("storeMemberPermissions", "toMemberPermissions")
   , ("storeTabulatedPermissions", "toTabulatedPermissions")
   ] ''Store
 

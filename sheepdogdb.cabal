@@ -26,7 +26,10 @@ source-repository head
 library
   exposed-modules:
       Lib
-      Lib.Types.Group
+      Lib.Actions.Gen
+      Lib.Actions.Safe
+      Lib.Actions.Tabulation
+      Lib.Actions.Unsafe
       Lib.Types.Id
       Lib.Types.Monad
       Lib.Types.Permission

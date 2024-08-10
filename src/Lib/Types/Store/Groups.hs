@@ -12,7 +12,10 @@
 module Lib.Types.Store.Groups where
 
 import Lib.Types.Id (GroupId, ActorId)
-import Lib.Types.Permission (Permission (Blind))
+import Lib.Types.Permission
+  ( CollectionPermission
+  , CollectionPermissionWithExemption
+  )
 
 import Data.Aeson (ToJSON, FromJSON)
 import Deriving.Aeson.Stock (PrefixedSnake, Generic, CustomJSON (..))
@@ -32,9 +35,9 @@ import Control.Monad.Extra (mconcatMapM)
 data Group = Group
   { groupPrev :: Maybe GroupId
   , groupNext :: HashSet GroupId
-  , groupUniversePermission :: Permission -- applies to BRCUD for spaces
-  , groupOrganizationPermission :: Permission -- applies to BRCUD for groups
-  , groupRecruiterPermission :: Permission -- applies to BRCUD for actors
+  , groupUniversePermission :: CollectionPermissionWithExemption -- applies to BRCUD for spaces
+  , groupOrganizationPermission :: CollectionPermissionWithExemption -- applies to BRCUD for groups
+  , groupRecruiterPermission :: CollectionPermission -- applies to BRCUD for actors
   , groupMembers :: HashSet ActorId
   } deriving (Eq, Generic, Show, Read)
   deriving (ToJSON, FromJSON)
@@ -52,9 +55,9 @@ emptyGroup :: Group
 emptyGroup = Group
   { groupPrev = Nothing
   , groupNext = mempty
-  , groupUniversePermission = Blind
-  , groupOrganizationPermission = Blind
-  , groupRecruiterPermission = Blind
+  , groupUniversePermission = minBound
+  , groupOrganizationPermission = minBound
+  , groupRecruiterPermission = minBound
   , groupMembers = mempty
   }
 

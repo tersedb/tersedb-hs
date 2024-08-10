@@ -7,7 +7,11 @@
   #-}
 
 import Lib.Types.Id (GroupId, SpaceId, EntityId, VersionId, ActorId)
-import Lib.Types.Permission (Permission (Delete))
+import Lib.Types.Permission
+  ( CollectionPermission (..)
+  , CollectionPermissionWithExemption (..)
+  , SinglePermission (Adjust)
+  )
 import Lib.Types.Store
   ( Store
   , TabulatedPermissionsForGroup
@@ -32,38 +36,44 @@ import Lib.Types.Store.Groups
 import Lib.Types.Store.Space (Space (..), entities)
 import Lib.Types.Store.Entity (space)
 import Lib.Types.Store.Version (genesisVersion, forkVersion)
-import Lib.Types.Group
+import Lib.Actions.Unsafe
   ( unsafeEmptyStore
-  , emptyStore
   , unsafeStoreGroup
-  , storeGroup
   , unsafeStoreActor
-  , storeActor
+  , unsafeStoreActor
   , unsafeStoreSpace
-  , storeSpace
   , unsafeStoreEntity
+  , unsafeStoreVersion
+  , unsafeAddMember
+  , unsafeLinkGroups
+  , unsafeUnlinkGroups
+  , unsafeAdjustUniversePermission
+  , unsafeAdjustOrganizationPermission
+  , unsafeAdjustRecruiterPermission
+  , unsafeAdjustGroupPermission
+  , unsafeAdjustSpacePermission
+  , unsafeAdjustEntityPermission
+  )
+import Lib.Actions.Safe
+  ( emptyStore
+  , storeGroup
+  , storeActor
+  , storeSpace
   , storeEntity
   , storeForkedEntity
-  , unsafeStoreVersion
   , storeVersion
-  , unsafeAddMember
   , addMember
-  , unsafeStoreActor
-  , linkGroups
-  , unlinkGroups
-  , resetTabulation
+  , setUniversePermission
+  , setOrganizationPermission
+  , setRecruiterPermission
+  , setGroupPermission
+  , setSpacePermission
+  , setEntityPermission
+  )
+import Lib.Actions.Tabulation
+  ( resetTabulation
   , initTabulatedPermissionsForGroup
   , updateTabulationStartingAt
-  , unsafeAdjustUniversePermission
-  , setUniversePermission
-  , unsafeAdjustOrganizationPermission
-  , setOrganizationPermission
-  , unsafeAdjustRecruiterPermission
-  , setRecruiterPermission
-  , unsafeAdjustSpacePermission
-  , setSpacePermission
-  , unsafeAdjustEntityPermission
-  , setEntityPermission
   )
 
 import qualified Data.Aeson as Aeson
@@ -73,7 +83,7 @@ import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HM
 import Data.Foldable (traverse_, for_, foldlM)
 import qualified Data.Text.Lazy as LT
-import Data.Maybe (isNothing, fromJust, fromMaybe)
+import Data.Maybe (isNothing, fromJust, fromMaybe, mapMaybe)
 import Data.List.NonEmpty (NonEmpty, uncons)
 import qualified Data.List.NonEmpty as NE
 import Text.Read (readMaybe)
@@ -82,7 +92,7 @@ import Topograph (pairs)
 import Control.Monad (void)
 import Control.Monad.Extra (when, unless)
 import Control.Monad.State (State, execState, modify, put, get)
-import Control.Lens ((%~), (.~), (&), (^.), at, ix)
+import Control.Lens ((%~), (.~), (&), (^.), at, ix, _1, _2)
 import Test.Syd (sydTest, describe, it, shouldBe, shouldSatisfy)
 import Test.QuickCheck
   ( Arbitrary (arbitrary, shrink)
@@ -109,11 +119,19 @@ main = sydTest $ do
       it "aeson should be isomorphic" $
         property $ \(id :: GroupId) ->
           Aeson.decode (Aeson.encode id) `shouldBe` Just id
-  describe "Permission" $ do
+  describe "CollectionPermission" $ do
     it "has a lower bound" $
-      property $ \(x :: Permission) -> x `shouldSatisfy` (>= minBound)
+      property $ \(x :: CollectionPermission) -> x `shouldSatisfy` (>= minBound)
     it "has an upper bound" $
-      property $ \(x :: Permission) -> x `shouldSatisfy` (<= maxBound)
+      property $ \(x :: CollectionPermission) -> x `shouldSatisfy` (<= maxBound)
+    it "is a semigroup" $
+      property $ \(x :: CollectionPermission) y z -> (x <> y) <> z `shouldBe` x <> (y <> z)
+    it "is a monoid left" $
+      property $ \(x :: CollectionPermission) -> x <> mempty `shouldBe` x
+    it "is a monoid right" $
+      property $ \(x :: CollectionPermission) -> mempty <> x `shouldBe` x
+    it "is commutative" $
+      property $ \(x :: CollectionPermission) y -> y <> x `shouldBe` x <> y
 -- TODO tabulating should be idempotent
   describe "TabulatedPermissionsForGroup" $ do
     it "is a semigroup" $
@@ -166,7 +184,7 @@ main = sydTest $ do
           in if null createdEdges
           then property True
           else forAll (elements (HS.toList createdEdges)) $ \(from, to) ->
-            let newStore = execState (unlinkGroups from to) store
+            let newStore = execState (unsafeUnlinkGroups from to) store
                 newGroups = newStore ^. toGroups
                 rootsWithoutTo = HS.delete to (newGroups ^. roots)
                 descendants :: GroupId -> HashSet GroupId
@@ -213,20 +231,34 @@ main = sydTest $ do
           property $ \(xs :: SampleStore, adminActor :: ActorId, adminGroup :: GroupId) ->
             let safeStore = storeSample xs adminActor adminGroup
                 unsafeStore = flip execState (loadSample xs) $ do
+                  -- setup admin
                   unsafeStoreGroup adminGroup
-                  unsafeAdjustUniversePermission (const Delete) adminGroup
-                  unsafeAdjustOrganizationPermission (const Delete) adminGroup
+                  unsafeAdjustUniversePermission
+                    (const $ CollectionPermissionWithExemption Delete True)
+                    adminGroup
+                  unsafeAdjustOrganizationPermission
+                    (const $ CollectionPermissionWithExemption Delete True)
+                    adminGroup
                   unsafeAdjustRecruiterPermission (const Delete) adminGroup
                   unsafeStoreActor adminActor
                   unsafeAddMember adminGroup adminActor
-                  updateTabulationStartingAt adminGroup
+                  -- "backdate" the granting of group adjust rights to admin group
+                  s <- get
+                  for_ (HM.keys $ s ^. toGroups . nodes) $ \gId ->
+                    unless (gId == adminGroup) $
+                      unsafeAdjustGroupPermission (const (Just Adjust)) adminGroup gId
+                  -- "backdate" the granting of space create rights to admin group
+                  s <- get
+                  for_ (HM.keys $ s ^. toSpaces) $ \sId ->
+                    unsafeAdjustEntityPermission (const Create) adminGroup sId
+                  resetTabulation
             in  safeStore `shouldBe` unsafeStore
 
 data SampleGroupTree a = SampleGroupTree
   { current :: GroupId
-  , univ :: Permission
-  , org :: Permission
-  , recr :: Permission
+  , univ :: CollectionPermissionWithExemption
+  , org :: CollectionPermissionWithExemption
+  , recr :: CollectionPermission
   , auxPerGroup :: a
   , children :: [SampleGroupTree a]
   } deriving (Eq, Show, Read)
@@ -268,7 +300,7 @@ data SampleStore = SampleStore
   { sampleSpaces :: HashSet SpaceId
   , sampleEntities :: HashMap EntityId (SpaceId, NonEmpty VersionId, Maybe VersionId) -- "should be forked"
   , sampleActors :: HashMap ActorId (HashSet GroupId)
-  , sampleGroups :: SampleGroupTree (HashMap SpaceId Permission, HashMap SpaceId Permission)
+  , sampleGroups :: SampleGroupTree (HashMap SpaceId SinglePermission, HashMap SpaceId CollectionPermission) -- spaces & entities
   } deriving (Eq, Show, Read)
 
 instance Arbitrary SampleStore where
@@ -296,15 +328,17 @@ instance Arbitrary SampleStore where
       count <- arbitrary
       fmap HM.fromList $ foldlM go [] (replicate count ())
     (groupsStructure :: SampleGroupTree ()) <- arbitrary
-    let fromSpaces :: Gen (HashMap SpaceId Permission, HashMap SpaceId Permission)
+    let fromSpaces :: Gen (HashMap SpaceId SinglePermission, HashMap SpaceId CollectionPermission) -- Spaces & entities rights 
         fromSpaces =
-          let relevantPermissions =
+          let relevantPermissions :: Arbitrary a => Gen (HashMap SpaceId a)
+              relevantPermissions =
                 if null spaces
                 then pure mempty
                 else fmap HM.fromList . listOf $ (,) <$> elements (HS.toList spaces) <*> arbitrary
           in  (,) <$> relevantPermissions <*> relevantPermissions
-    groups <- sequenceA $ fmap (const fromSpaces) groupsStructure
-    let allGroups =
+    groups <- sequenceA $ fmap (const fromSpaces) groupsStructure -- replaces () with fromSpaces
+    let allGroups :: HashSet GroupId
+        allGroups =
           let go (SampleGroupTree g _ _ _ _ gs) = HS.insert g . HS.unions $ fmap go gs
           in  go groups
     actors <- fmap HM.fromList . listOf $ do
@@ -343,9 +377,11 @@ loadSample SampleStore{..} = flip execState (loadSampleTree sampleGroups) $ do
       Just vIdsTail -> void . (\f -> foldlM f vId vIdsTail) $ \prevVId vId -> do
         unsafeStoreVersion eId vId (flip forkVersion prevVId)
         pure vId
-  let loadPermissions SampleGroupTree{current, auxPerGroup = (spacesPerms, entityPerms), children} = do
+  let loadPermissions :: SampleGroupTree (HashMap SpaceId SinglePermission, HashMap SpaceId CollectionPermission)
+                      -> State Store ()
+      loadPermissions SampleGroupTree{current, auxPerGroup = (spacesPerms, entityPerms), children} = do
         for_ (HM.toList spacesPerms) $ \(space, permission) -> do
-          unsafeAdjustSpacePermission (const permission) current space
+          unsafeAdjustSpacePermission (const (Just permission)) current space
         for_ (HM.toList entityPerms) $ \(space, permission) -> do
           unsafeAdjustEntityPermission (const permission) current space
         traverse_ loadPermissions children
@@ -364,7 +400,54 @@ storeSample SampleStore{..} adminActor adminGroup =
       unless succeeded $ do
         s <- get
         error $ "Failed to store space " <> show sId <> " - " <> LT.unpack (pShowNoColor s)
-    for_ (HM.toList sampleEntities) $ \(eId, (sId, vIds, mFork)) -> do
+      succeeded <- setEntityPermission adminActor Create adminGroup sId 
+      unless succeeded $ do
+        s <- get
+        error $ "Failed to set entity permissions " <> show sId <> " - " <> LT.unpack (pShowNoColor s)
+    let forksOf :: HashMap VersionId (HashSet EntityId)
+        forksOf = foldr (HM.unionWith HS.union) mempty
+                 . mapMaybe
+                    (\(eId, (_,_,mFork)) -> fmap (\vId -> HM.singleton vId (HS.singleton eId)) mFork)
+                 $ HM.toList sampleEntities
+        backtrackLinks :: State
+          ( HashSet VersionId
+          , [HashSet EntityId]
+          ) ()
+        backtrackLinks = do
+          (versionsToGet, xs) <- get
+          if null versionsToGet then pure () else do
+            let go :: HashSet VersionId
+                   -> VersionId
+                   -> State (HashSet VersionId, [HashSet EntityId]) (HashSet VersionId)
+                go nextVs vChildId = case HM.lookup vChildId forksOf of
+                  Nothing -> pure nextVs
+                  Just es -> do
+                    modify $ _2 %~ (es:)
+                    let go' eId nextVs' =
+                          let (sId, vIds, _mFork) = fromJust $ HM.lookup eId sampleEntities
+                          in  foldr HS.insert nextVs' vIds
+                    pure $ foldr go' nextVs $ HS.toList es
+            nextVersionsToGet <- foldlM go mempty (HS.toList versionsToGet)
+            modify $ _1 .~ nextVersionsToGet
+            backtrackLinks
+        initialLinks ::
+          ( HashSet VersionId
+          , [HashSet EntityId]
+          )
+        initialLinks = 
+          ( HS.fromList $ concatMap (\(_,(_,vs,_)) -> NE.toList vs) noChildren
+          , [HS.fromList $ map fst noChildren]
+          )
+          where
+            noChildren :: [(EntityId, (SpaceId, NonEmpty VersionId, Maybe VersionId))]
+            noChildren = filter (\(_,(_,_,mFork)) -> isNothing mFork) $ HM.toList sampleEntities
+        sortedSampleEntities :: [(EntityId, (SpaceId, NonEmpty VersionId, Maybe VersionId))]
+        sortedSampleEntities =
+          let es = reverse $ execState backtrackLinks initialLinks ^. _2
+              rebuild eId = (eId, fromJust $ HM.lookup eId sampleEntities)
+          in  concatMap (\es' -> map rebuild (HS.toList es')) es
+          
+    for_ sortedSampleEntities $ \(eId, (sId, vIds, mFork)) -> do -- FIXME use a State to keep retrying on fork failure? Or just sort the list?
       let (vId, vIdsTail) = uncons vIds
       case mFork of
         Nothing -> do
@@ -373,21 +456,27 @@ storeSample SampleStore{..} adminActor adminGroup =
             s <- get
             error $ "Failed to store entity " <> show (eId, sId, vId) <> " - " <> LT.unpack (pShowNoColor s)
         Just fork -> do
-          succeeded <- storeForkedEntity adminActor eId sId vId fork
-          unless succeeded $ do
-            s <- get
-            error $ "Failed to store forked entity " <> show (eId, sId, vId, fork) <> " - " <> LT.unpack (pShowNoColor s)
+          eSucceeded <- storeForkedEntity adminActor eId sId vId fork
+          case eSucceeded of
+            Right succeeded ->
+              unless succeeded $ do
+                s <- get
+                error $ "Failed to store forked entity " <> show (eId, sId, vId, fork) <> " - " <> LT.unpack (pShowNoColor s)
+            Left e -> do
+              s <- get
+              error $ "Error storing forked entity " <> show (e, eId, sId, vId, fork) <> " - " <> LT.unpack (pShowNoColor s)
       case vIdsTail of
         Nothing -> pure ()
-        Just vIdsTail -> void . (\f -> foldlM f vId vIdsTail) $ \prevVId vId -> do
-          succeeded <- storeVersion adminActor eId vId prevVId
+        Just vIdsTail -> for_ vIdsTail $ \vId -> do
+          succeeded <- storeVersion adminActor eId vId
           unless succeeded $ do
             s <- get
             error $ "Failed to store version " <> show (eId, vId) <> " - " <> LT.unpack (pShowNoColor s)
-          pure vId
-    let loadPermissions SampleGroupTree{current, auxPerGroup = (spacesPerms, entityPerms), children} = do
+    let loadPermissions :: SampleGroupTree (HashMap SpaceId SinglePermission, HashMap SpaceId CollectionPermission)
+                        -> State Store ()
+        loadPermissions SampleGroupTree{current, auxPerGroup = (spacesPerms, entityPerms), children} = do
           for_ (HM.toList spacesPerms) $ \(space, permission) -> do
-            succeeded <- setSpacePermission adminActor permission current space
+            succeeded <- setSpacePermission adminActor (Just permission) current space
             unless succeeded $ do
               s <- get
               error $ "Failed to set space permission " <> show (current, space) <> " - " <> LT.unpack (pShowNoColor s)
@@ -430,7 +519,7 @@ loadSampleTree xs = flip execState unsafeEmptyStore $ do
       -- loads all nodes
       let linkChild (SampleGroupTree child univChild orgChild recrChild _ _) = do
             setupNode child univChild orgChild recrChild
-            mE <- linkGroups current child
+            mE <- unsafeLinkGroups current child
             case mE of
               Left e -> do
                 s <- get
@@ -454,6 +543,10 @@ storeSampleTree xs adminActor adminGroup = flip execState (emptyStore adminActor
       unless succeeded $ do
         s <- get
         error $ "Failed to store group " <> show current <> " - " <> LT.unpack (pShowNoColor s)
+      succeeded <- setGroupPermission adminActor (Just Adjust) adminGroup current
+      unless succeeded $ do
+        s <- get
+        error $ "Failed to grant admin group permissions over current " <> show current <> " - " <> LT.unpack (pShowNoColor s)
       succeeded <- setUniversePermission adminActor univ current
       unless succeeded $ do
         s <- get
@@ -476,7 +569,7 @@ storeSampleTree xs adminActor adminGroup = flip execState (emptyStore adminActor
       -- loads all nodes
       let linkChild (SampleGroupTree child univChild orgChild recrChild _ _) = do
             setupNode child univChild orgChild recrChild
-            mE <- linkGroups current child
+            mE <- unsafeLinkGroups current child -- FIXME
             case mE of
               Left e -> do
                 s <- get
