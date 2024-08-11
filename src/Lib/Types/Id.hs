@@ -14,6 +14,7 @@ import Data.Word (Word8)
 import Data.Aeson (ToJSON (toJSON), FromJSON (parseJSON), Value (String))
 import Data.Aeson.Types (typeMismatch)
 import GHC.Generics (Generic)
+import Control.Monad (replicateM)
 import Text.Read (Read (readPrec))
 import Test.QuickCheck (Arbitrary (arbitrary), vectorOf)
 import Test.QuickCheck.Gen (chooseUpTo)
@@ -47,19 +48,8 @@ instance FromJSON Id where
 
 instance Uniform Id where
   uniformM gen = do
-    a <- uniformM gen 
-    b <- uniformM gen 
-    c <- uniformM gen 
-    d <- uniformM gen 
-    e <- uniformM gen 
-    f <- uniformM gen 
-    g <- uniformM gen 
-    h <- uniformM gen 
-    i <- uniformM gen 
-    j <- uniformM gen 
-    k <- uniformM gen 
-    l <- uniformM gen 
-    pure (Id (BS.pack [a,b,c,d,e,f,g,h,i,j,k,l]))
+    xs <- replicateM 12 (uniformM gen)
+    pure (Id (BS.pack xs))
 
 instance Arbitrary Id where
   arbitrary = do
