@@ -37,6 +37,7 @@ library
       Lib.Types.Store.Entity
       Lib.Types.Store.Groups
       Lib.Types.Store.Space
+      Lib.Types.Store.Tabulation.Group
       Lib.Types.Store.Version
   other-modules:
       Paths_sheepdogdb

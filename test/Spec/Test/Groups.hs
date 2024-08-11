@@ -19,8 +19,8 @@ import Lib.Types.Store
   ( Store
   , toGroups
   , toTabulatedPermissions
-  , hasLessOrEqualPermissionsTo
   )
+import Lib.Types.Store.Tabulation.Group (hasLessOrEqualPermissionsTo)
 import Lib.Types.Store.Groups
   ( Groups
   , nodes

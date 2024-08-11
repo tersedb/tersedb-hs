@@ -45,6 +45,8 @@ import Lib.Types.Store
   , toSpaces
   , toEntities
   , toVersions
+  , toReferencesFrom
+  , toSubscriptionsFrom
   , toSpacePermissions
   , toEntityPermissions
   , toGroupPermissions
@@ -52,7 +54,7 @@ import Lib.Types.Store
   )
 import Lib.Types.Store.Space (entities)
 import Lib.Types.Store.Entity (initEntity, addVersion)
-import Lib.Types.Store.Version (Version)
+import Lib.Types.Store.Version (Version, references, subscriptions)
 import Lib.Types.Store.Groups
   ( Group
   , emptyGroup
@@ -72,6 +74,7 @@ import Lib.Types.Store.Groups
 
 import qualified Data.HashSet as HS
 import Data.Maybe (fromMaybe)
+import Data.Foldable (for_)
 import Control.Lens (Lens', (&), (^.), (.~), (%~), at, non, ix)
 import Control.Monad.State (MonadState (get, put), modify)
 import Control.Monad.Extra (when)
@@ -86,6 +89,8 @@ unsafeEmptyStore = Store
   , storeSpaces = mempty
   , storeEntities = mempty
   , storeVersions = mempty
+  , storeReferencesFrom = mempty
+  , storeSubscriptionsFrom = mempty
   , storeSpacePermissions = mempty
   , storeEntityPermissions = mempty
   , storeGroupPermissions = mempty
@@ -135,7 +140,12 @@ unsafeStoreVersion
   -> m ()
 unsafeStoreVersion eId vId buildVersion = do
   modify $ toEntities . ix eId %~ flip addVersion vId
-  modify $ toVersions . at vId .~ Just (buildVersion eId)
+  let v = buildVersion eId
+  modify $ toVersions . at vId .~ Just v
+  for_ (HS.toList $ v ^. references) $ \refId ->
+    modify $ toReferencesFrom . at refId . non mempty . at vId .~ Just ()
+  for_ (HS.toList $ v ^. subscriptions) $ \subId ->
+    modify $ toSubscriptionsFrom . at subId . non mempty . at vId .~ Just ()
 
 data LinkGroupError
   = CycleDetected [GroupId]

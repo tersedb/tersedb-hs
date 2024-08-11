@@ -14,7 +14,7 @@ import Lib.Types.Permission
   , CollectionPermissionWithExemption (..)
   , SinglePermission
   )
-import Lib.Types.Store
+import Lib.Types.Store.Tabulation.Group
   ( TabulatedPermissionsForGroup
   , hasLessOrEqualPermissionsTo
   )

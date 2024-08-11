@@ -44,7 +44,9 @@ import Lib.Types.Store
   , toEntities
   , toVersions
   , toTabulatedPermissions
-  , TabulatedPermissionsForGroup (..)
+  )
+import Lib.Types.Store.Tabulation.Group
+  ( TabulatedPermissionsForGroup (..)
   , forUniverse
   , forOrganization
   , forRecruiter

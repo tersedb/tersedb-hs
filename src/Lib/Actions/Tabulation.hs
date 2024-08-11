@@ -21,8 +21,8 @@ import Lib.Types.Store
   , toEntityPermissions
   , toGroupPermissions
   , toMemberPermissions
-  , TabulatedPermissionsForGroup (..)
   )
+import Lib.Types.Store.Tabulation.Group (TabulatedPermissionsForGroup (..))
 import Lib.Types.Store.Groups
   ( nodes
   , universePermission

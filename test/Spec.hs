@@ -6,11 +6,7 @@
   , NamedFieldPuns
   #-}
 
-import Spec.Sample.Tree
-  ( SampleGroupTree (..)
-  , loadSampleTreeNoTab
-  , loadSampleTree
-  )
+import Spec.Sample.Tree (SampleGroupTree (..))
 import Spec.Sample.Store
   ( SampleStore (..)
   , loadSample
@@ -29,27 +25,14 @@ import Lib.Types.Store
   ( toGroups
   , toSpaces
   , toEntities
-  , toTabulatedPermissions
-  , hasLessOrEqualPermissionsTo
   )
-import Lib.Types.Store.Groups
-  ( Groups
-  , nodes
-  , edges
-  , roots
-  , next
-  , prev
-  , hasCycle
-  , emptyGroup
-  , emptyGroups
-  )
+import Lib.Types.Store.Groups (nodes)
 import Lib.Types.Store.Space (entities)
 import Lib.Types.Store.Entity (space)
 import Lib.Actions.Unsafe
   ( unsafeStoreGroup
   , unsafeStoreActor
   , unsafeAddMember
-  , unsafeUnlinkGroups
   , unsafeAdjustUniversePermission
   , unsafeAdjustOrganizationPermission
   , unsafeAdjustRecruiterPermission
@@ -59,16 +42,12 @@ import Lib.Actions.Unsafe
   )
 import Lib.Actions.Tabulation (resetTabulation)
 
-import Data.HashSet (HashSet)
 import qualified Data.HashSet as HS
 import qualified Data.HashMap.Strict as HM
-import Data.Foldable (traverse_, for_)
-import Data.Maybe (fromJust)
-import Topograph (pairs)
-import Control.Monad (void)
+import Data.Foldable (for_)
 import Control.Monad.Extra (unless)
-import Control.Monad.State (State, execState, modify, get)
-import Control.Lens ((.~), (^.), at, ix)
+import Control.Monad.State (execState, get)
+import Control.Lens ((^.))
 import Test.Syd (sydTest, describe, it, shouldBe, shouldSatisfy)
 import Test.QuickCheck
   ( property
