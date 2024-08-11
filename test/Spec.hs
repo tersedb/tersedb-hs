@@ -22,7 +22,9 @@ import Lib.Types.Permission
   , SinglePermission (Adjust)
   )
 import Lib.Types.Store
-  ( toGroups
+  ( store
+  , temp
+  , toGroups
   , toSpaces
   , toEntities
   )
@@ -67,16 +69,16 @@ main = sydTest $ do
         in  testPermissionInheritance (current groups) (children groups) (loadSample xs)
     it "all spaces are disjoint" $
       property $ \(xs :: SampleStore) ->
-        let store = loadSample xs
-        in  foldr HS.intersection mempty (fmap (^. entities) (store ^. toSpaces))
+        let s = loadSample xs
+        in  foldr HS.intersection mempty (fmap (^. entities) (s ^. store . toSpaces))
               `shouldBe` mempty
     it "all elements exist in their space" $
       property $ \(xs :: SampleStore) ->
-        let store = loadSample xs
-        in  if null (store ^. toEntities)
+        let s = loadSample xs
+        in  if null (s ^. store . toEntities)
             then property True
-            else forAll (elements . HM.toList $ store ^. toEntities) $ \(eId, e) ->
-                  (store, eId, HM.lookup (e ^. space) (store ^. toSpaces)) `shouldSatisfy` (\(_,_,mSpace) ->
+            else forAll (elements . HM.toList $ s ^. store . toEntities) $ \(eId, e) ->
+                  (s, eId, HM.lookup (e ^. space) (s ^. store . toSpaces)) `shouldSatisfy` (\(_,_,mSpace) ->
                     maybe False (\space -> HS.member eId (space ^. entities)) mSpace
                   )
     describe "Safe" $ do
@@ -97,13 +99,13 @@ main = sydTest $ do
                 unsafeAddMember adminGroup adminActor
                 -- "backdate" the granting of group adjust rights to admin group
                 s <- get
-                for_ (HM.keys $ s ^. toGroups . nodes) $ \gId ->
+                for_ (HM.keys $ s ^. store . toGroups . nodes) $ \gId ->
                   unless (gId == adminGroup) $ do
                     unsafeAdjustGroupPermission (const (Just Adjust)) adminGroup gId
                     unsafeAdjustMemberPermission (const Create) adminGroup gId
                 -- "backdate" the granting of space create rights to admin group
                 s <- get
-                for_ (HM.keys $ s ^. toSpaces) $ \sId ->
+                for_ (HM.keys $ s ^. store . toSpaces) $ \sId ->
                   unsafeAdjustEntityPermission (const Create) adminGroup sId
                 resetTabulation
           in  safeStore `shouldBe` unsafeStore

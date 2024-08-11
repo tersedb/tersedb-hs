@@ -10,7 +10,7 @@
   #-}
 
 module Lib.Actions.Unsafe
-  ( unsafeEmptyStore
+  ( unsafeEmptyShared
   , unsafeStoreGroup
   , unsafeStoreActor
   , unsafeAddMember
@@ -40,7 +40,11 @@ import Lib.Types.Permission
   , SinglePermission
   )
 import Lib.Types.Store
-  ( Store (..)
+  ( Shared (..)
+  , Store (..)
+  , Temp (..)
+  , store
+  , temp
   , toGroups
   , toActors
   , toSpaces
@@ -86,49 +90,53 @@ import Control.Monad.Extra (when)
 
 
 -- Note that this doesn't grant any initial "admin" actor
-unsafeEmptyStore :: Store
-unsafeEmptyStore = Store
-  { storeGroups = emptyGroups
-  , storeActors = mempty
-  , storeSpaces = mempty
-  , storeEntities = mempty
-  , storeVersions = mempty
-  , storeReferencesFrom = mempty
-  , storeReferencesFromEntities = mempty
-  , storeReferencesFromSpaces = mempty
-  , storeSubscriptionsFrom = mempty
-  , storeSubscriptionsFromSpaces = mempty
-  , storeSpacePermissions = mempty
-  , storeEntityPermissions = mempty
-  , storeGroupPermissions = mempty
-  , storeMemberPermissions = mempty
-  , storeTabulatedPermissions = mempty
+unsafeEmptyShared :: Shared
+unsafeEmptyShared = Shared
+  { sharedStore = Store
+    { storeGroups = emptyGroups
+    , storeActors = mempty
+    , storeSpaces = mempty
+    , storeEntities = mempty
+    , storeVersions = mempty
+    , storeSpacePermissions = mempty
+    , storeEntityPermissions = mempty
+    , storeGroupPermissions = mempty
+    , storeMemberPermissions = mempty
+    }
+  , sharedTemp = Temp
+    { tempReferencesFrom = mempty
+    , tempReferencesFromEntities = mempty
+    , tempReferencesFromSpaces = mempty
+    , tempSubscriptionsFrom = mempty
+    , tempSubscriptionsFromSpaces = mempty
+    , tempTabulatedGroups = mempty
+    }
   }
 
 -- | Sets the group to empty
-unsafeStoreGroup :: MonadState Store m => GroupId -> m ()
+unsafeStoreGroup :: MonadState Shared m => GroupId -> m ()
 unsafeStoreGroup gId = do
-  modify $ toGroups . nodes . at gId %~ Just . fromMaybe emptyGroup
+  modify $ store . toGroups . nodes . at gId %~ Just . fromMaybe emptyGroup
   s <- get
-  when (null (s ^. toGroups . nodes . at gId . non emptyGroup . prev)) $
-    modify $ toGroups . roots . at gId .~ Just ()
+  when (null (s ^. store . toGroups . nodes . at gId . non emptyGroup . prev)) $
+    modify $ store . toGroups . roots . at gId .~ Just ()
 
-unsafeStoreActor :: MonadState Store m => ActorId -> m ()
+unsafeStoreActor :: MonadState Shared m => ActorId -> m ()
 unsafeStoreActor aId = do
-  modify $ toActors . at aId .~ Just mempty
+  modify $ store . toActors . at aId .~ Just mempty
 
-unsafeAddMember :: MonadState Store m => GroupId -> ActorId -> m ()
+unsafeAddMember :: MonadState Shared m => GroupId -> ActorId -> m ()
 unsafeAddMember gId aId = do
-  modify $ toActors . at aId . non mempty . at gId .~ Just ()
-  modify $ toGroups . nodes . at gId . non emptyGroup . members . at aId .~ Just ()
+  modify $ store . toActors . at aId . non mempty . at gId .~ Just ()
+  modify $ store . toGroups . nodes . at gId . non emptyGroup . members . at aId .~ Just ()
 
 -- | Sets the space to empty
-unsafeStoreSpace :: MonadState Store m => SpaceId -> m ()
+unsafeStoreSpace :: MonadState Shared m => SpaceId -> m ()
 unsafeStoreSpace sId = do
-  modify $ toSpaces . at sId .~ Just mempty
+  modify $ store . toSpaces . at sId .~ Just mempty
 
 unsafeStoreEntity
-  :: MonadState Store m
+  :: MonadState Shared m
   => EntityId
   -> SpaceId
   -> VersionId
@@ -137,34 +145,34 @@ unsafeStoreEntity
 unsafeStoreEntity eId sId vId buildVersion = do
   s <- get
   let v = buildVersion eId
-      s' = s & toEntities . at eId .~ Just (initEntity sId vId)
-             & toSpaces . ix sId . entities . at eId .~ Just ()
-             & toVersions . at vId .~ Just (buildVersion eId)
-      storeRefs :: Store -> VersionId -> Either StoreVersionError Store
+      s' = s & store . toEntities . at eId .~ Just (initEntity sId vId)
+             & store . toSpaces . ix sId . entities . at eId .~ Just ()
+             & store . toVersions . at vId .~ Just (buildVersion eId)
+      storeRefs :: Shared -> VersionId -> Either StoreVersionError Shared
       storeRefs s' refId =
-        let s = s' & toReferencesFrom . at refId . non mempty . at vId .~ Just ()
-        in case s ^. toVersions . at refId of
+        let s = s' & temp . toReferencesFrom . at refId . non mempty . at vId .~ Just ()
+        in case s ^. store . toVersions . at refId of
             Nothing -> Left $ ReferenceVersionNotFound refId
             Just ref ->
               let refEId = ref ^. entity
-                  s' = s & toReferencesFromEntities . at refEId . non mempty . at vId .~ Just ()
-              in  case s' ^. toEntities . at refEId of
+                  s' = s & temp . toReferencesFromEntities . at refEId . non mempty . at vId .~ Just ()
+              in  case s' ^. store . toEntities . at refEId of
                     Nothing -> Left $ ReferenceEntityNotFound refEId
                     Just refE ->
                       let refSId = refE ^. space
-                      in  pure $ s' & toReferencesFromSpaces . at refSId . non mempty . at vId .~ Just ()
+                      in  pure $ s' & temp . toReferencesFromSpaces . at refSId . non mempty . at vId .~ Just ()
       eS = foldlM storeRefs s' (HS.toList $ v ^. references)
   case eS of
     Left e -> pure (Left e)
     Right s -> do
-      let storeSubs :: Store -> EntityId -> Either StoreVersionError Store
+      let storeSubs :: Shared -> EntityId -> Either StoreVersionError Shared
           storeSubs s subId =
-            let s' = s & toSubscriptionsFrom . at subId . non mempty . at vId .~ Just ()
-            in  case s' ^. toEntities . at subId of
+            let s' = s & temp . toSubscriptionsFrom . at subId . non mempty . at vId .~ Just ()
+            in  case s' ^. store . toEntities . at subId of
                   Nothing -> Left $ SubscriptionEntityNotFound subId
                   Just sub ->
                     let subSId = sub ^. space
-                    in  pure $ s' & toSubscriptionsFromSpaces . at subSId . non mempty . at vId .~ Just ()
+                    in  pure $ s' & temp . toSubscriptionsFromSpaces . at subSId . non mempty . at vId .~ Just ()
           eS = foldlM storeSubs s (HS.toList $ v ^. subscriptions)
       case eS of
         Left e -> pure (Left e)
@@ -177,7 +185,7 @@ data StoreVersionError
   deriving (Eq, Show, Read)
 
 unsafeStoreVersion
-  :: MonadState Store m
+  :: MonadState Shared m
   => EntityId
   -> VersionId
   -> (EntityId -> Version)
@@ -185,33 +193,33 @@ unsafeStoreVersion
 unsafeStoreVersion eId vId buildVersion = do
   s <- get
   let v = buildVersion eId
-      s' = s & toEntities . ix eId %~ flip addVersion vId
-             & toVersions . at vId .~ Just v
-      storeRefs :: Store -> VersionId -> Either StoreVersionError Store
+      s' = s & store . toEntities . ix eId %~ flip addVersion vId
+             & store . toVersions . at vId .~ Just v
+      storeRefs :: Shared -> VersionId -> Either StoreVersionError Shared
       storeRefs s' refId =
-        let s = s' & toReferencesFrom . at refId . non mempty . at vId .~ Just ()
-        in case s ^. toVersions . at refId of
+        let s = s' & temp . toReferencesFrom . at refId . non mempty . at vId .~ Just ()
+        in case s ^. store . toVersions . at refId of
             Nothing -> Left $ ReferenceVersionNotFound refId
             Just ref ->
               let refEId = ref ^. entity
-                  s' = s & toReferencesFromEntities . at refEId . non mempty . at vId .~ Just ()
-              in  case s' ^. toEntities . at refEId of
+                  s' = s & temp . toReferencesFromEntities . at refEId . non mempty . at vId .~ Just ()
+              in  case s' ^. store . toEntities . at refEId of
                     Nothing -> Left $ ReferenceEntityNotFound refEId
                     Just refE ->
                       let refSId = refE ^. space
-                      in  pure $ s' & toReferencesFromSpaces . at refSId . non mempty . at vId .~ Just ()
+                      in  pure $ s' & temp . toReferencesFromSpaces . at refSId . non mempty . at vId .~ Just ()
       eS = foldlM storeRefs s' (HS.toList $ v ^. references)
   case eS of
     Left e -> pure (Left e)
     Right s -> do
-      let storeSubs :: Store -> EntityId -> Either StoreVersionError Store
+      let storeSubs :: Shared -> EntityId -> Either StoreVersionError Shared
           storeSubs s subId =
-            let s' = s & toSubscriptionsFrom . at subId . non mempty . at vId .~ Just ()
-            in  case s' ^. toEntities . at subId of
+            let s' = s & temp . toSubscriptionsFrom . at subId . non mempty . at vId .~ Just ()
+            in  case s' ^. store . toEntities . at subId of
                   Nothing -> Left $ SubscriptionEntityNotFound subId
                   Just sub ->
                     let subSId = sub ^. space
-                    in  pure $ s' & toSubscriptionsFromSpaces . at subSId . non mempty . at vId .~ Just ()
+                    in  pure $ s' & temp . toSubscriptionsFromSpaces . at subSId . non mempty . at vId .~ Just ()
           eS = foldlM storeSubs s (HS.toList $ v ^. subscriptions)
       case eS of
         Left e -> pure (Left e)
@@ -224,10 +232,10 @@ data LinkGroupError
   deriving (Eq, Show, Read)
 
 -- | Loads the parent's untabulated permissions if it's not already tabulated!
-unsafeLinkGroups :: MonadState Store m => GroupId -> GroupId -> m (Either LinkGroupError ())
+unsafeLinkGroups :: MonadState Shared m => GroupId -> GroupId -> m (Either LinkGroupError ())
 unsafeLinkGroups from to = do
   s <- get
-  let groups = s ^. toGroups
+  let groups = s ^. store . toGroups
   if HS.member (from, to) (groups ^. edges)
   then pure (Left (DuplicateEdge from to))
   else if HS.member to (groups ^. outs)
@@ -243,14 +251,14 @@ unsafeLinkGroups from to = do
     in case hasCycle newGroups of
         Just cycle -> pure . Left $ CycleDetected cycle
         Nothing -> do
-          modify $ toGroups .~ newGroups
+          modify $ store . toGroups .~ newGroups
           updateTabulationStartingAt to
           pure (Right ())
 
-unsafeUnlinkGroups :: MonadState Store m => GroupId -> GroupId -> m ()
+unsafeUnlinkGroups :: MonadState Shared m => GroupId -> GroupId -> m ()
 unsafeUnlinkGroups from to = do
   s <- get
-  let groups = s ^. toGroups
+  let groups = s ^. store . toGroups
       newGroups = groups
         & edges . at (from,to) .~ Nothing
         & outs . at to .~ Nothing
@@ -259,21 +267,21 @@ unsafeUnlinkGroups from to = do
         & nodes . ix from . next . at to .~ Nothing
         & nodes . ix to . prev .~ Nothing
   put $ s
-      & toGroups .~ newGroups
+      & store . toGroups .~ newGroups
   updateTabulationStartingAt to
 
 unsafeAdjustPermissionForGroup
-  :: MonadState Store m
+  :: MonadState Shared m
   => Lens' Group a
   -> (a -> a)
   -> GroupId
   -> m ()
 unsafeAdjustPermissionForGroup project f gId = do
-  modify $ toGroups . nodes . ix gId . project %~ f
+  modify $ store . toGroups . nodes . ix gId . project %~ f
   updateTabulationStartingAt gId
 
 unsafeAdjustUniversePermission
-  :: MonadState Store m
+  :: MonadState Shared m
   => (CollectionPermissionWithExemption -> CollectionPermissionWithExemption)
   -> GroupId
   -> m ()
@@ -281,7 +289,7 @@ unsafeAdjustUniversePermission =
   unsafeAdjustPermissionForGroup universePermission
 
 unsafeAdjustOrganizationPermission
-  :: MonadState Store m
+  :: MonadState Shared m
   => (CollectionPermissionWithExemption -> CollectionPermissionWithExemption)
   -> GroupId
   -> m ()
@@ -289,7 +297,7 @@ unsafeAdjustOrganizationPermission =
   unsafeAdjustPermissionForGroup organizationPermission
 
 unsafeAdjustRecruiterPermission
-  :: MonadState Store m
+  :: MonadState Shared m
   => (CollectionPermission -> CollectionPermission)
   -> GroupId
   -> m ()
@@ -297,8 +305,8 @@ unsafeAdjustRecruiterPermission =
   unsafeAdjustPermissionForGroup recruiterPermission
 
 unsafeAdjustPermission
-  :: MonadState Store m
-  => Lens' Store a
+  :: MonadState Shared m
+  => Lens' Shared a
   -> (a -> a)
   -> GroupId
   -> m ()
@@ -307,49 +315,49 @@ unsafeAdjustPermission project f gId = do
   updateTabulationStartingAt gId
 
 unsafeAdjustSpacePermission
-  :: MonadState Store m
+  :: MonadState Shared m
   => (Maybe SinglePermission -> Maybe SinglePermission)
   -> GroupId
   -> SpaceId
   -> m ()
 unsafeAdjustSpacePermission f gId sId =
   unsafeAdjustPermission
-    (toSpacePermissions . at gId . non mempty . at sId)
+    (store . toSpacePermissions . at gId . non mempty . at sId)
     f
     gId
 
 unsafeAdjustEntityPermission
-  :: MonadState Store m
+  :: MonadState Shared m
   => (CollectionPermission -> CollectionPermission)
   -> GroupId
   -> SpaceId
   -> m ()
 unsafeAdjustEntityPermission f gId sId =
   unsafeAdjustPermission
-    (toEntityPermissions . at gId . non mempty . at sId . non Blind)
+    (store . toEntityPermissions . at gId . non mempty . at sId . non Blind)
     f
     gId
 
 unsafeAdjustGroupPermission
-  :: MonadState Store m
+  :: MonadState Shared m
   => (Maybe SinglePermission -> Maybe SinglePermission) -- ^ get new permission
   -> GroupId -- ^ group gaining new permission
   -> GroupId -- ^ group being subject to manipulation
   -> m ()
 unsafeAdjustGroupPermission f gId gId' =
   unsafeAdjustPermission
-    (toGroupPermissions . at gId . non mempty . at gId')
+    (store . toGroupPermissions . at gId . non mempty . at gId')
     f
     gId
 
 unsafeAdjustMemberPermission
-  :: MonadState Store m
+  :: MonadState Shared m
   => (CollectionPermission -> CollectionPermission)
   -> GroupId
   -> GroupId
   -> m ()
 unsafeAdjustMemberPermission f gId gId' =
   unsafeAdjustPermission
-    (toMemberPermissions . at gId . non mempty . at gId' . non Blind)
+    (store . toMemberPermissions . at gId . non mempty . at gId' . non Blind)
     f
     gId

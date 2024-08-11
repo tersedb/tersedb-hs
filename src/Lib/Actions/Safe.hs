@@ -15,7 +15,7 @@ import Lib.Actions.Tabulation
   ( updateTabulationStartingAt
   )
 import Lib.Actions.Unsafe
-  ( unsafeEmptyStore
+  ( unsafeEmptyShared
   , unsafeStoreGroup
   , unsafeStoreActor
   , unsafeStoreSpace
@@ -40,11 +40,13 @@ import Lib.Types.Permission
   , collectionPermission
   )
 import Lib.Types.Store
-  ( Store (..)
+  ( Shared
+  , store
+  , temp
   , toActors
   , toEntities
   , toVersions
-  , toTabulatedPermissions
+  , toTabulatedGroups
   )
 import Lib.Types.Store.Tabulation.Group
   ( TabulatedPermissionsForGroup (..)
@@ -68,8 +70,8 @@ import Control.Monad.Extra (andM, orM, when)
 
 
 
-emptyStore :: ActorId -> GroupId -> Store
-emptyStore adminActor adminGroup = flip execState unsafeEmptyStore $ do
+emptyShared :: ActorId -> GroupId -> Shared
+emptyShared adminActor adminGroup = flip execState unsafeEmptyShared $ do
   unsafeStoreGroup adminGroup
   unsafeAdjustUniversePermission (const $ CollectionPermissionWithExemption Delete True) adminGroup
   unsafeAdjustOrganizationPermission (const $ CollectionPermissionWithExemption Delete True) adminGroup
@@ -81,7 +83,7 @@ emptyStore adminActor adminGroup = flip execState unsafeEmptyStore $ do
 -- | Looks first for the groups the user is in, then sees if any of the groups
 -- can do the action, depicted by the Lens
 canDoWithTab
-  :: ( MonadState Store m
+  :: ( MonadState Shared m
      , Ord a
      ) => (TabulatedPermissionsForGroup -> a) -- ^ Specific permission being checked
        -> ActorId -- ^ Actor requesting permission
@@ -89,16 +91,16 @@ canDoWithTab
        -> m Bool
 canDoWithTab proj creator getP = do
   s <- get
-  pure $ case s ^. toActors . at creator of
+  pure $ case s ^. store . toActors . at creator of
     Just groups ->
       let perGroup gId =
-            let tab = s ^. toTabulatedPermissions . at gId . non mempty
+            let tab = s ^. temp . toTabulatedGroups . at gId . non mempty
             in  proj tab >= getP tab
       in  any perGroup (HS.toList groups)
     _ -> False
 
 canDo
-  :: ( MonadState Store m
+  :: ( MonadState Shared m
      , Ord a
      ) => (TabulatedPermissionsForGroup -> a) -- ^ Specific permission being checked
        -> ActorId -- ^ Actor requesting permission
@@ -106,7 +108,7 @@ canDo
        -> m Bool
 canDo a b c = canDoWithTab a b (const c)
 
-canUpdateGroup :: MonadState Store m => ActorId -> GroupId -> m Bool
+canUpdateGroup :: MonadState Shared m => ActorId -> GroupId -> m Bool
 canUpdateGroup creator gId = orM
   [ canDo (\t -> t ^. forGroups . at gId . non Blind) creator Update
   , canDo (\t -> t ^. forOrganization . collectionPermission) creator Update
@@ -116,7 +118,7 @@ conditionally :: Applicative m => m () -> Bool -> m Bool
 conditionally f t = t <$ when t f
 
 storeGroup
-  :: MonadState Store m
+  :: MonadState Shared m
   => ActorId -- ^ actor storing the group
   -> GroupId -- ^ group being stored
   -> m Bool
@@ -125,7 +127,7 @@ storeGroup creator gId = do
     conditionally (unsafeStoreGroup gId)
 
 storeActor
-  :: MonadState Store m
+  :: MonadState Shared m
   => ActorId -- ^ actor storing the created actor
   -> ActorId -- ^ created actor being stored
   -> m Bool
@@ -134,7 +136,7 @@ storeActor creator aId =
     conditionally (unsafeStoreActor aId)
 
 addMember
-  :: MonadState Store m
+  :: MonadState Shared m
   => ActorId -- ^ actor creating membership
   -> GroupId -- ^ group gaining a member
   -> ActorId -- ^ new member
@@ -144,7 +146,7 @@ addMember creator gId aId = do
     conditionally (unsafeAddMember gId aId)
 
 storeSpace
-  :: MonadState Store m
+  :: MonadState Shared m
   => ActorId -- ^ actor storing the space
   -> SpaceId -- ^ space being created
   -> m Bool
@@ -153,7 +155,7 @@ storeSpace creator sId =
     conditionally (unsafeStoreSpace sId)
 
 storeEntity
-  :: MonadState Store m
+  :: MonadState Shared m
   => ActorId -- ^ actor storing the entity
   -> EntityId -- ^ entity being stored
   -> SpaceId -- ^ space in which entity is being stored
@@ -174,7 +176,7 @@ data StoreForkedEntityError
   deriving (Eq, Show, Read)
 
 storeForkedEntity
-  :: MonadState Store m
+  :: MonadState Shared m
   => ActorId -- ^ actor forking the entity
   -> EntityId -- ^ entity being forked
   -> SpaceId -- ^ space in which entity is being forked to
@@ -185,9 +187,9 @@ storeForkedEntity creator eId sId vId prevVId
   | vId == prevVId = pure . Just . Left $ Left ForkingSelf
   | otherwise = do
   s <- get
-  case s ^. toVersions . at prevVId of
+  case s ^. store . toVersions . at prevVId of
     Nothing -> pure . Just . Left $ Left PreviousVersionDoesntExist
-    Just prevV -> case s ^. toEntities . at (prevV ^. entity) of
+    Just prevV -> case s ^. store . toEntities . at (prevV ^. entity) of
       Nothing -> pure . Just . Left $ Left PreviousEntityDoesntExist
       Just prevE -> do
         let prevSId = prevE ^. space
@@ -200,14 +202,14 @@ storeForkedEntity creator eId sId vId prevVId
           pure . Just $ eVErr & _Left %~ Right
 
 storeVersion
-  :: MonadState Store m
+  :: MonadState Shared m
   => ActorId -- ^ actor attempting to store a version
   -> EntityId -- ^ entity receiving a new version
   -> VersionId -- ^ version being stored
   -> m (Maybe (Either StoreVersionError ()))
 storeVersion creator eId vId = do
   s <- get
-  case s ^. toEntities . at eId of
+  case s ^. store . toEntities . at eId of
     Nothing -> pure Nothing
     Just e -> do
       canAdjust <- canDo (\t -> t ^. forEntities . at (e ^. space) . non Blind) creator Create
@@ -216,7 +218,7 @@ storeVersion creator eId vId = do
 
 -- | Will only update the group if the actor has same or greater permission
 setUniversePermission
-  :: MonadState Store m
+  :: MonadState Shared m
   => ActorId -- ^ actor attempting to set permission
   -> CollectionPermissionWithExemption -- ^ permission being set
   -> GroupId -- ^ group subject to new permission
@@ -231,7 +233,7 @@ setUniversePermission creator p gId = do
     canAdjust
 
 setOrganizationPermission 
-  :: MonadState Store m
+  :: MonadState Shared m
   => ActorId -- ^ actor attempting to set permission
   -> CollectionPermissionWithExemption -- ^ permission being set
   -> GroupId -- ^ group subject to new permission
@@ -246,7 +248,7 @@ setOrganizationPermission creator p gId = do
     canAdjust
 
 setRecruiterPermission 
-  :: MonadState Store m
+  :: MonadState Shared m
   => ActorId -- ^ actor attempting to set permission
   -> CollectionPermission -- ^ permission being set
   -> GroupId -- ^ group subject to new permission
@@ -261,7 +263,7 @@ setRecruiterPermission creator p gId = do
     canAdjust
 
 setSpacePermission 
-  :: MonadState Store m
+  :: MonadState Shared m
   => ActorId -- ^ actor attempting to set permission
   -> Maybe SinglePermission -- ^ permission being set
   -> GroupId -- ^ group subject to new permission
@@ -280,7 +282,7 @@ setSpacePermission creator p gId sId = do
     canAdjust
 
 setEntityPermission 
-  :: MonadState Store m
+  :: MonadState Shared m
   => ActorId -- ^ actor attempting to set permission
   -> CollectionPermission -- ^ permission being set
   -> GroupId -- ^ group subject to new permission
@@ -299,7 +301,7 @@ setEntityPermission creator p gId sId = do
     canAdjust
 
 setGroupPermission 
-  :: MonadState Store m
+  :: MonadState Shared m
   => ActorId -- ^ actor attempting to set permission
   -> Maybe SinglePermission -- ^ permission being set
   -> GroupId -- ^ group subject to new permission
@@ -319,7 +321,7 @@ setGroupPermission creator p gId towardGId = do
     canAdjust
 
 setMemberPermission 
-  :: MonadState Store m
+  :: MonadState Shared m
   => ActorId -- ^ actor attempting to set permission
   -> CollectionPermission -- ^ the permission being granted
   -> GroupId -- ^ the group gaining the permission

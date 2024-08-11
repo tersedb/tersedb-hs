@@ -16,9 +16,11 @@ import Spec.Sample.Tree
 
 import Lib.Types.Id (GroupId)
 import Lib.Types.Store
-  ( Store
+  ( Shared
+  , store
+  , temp
   , toGroups
-  , toTabulatedPermissions
+  , toTabulatedGroups
   )
 import Lib.Types.Store.Tabulation.Group (hasLessOrEqualPermissionsTo)
 import Lib.Types.Store.Groups
@@ -70,20 +72,20 @@ groupsTests = do
           `shouldBe` execState resetTabulation (loadSampleTreeNoTab xs)
     it "unlinking causes disjoint trees" $
       property $ \(xs :: SampleGroupTree ()) ->
-        let store = loadSampleTree xs
-            createdEdges = store ^. toGroups . edges
+        let s = loadSampleTree xs
+            createdEdges = s ^. store . toGroups . edges
         in if null createdEdges
         then property True
         else forAll (elements (HS.toList createdEdges)) $ \(from, to) ->
-          let newStore = execState (unsafeUnlinkGroups from to) store
-              newGroups = newStore ^. toGroups
+          let newS = execState (unsafeUnlinkGroups from to) s
+              newGroups = newS ^. store . toGroups
               rootsWithoutTo = HS.delete to (newGroups ^. roots)
               descendants :: GroupId -> HashSet GroupId
               descendants gId =
                 let children = fromJust (HM.lookup gId (newGroups ^. nodes)) ^. next
                 in  HS.insert gId (HS.unions (map descendants (HS.toList children)))
-          in  (newStore, from, to) `shouldSatisfy` (\_ ->
-                to `HS.member` (newStore ^. toGroups . roots)
+          in  (newS, from, to) `shouldSatisfy` (\_ ->
+                to `HS.member` (newS ^. store . toGroups . roots)
                 && all
                   (\descendantOfTo ->
                      not . HS.member descendantOfTo . HS.unions . map descendants $ HS.toList rootsWithoutTo
@@ -99,9 +101,9 @@ groupsTests = do
       describe "total" . testsPerStoreBuild $ execState resetTabulation . loadSampleTreeNoTab
       describe "incremental" $ testsPerStoreBuild loadSampleTree
 
-testPermissionInheritance :: GroupId -> [SampleGroupTree a] -> Store -> Property
-testPermissionInheritance root cs store =
-  let tabs = store ^. toTabulatedPermissions
+testPermissionInheritance :: GroupId -> [SampleGroupTree a] -> Shared -> Property
+testPermissionInheritance root cs s =
+  let tabs = s ^. temp . toTabulatedGroups
       descendants =
         let go (SampleGroupTree x _ _ _ _ xs) = do
               modify (x:)
@@ -112,7 +114,7 @@ testPermissionInheritance root cs store =
       else forAll (elements descendants) $ \descendant ->
             case (HM.lookup root tabs, HM.lookup descendant tabs) of
               (Just r, Just d) ->
-                (store, r, d) `shouldSatisfy` (\_ -> r `hasLessOrEqualPermissionsTo` d)
+                (s, r, d) `shouldSatisfy` (\_ -> r `hasLessOrEqualPermissionsTo` d)
               tabs -> error $ "Tab wasn't found " <> show tabs
 
 loadCycle :: [GroupId] -> Groups

@@ -27,6 +27,23 @@ import Data.HashMap.Strict (HashMap)
 import Control.Lens.TH (makeLensesFor)
 
 
+data Temp = Temp
+  { tempReferencesFrom :: HashMap VersionId (HashSet VersionId)
+  , tempReferencesFromEntities :: HashMap EntityId (HashSet VersionId)
+  , tempReferencesFromSpaces :: HashMap SpaceId (HashSet VersionId)
+  , tempSubscriptionsFrom :: HashMap EntityId (HashSet VersionId)
+  , tempSubscriptionsFromSpaces :: HashMap SpaceId (HashSet VersionId)
+  , tempTabulatedGroups :: HashMap GroupId TabulatedPermissionsForGroup
+  } deriving (Eq, Show, Read)
+makeLensesFor
+  [ ("tempReferencesFrom", "toReferencesFrom")
+  , ("tempReferencesFromEntities", "toReferencesFromEntities")
+  , ("tempReferencesFromSpaces", "toReferencesFromSpaces")
+  , ("tempSubscriptionsFrom", "toSubscriptionsFrom")
+  , ("tempSubscriptionsFromSpaces", "toSubscriptionsFromSpaces")
+  , ("tempTabulatedGroups", "toTabulatedGroups")
+  ] ''Temp
+
 
 data Store = Store
   { storeGroups :: Groups
@@ -34,16 +51,10 @@ data Store = Store
   , storeSpaces :: HashMap SpaceId Space
   , storeEntities :: HashMap EntityId Entity
   , storeVersions :: HashMap VersionId Version
-  , storeReferencesFrom :: HashMap VersionId (HashSet VersionId)
-  , storeReferencesFromEntities :: HashMap EntityId (HashSet VersionId)
-  , storeReferencesFromSpaces :: HashMap SpaceId (HashSet VersionId)
-  , storeSubscriptionsFrom :: HashMap EntityId (HashSet VersionId)
-  , storeSubscriptionsFromSpaces :: HashMap SpaceId (HashSet VersionId)
   , storeSpacePermissions :: HashMap GroupId (HashMap SpaceId SinglePermission)
   , storeEntityPermissions :: HashMap GroupId (HashMap SpaceId CollectionPermission)
   , storeGroupPermissions :: HashMap GroupId (HashMap GroupId SinglePermission)
   , storeMemberPermissions :: HashMap GroupId (HashMap GroupId CollectionPermission)
-  , storeTabulatedPermissions :: HashMap GroupId TabulatedPermissionsForGroup 
   } deriving (Eq, Show, Read)
 makeLensesFor
   [ ("storeGroups", "toGroups")
@@ -51,15 +62,18 @@ makeLensesFor
   , ("storeSpaces", "toSpaces")
   , ("storeEntities", "toEntities")
   , ("storeVersions", "toVersions")
-  , ("storeReferencesFrom", "toReferencesFrom")
-  , ("storeReferencesFromEntities", "toReferencesFromEntities")
-  , ("storeReferencesFromSpaces", "toReferencesFromSpaces")
-  , ("storeSubscriptionsFrom", "toSubscriptionsFrom")
-  , ("storeSubscriptionsFromSpaces", "toSubscriptionsFromSpaces")
   , ("storeSpacePermissions", "toSpacePermissions")
   , ("storeEntityPermissions", "toEntityPermissions")
   , ("storeGroupPermissions", "toGroupPermissions")
   , ("storeMemberPermissions", "toMemberPermissions")
-  , ("storeTabulatedPermissions", "toTabulatedPermissions")
   ] ''Store
 
+
+data Shared = Shared
+  { sharedStore :: Store
+  , sharedTemp :: Temp
+  } deriving (Eq, Show, Read)
+makeLensesFor
+  [ ("sharedStore", "store")
+  , ("sharedTemp", "temp")
+  ] ''Shared

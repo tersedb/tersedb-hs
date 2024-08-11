@@ -19,7 +19,7 @@ import Lib.Types.Permission
   ( CollectionPermission (..)
   , SinglePermission
   )
-import Lib.Types.Store (Store)
+import Lib.Types.Store (Shared, store, temp)
 import Lib.Types.Store.Version (genesisVersion, forkVersion)
 import Lib.Actions.Unsafe
   ( unsafeStoreActor
@@ -173,7 +173,7 @@ instance Arbitrary SampleStore where
     ]
 
 
-loadSample :: SampleStore -> Store
+loadSample :: SampleStore -> Shared
 loadSample SampleStore{..} = flip execState (loadSampleTree sampleGroups) $ do
   for_ (HS.toList sampleSpaces) $ \sId -> do
     unsafeStoreSpace sId
@@ -198,7 +198,7 @@ loadSample SampleStore{..} = flip execState (loadSampleTree sampleGroups) $ do
           Left e -> error $ "Error during store version " <> show e
           Right () -> pure vId
   let loadPermissions :: SampleGroupTree (HashMap SpaceId SinglePermission, HashMap SpaceId CollectionPermission)
-                      -> State Store ()
+                      -> State Shared ()
       loadPermissions SampleGroupTree{current, auxPerGroup = (spacesPerms, entityPerms), children} = do
         for_ (HM.toList spacesPerms) $ \(space, permission) -> do
           unsafeAdjustSpacePermission (const (Just permission)) current space
@@ -212,7 +212,7 @@ loadSample SampleStore{..} = flip execState (loadSampleTree sampleGroups) $ do
       unsafeAddMember gId aId
 
 
-storeSample :: SampleStore -> ActorId -> GroupId -> Store
+storeSample :: SampleStore -> ActorId -> GroupId -> Shared
 storeSample SampleStore{..} adminActor adminGroup =
   flip execState (storeSampleTree sampleGroups adminActor adminGroup) $ do
     for_ (HS.toList sampleSpaces) $ \sId -> do
@@ -250,7 +250,7 @@ storeSample SampleStore{..} adminActor adminGroup =
               s <- get
               error $ "Failed to store version " <> show (mE, eId, vId) <> " - " <> LT.unpack (pShowNoColor s)
     let loadPermissions :: SampleGroupTree (HashMap SpaceId SinglePermission, HashMap SpaceId CollectionPermission)
-                        -> State Store ()
+                        -> State Shared ()
         loadPermissions SampleGroupTree{current, auxPerGroup = (spacesPerms, entityPerms), children} = do
           for_ (HM.toList spacesPerms) $ \(space, permission) -> do
             succeeded <- setSpacePermission adminActor (Just permission) current space

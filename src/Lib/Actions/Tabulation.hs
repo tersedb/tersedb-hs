@@ -14,9 +14,11 @@ module Lib.Actions.Tabulation where
 import Lib.Types.Permission (escalate)
 import Lib.Types.Id (GroupId)
 import Lib.Types.Store
-  ( Store (..)
+  ( Shared
+  , store
+  , temp
   , toGroups
-  , toTabulatedPermissions
+  , toTabulatedGroups
   , toSpacePermissions
   , toEntityPermissions
   , toGroupPermissions
@@ -42,51 +44,51 @@ import Control.Monad.State (MonadState (get), modify)
 
 -- | Gets an initial tabulation for a specific group; assumes the group is a root
 -- node, and isn't inheriting any other groups.
-initTabulatedPermissionsForGroup :: MonadState Store m => GroupId -> m TabulatedPermissionsForGroup
+initTabulatedPermissionsForGroup :: MonadState Shared m => GroupId -> m TabulatedPermissionsForGroup
 initTabulatedPermissionsForGroup gId = do
   s <- get
-  pure $ case s ^. toGroups . nodes . at gId of
+  pure $ case s ^. store . toGroups . nodes . at gId of
     Nothing -> error $ "Group " <> show gId <> " doesn't exist in groups store"
     Just group -> do
       let univPerms = group ^. universePermission
           orgPerms = group ^. organizationPermission
-          spacePerms = fromMaybe mempty (s ^. toSpacePermissions . at gId)
-          groupPerms = fromMaybe mempty (s ^. toGroupPermissions . at gId)
+          spacePerms = fromMaybe mempty (s ^. store . toSpacePermissions . at gId)
+          groupPerms = fromMaybe mempty (s ^. store . toGroupPermissions . at gId)
       TabulatedPermissionsForGroup
         { tabulatedPermissionsForGroupUniverse = univPerms
         , tabulatedPermissionsForGroupOrganization = orgPerms
         , tabulatedPermissionsForGroupRecruiter = group ^. recruiterPermission
         , tabulatedPermissionsForGroupSpaces = fmap (escalate univPerms) spacePerms
-        , tabulatedPermissionsForGroupEntities = fromMaybe mempty (s ^. toEntityPermissions . at gId)
+        , tabulatedPermissionsForGroupEntities = fromMaybe mempty (s ^. store . toEntityPermissions . at gId)
         , tabulatedPermissionsForGroupGroups = fmap (escalate orgPerms) groupPerms 
-        , tabulatedPermissionsForGroupMembers = fromMaybe mempty (s ^. toMemberPermissions . at gId)
+        , tabulatedPermissionsForGroupMembers = fromMaybe mempty (s ^. store . toMemberPermissions . at gId)
         }
 
 -- | updates the tab with a possibly erroneous cache for the parent if its missing
 -- - would only work if the parent happened to be the root node.
-updateTabulationStartingAt :: MonadState Store m => GroupId -> m ()
+updateTabulationStartingAt :: MonadState Shared m => GroupId -> m ()
 updateTabulationStartingAt gId = do
   s <- get
   initTab <- initTabulatedPermissionsForGroup gId
-  let group = fromJust (s ^. toGroups . nodes . at gId)
+  let group = fromJust (s ^. store . toGroups . nodes . at gId)
   parentTab <- case group ^. prev of
     Nothing -> pure mempty -- root node
-    Just parent -> case s ^. toTabulatedPermissions . at parent of
+    Just parent -> case s ^. temp . toTabulatedGroups . at parent of
       Nothing -> do
         t <- initTabulatedPermissionsForGroup parent
-        modify $ toTabulatedPermissions . at parent .~ Just t
+        modify $ temp . toTabulatedGroups . at parent .~ Just t
         pure t
       Just t -> pure t
   let newTab = parentTab <> initTab
-  case s ^. toTabulatedPermissions . at gId of
+  case s ^. temp . toTabulatedGroups . at gId of
     Just oldTab | newTab == oldTab -> pure ()
     _ -> do
       -- doing fromJust because initTabulatedPermissionsForGroup already checks
-      modify (toTabulatedPermissions . at gId .~ Just newTab)
+      modify $ temp . toTabulatedGroups . at gId .~ Just newTab
       traverse_ updateTabulationStartingAt . HS.toList $ group ^. next
 
 
-resetTabulation :: MonadState Store m => m ()
+resetTabulation :: MonadState Shared m => m ()
 resetTabulation = do
   s <- get
-  traverse_ updateTabulationStartingAt . HS.toList $ s ^. toGroups . roots
+  traverse_ updateTabulationStartingAt . HS.toList $ s ^. store . toGroups . roots

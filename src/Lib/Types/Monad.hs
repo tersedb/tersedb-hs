@@ -1,8 +1,8 @@
 module Lib.Types.Monad where
 
-import Lib.Types.Store (Store)
+import Lib.Types.Store (Shared)
 
 import Control.Monad.State (StateT)
 
 
-type SheepdogM = StateT Store IO
+type SheepdogM = StateT Shared IO
