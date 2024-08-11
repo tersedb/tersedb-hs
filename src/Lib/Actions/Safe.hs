@@ -36,7 +36,6 @@ import Lib.Types.Permission
   , CollectionPermissionWithExemption (..)
   , SinglePermission (..)
   , escalate
-  , escalateWithoutExemption
   , collectionPermission
   )
 import Lib.Types.Store
@@ -59,6 +58,7 @@ import Lib.Types.Store.Version (genesisVersion, forkVersion, entity)
 
 import qualified Data.HashSet as HS
 import qualified Data.List.NonEmpty as NE
+import Data.Maybe (fromMaybe)
 import Control.Lens ((^.), at, non)
 import Control.Monad.State (MonadState (get), execState)
 import Control.Monad.Extra (andM, orM, when)
@@ -103,39 +103,11 @@ canDo
        -> m Bool
 canDo a b c = canDoWithTab a b (const c)
 
--- canDo
---   :: MonadState Store m
---   => Lens' TabulatedPermissionsForGroup CollectionPermission
---   -> ActorId
---   -> CollectionPermission
---   -> m Bool
--- canDo a b c = canDo' a b . const $ pure c
---
--- canDoWithExemption
---   :: MonadState Store m
---   => Lens' TabulatedPermissionsForGroup CollectionPermission
---   -> ActorId
---   -> CollectionPermissionWithExemption
---   -> m Bool
--- canDoWithExemption a b c = canDo' a b . const . pure $ c ^. collectionPermission
---
--- canDoSingle
---   :: MonadState Store m
---   => Lens' TabulatedPermissionsForGroup CollectionPermission
---   -> ActorId
---   -> CollectionPermission
---   -> Lens' Store (Maybe SinglePermission)
---   -> Lens' Group CollectionPermissionWithExemption
---   -- -> (CollectionPermissionWithExemption -> Maybe SinglePermission -> m CollectionPermission)
---   -> m Bool
--- canDoSingle fromTab creator p toSingle toCollection = do
---   -- canDo fromTab creator p
---   canDo' fromTab creator p $ \g -> do
---     s <- get
---     let c = g ^. toCollection
---         q = case s ^. toSingle of
---           Nothing -> c ^. collectionPermission
---           Just s' -> escalate c s'
+canUpdateGroup :: MonadState Store m => ActorId -> GroupId -> m Bool
+canUpdateGroup creator gId = orM
+  [ canDo (\t -> t ^. forGroups . at gId . non Blind) creator Update
+  , canDo (\t -> t ^. forOrganization . collectionPermission) creator Update
+  ]
 
 conditionally :: Applicative m => m () -> Bool -> m Bool
 conditionally f t = t <$ when t f
@@ -165,11 +137,8 @@ addMember
   -> ActorId -- ^ new member
   -> m Bool
 addMember creator gId aId = do
-  canAdjust <- orM
-    [ canDo (\t -> t ^. forMembers . at gId . non Blind) creator Create
-    , canDo (\t -> t ^. forOrganization . collectionPermission) creator Update
-    ]
-  conditionally (unsafeAddMember gId aId) canAdjust
+  canDo (\t -> t ^. forMembers . at gId . non Blind) creator Create >>=
+    conditionally (unsafeAddMember gId aId)
 
 storeSpace
   :: MonadState Store m
@@ -188,11 +157,8 @@ storeEntity
   -> VersionId -- ^ initial version
   -> m Bool
 storeEntity creator eId sId vId = do
-  canAdjust <- orM
-    [ canDo (\t -> t ^. forEntities . at sId . non Blind) creator Create
-    -- , canDo (\t -> t ^. forUniverse . collectionPermission) creator Update -- FIXME is this correct? Just because I can update spaces, does that mean I have a right to create entities in any space?
-    ]
-  conditionally (unsafeStoreEntity eId sId vId genesisVersion) canAdjust
+  canDo (\t -> t ^. forEntities . at sId . non Blind) creator Create >>=
+    conditionally (unsafeStoreEntity eId sId vId genesisVersion)
 
 data StoreForkedEntityError
   = PreviousVersionDoesntExist
@@ -216,10 +182,7 @@ storeForkedEntity creator eId sId vId prevVId = do
       Just prevE -> do
         let prevSId = prevE ^. space
         canAdjust <- andM
-          [ orM
-            [ canDo (\t -> t ^. forEntities . at sId . non Blind) creator Create
-            -- , canDo forUniverse creator Update -- FIXME is this correct? Just because I can update spaces, does that mean I have a right to create entities in any space?
-            ]
+          [ canDo (\t -> t ^. forEntities . at sId . non Blind) creator Create
           , canDo (\t -> t ^. forEntities . at prevSId . non Blind) creator Read
           ]
         Right <$> conditionally (unsafeStoreEntity eId sId vId (flip forkVersion prevVId)) canAdjust
@@ -229,19 +192,14 @@ storeVersion
   => ActorId -- ^ actor attempting to store a version
   -> EntityId -- ^ entity receiving a new version
   -> VersionId -- ^ version being stored
-  -- -> VersionId -- ^ previous version of entity -- FIXME just pull the latest from entity???
   -> m Bool
 storeVersion creator eId vId = do
   s <- get
   case s ^. toEntities . at eId of
     Nothing -> pure False
-    Just e -> do
-      let sId = e ^. space
-      canAdjust <- orM
-        [ canDo (\t -> t ^. forSpaces . at sId . non Blind) creator Create
-        , canDo (\t -> t ^. forUniverse . collectionPermission) creator Update -- FIXME is this valid? Because I can update any space, does that mean I can create data in any space?
-        ]
-      conditionally (unsafeStoreVersion eId vId . flip forkVersion . NE.head $ e ^. versions) canAdjust
+    Just e ->
+      canDo (\t -> t ^. forEntities . at (e ^. space) . non Blind) creator Create >>=
+        conditionally (unsafeStoreVersion eId vId . flip forkVersion . NE.head $ e ^. versions)
 
 -- | Will only update the group if the actor has same or greater permission
 setUniversePermission
@@ -252,10 +210,7 @@ setUniversePermission
   -> m Bool
 setUniversePermission creator p gId = do
   canAdjust <- andM
-    [ orM
-      [ canDo (\t -> t ^. forGroups . at gId . non Blind) creator Update
-      -- , canDo (\t -> t ^. forOrganization) creator Update -- forGroups is already subject to forOrganization
-      ]
+    [ canUpdateGroup creator gId
     , canDo (\t -> t ^. forUniverse) creator p
     ]
   conditionally
@@ -270,10 +225,7 @@ setOrganizationPermission
   -> m Bool
 setOrganizationPermission creator p gId = do
   canAdjust <- andM
-    [ orM
-      [ canDo (\t -> t ^. forGroups . at gId . non Blind) creator Update
-      -- , canDo forOrganization creator Update
-      ]
+    [ canUpdateGroup creator gId
     , canDo (\t -> t ^. forOrganization) creator p
     ]
   conditionally
@@ -288,10 +240,7 @@ setRecruiterPermission
   -> m Bool
 setRecruiterPermission creator p gId = do
   canAdjust <- andM
-    [ orM
-      [ canDo (\t -> t ^. forGroups . at gId . non Blind) creator Update
-      -- , canDo forOrganization creator Update
-      ]
+    [ canUpdateGroup creator gId
     , canDo (\t -> t ^. forRecruiter) creator p
     ]
   conditionally
@@ -307,22 +256,11 @@ setSpacePermission
   -> m Bool
 setSpacePermission creator p gId sId = do
   canAdjust <- andM
-    [ orM
-      [ canDo (\t -> t ^. forGroups . at gId . non Blind) creator Update
-      , canDo (\t -> t ^. forOrganization . collectionPermission) creator Update
-      ]
-    , orM
-      [ canDoWithTab -- creator can already do `p` with space `sId`
-          (\t -> t ^. forSpaces . at sId . non Blind)
-          creator
-          (\t -> maybe Read (escalate (t ^. forUniverse)) p)
-      -- , canDo forUniverse creator p
-      -- FIXME only apply this if entry in spaces is Nothing; Just Blind should be forced to use exemption
-      , canDo
-          (\t -> t ^. forUniverse . collectionPermission)
-          creator
-          (maybe Blind escalateWithoutExemption  p)
-      ]
+    [ canUpdateGroup creator gId
+    , canDoWithTab -- use universe permission if spaces permission isn't set
+        (\t -> fromMaybe (t ^. forUniverse . collectionPermission) (t ^. forSpaces . at sId))
+        creator
+        (\t -> maybe Read (escalate (t ^. forUniverse)) p)
     ]
   conditionally
     (unsafeAdjustSpacePermission (const p) gId sId)
@@ -337,13 +275,10 @@ setEntityPermission
   -> m Bool
 setEntityPermission creator p gId sId = do
   canAdjust <- andM
-    [ orM
-      [ canDo (\t -> t ^. forGroups . at gId . non Blind) creator Update -- FIXME if this is Just Blind, and I'm not exempt, then this should fail
-      , canDo (\t -> t ^. forOrganization . collectionPermission) creator Update -- FIXME what if I'm not exempt to the group rights?
-      ]
+    [ canUpdateGroup creator gId
     , orM
       [ canDo (\t -> t ^. forEntities . at sId . non Blind) creator p -- can you already do stuff with entities?
-      , canDo (\t -> t ^. forUniverse . collectionPermission) creator p
+      , canDo (\t -> t ^. forUniverse . collectionPermission) creator p -- if not, do you have universe permissions?
       ]
     ]
   conditionally
@@ -358,15 +293,13 @@ setGroupPermission
   -> GroupId -- ^ relevant to this group (grants one group to NEAO other groups)
   -> m Bool
 setGroupPermission creator p gId towardGId = do
-  canAdjust <- orM
-    [ andM
-      [ canDo (\t -> t ^. forGroups . at gId . non Blind) creator Update -- I can update the group I'm granting permissions over another
-      , canDoWithTab
-          (\t -> t ^. forGroups . at towardGId . non Blind) -- I've already been granted permissions with that group I'm allowing the first permission over
-          creator
-          (\t -> maybe Read (escalate (t ^. forOrganization)) p)
-      ]
-    , canDo (\t -> t ^. forOrganization . collectionPermission) creator Update
+  canAdjust <- andM
+    [ canUpdateGroup creator gId
+    , canDoWithTab
+        (\t -> fromMaybe (t ^. forOrganization . collectionPermission)
+           (t ^. forGroups . at towardGId)) -- I've already been granted permissions with that group I'm allowing the first permission over
+        creator
+        (\t -> maybe Read (escalate (t ^. forOrganization)) p)
     ]
   conditionally
     (unsafeAdjustGroupPermission (const p) gId towardGId)
@@ -380,12 +313,12 @@ setMemberPermission
   -> GroupId -- ^ the group that can have their members manipulated
   -> m Bool
 setMemberPermission creator p manipulatorGId manipulatedGId = do
-  canAdjust <- orM
-    [ andM
-      [ canDo (\t -> t ^. forGroups . at manipulatorGId . non Blind) creator Update
-      , canDo (\t -> t ^. forMembers . at manipulatedGId . non Blind) creator p
+  canAdjust <- andM
+    [ canUpdateGroup creator manipulatorGId
+    , orM
+      [ canDo (\t -> t ^. forMembers . at manipulatedGId . non Blind) creator p -- can you already do stuff to manipulated?
+      , canDo (\t -> t ^. forOrganization . collectionPermission) creator p -- if not, do you have organization rights?
       ]
-    -- , canDo forOrganization creator Update -- unnecessary as single permission adjusts for it?
     ]
   conditionally
     (unsafeAdjustMemberPermission (const p) manipulatorGId manipulatedGId)

@@ -42,10 +42,10 @@ import Lib.Actions.Safe
   , setOrganizationPermission
   , setRecruiterPermission
   , setGroupPermission
+  , setMemberPermission
   )
 import Lib.Actions.Tabulation (initTabulatedPermissionsForGroup)
 
-import qualified Data.Aeson as Aeson
 import Data.Foldable (traverse_)
 import qualified Data.Text.Lazy as LT
 import Data.Maybe (fromMaybe)
@@ -120,7 +120,11 @@ storeSampleTree xs adminActor adminGroup = flip execState (emptyStore adminActor
       succeeded <- setGroupPermission adminActor (Just Adjust) adminGroup current
       unless succeeded $ do
         s <- get
-        error $ "Failed to grant admin group permissions over current " <> show current <> " - " <> LT.unpack (pShowNoColor s)
+        error $ "Failed to grant the admin group groupWise permissions over current " <> show current <> " - " <> LT.unpack (pShowNoColor s)
+      succeeded <- setMemberPermission adminActor Create adminGroup current
+      unless succeeded $ do
+        s <- get
+        error $ "Failed to grant the admin group member permissions over current " <> show current <> " - " <> LT.unpack (pShowNoColor s)
       succeeded <- setUniversePermission adminActor univ current
       unless succeeded $ do
         s <- get

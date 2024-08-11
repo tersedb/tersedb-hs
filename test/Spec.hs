@@ -55,6 +55,7 @@ import Lib.Actions.Unsafe
   , unsafeAdjustRecruiterPermission
   , unsafeAdjustGroupPermission
   , unsafeAdjustEntityPermission
+  , unsafeAdjustMemberPermission
   )
 import Lib.Actions.Tabulation (resetTabulation)
 
@@ -118,8 +119,9 @@ main = sydTest $ do
                 -- "backdate" the granting of group adjust rights to admin group
                 s <- get
                 for_ (HM.keys $ s ^. toGroups . nodes) $ \gId ->
-                  unless (gId == adminGroup) $
+                  unless (gId == adminGroup) $ do
                     unsafeAdjustGroupPermission (const (Just Adjust)) adminGroup gId
+                    unsafeAdjustMemberPermission (const Create) adminGroup gId
                 -- "backdate" the granting of space create rights to admin group
                 s <- get
                 for_ (HM.keys $ s ^. toSpaces) $ \sId ->
