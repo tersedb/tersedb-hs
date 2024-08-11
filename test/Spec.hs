@@ -42,7 +42,7 @@ import Lib.Actions.Unsafe
   , unsafeAdjustEntityPermission
   , unsafeAdjustMemberPermission
   )
-import Lib.Actions.Tabulation (resetTabulation)
+import Lib.Actions.Tabulation (resetTabulation, tempFromStore)
 
 import qualified Data.HashSet as HS
 import qualified Data.HashMap.Strict as HM
@@ -63,6 +63,10 @@ main = sydTest $ do
   describe "Simple" simpleTests
   describe "Groups" groupsTests
   describe "Store" $ do
+    it "temp data is reproducible from store" $
+      property $ \(xs :: SampleStore) ->
+        let s = loadSample xs
+        in  s ^. temp `shouldBe` tempFromStore (s ^. store)
     it "all descendants are supersets of roots - build all permissions" $
       property $ \(xs :: SampleStore) ->
         let groups = sampleGroups xs

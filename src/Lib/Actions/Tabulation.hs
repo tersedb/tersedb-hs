@@ -14,15 +14,24 @@ module Lib.Actions.Tabulation where
 import Lib.Types.Permission (escalate)
 import Lib.Types.Id (GroupId)
 import Lib.Types.Store
-  ( Shared
+  ( Shared (..)
+  , Store
+  , Temp (..)
   , store
   , temp
   , toGroups
+  , toEntities
+  , toVersions
   , toTabulatedGroups
   , toSpacePermissions
   , toEntityPermissions
   , toGroupPermissions
   , toMemberPermissions
+  , toReferencesFrom
+  , toReferencesFromEntities
+  , toReferencesFromSpaces
+  , toSubscriptionsFrom
+  , toSubscriptionsFromSpaces
   )
 import Lib.Types.Store.Tabulation.Group (TabulatedPermissionsForGroup (..))
 import Lib.Types.Store.Groups
@@ -34,12 +43,15 @@ import Lib.Types.Store.Groups
   , next
   , prev
   )
+import Lib.Types.Store.Version (entity, references, subscriptions)
+import Lib.Types.Store.Entity (space)
 
 import qualified Data.HashSet as HS
+import qualified Data.HashMap.Strict as HM
 import Data.Maybe (fromJust, fromMaybe)
-import Data.Foldable (traverse_)
-import Control.Lens ((^.), (.~), at)
-import Control.Monad.State (MonadState (get), modify)
+import Data.Foldable (traverse_, for_)
+import Control.Lens ((^.), (.~), at, non)
+import Control.Monad.State (MonadState (get, put), modify, State, execState)
 
 
 -- | Gets an initial tabulation for a specific group; assumes the group is a root
@@ -92,3 +104,36 @@ resetTabulation :: MonadState Shared m => m ()
 resetTabulation = do
   s <- get
   traverse_ updateTabulationStartingAt . HS.toList $ s ^. store . toGroups . roots
+
+
+tempFromStore :: Store -> Temp
+tempFromStore s = execState go (Temp mempty mempty mempty mempty mempty mempty)
+  where
+    go :: State Temp ()
+    go = do
+      loadVersions
+      loadTabulationGroups
+
+    loadTabulationGroups :: State Temp ()
+    loadTabulationGroups = do
+      t <- get
+      let shared = execState resetTabulation (Shared s t)
+      put $ shared ^. temp
+
+    loadVersions :: State Temp ()
+    loadVersions = do
+      for_ (HM.toList (s ^. toVersions)) $ \(vId, v) -> do
+        for_ (HS.toList $ v ^. references) $ \refId -> do
+          modify $ toReferencesFrom . at refId . non mempty . at vId .~ Just ()
+          case s ^. toVersions . at refId of
+            Nothing -> error $ "Missing version " <> show refId
+            Just refV -> do
+              modify $ toReferencesFromEntities . at (refV ^. entity) . non mempty . at vId .~ Just ()
+              case s ^. toEntities . at (refV ^. entity) of
+                Nothing -> error $ "Missing entity " <> show (refV ^. entity)
+                Just refE -> modify $ toReferencesFromSpaces . at (refE ^. space) . non mempty . at vId .~ Just ()
+        for_ (HS.toList $ v ^. subscriptions) $ \subId -> do
+          modify $ toSubscriptionsFrom . at subId . non mempty . at vId .~ Just ()
+          case s ^. toEntities . at subId of
+            Nothing -> error $ "Missing entity " <> show subId
+            Just subE -> modify $ toSubscriptionsFromSpaces . at (subE ^. space) . non mempty . at vId .~ Just ()
