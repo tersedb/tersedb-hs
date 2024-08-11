@@ -12,7 +12,7 @@
 module Lib.Actions.Tabulation where
 
 import Lib.Types.Permission (escalate)
-import Lib.Types.Id (GroupId)
+import Lib.Types.Id (GroupId, EntityId, VersionId)
 import Lib.Types.Store
   ( Shared (..)
   , Store
@@ -43,14 +43,14 @@ import Lib.Types.Store.Groups
   , next
   , prev
   )
-import Lib.Types.Store.Version (entity, references, subscriptions)
+import Lib.Types.Store.Version (Version, entity, references, subscriptions)
 import Lib.Types.Store.Entity (space)
 
 import qualified Data.HashSet as HS
 import qualified Data.HashMap.Strict as HM
 import Data.Maybe (fromJust, fromMaybe)
-import Data.Foldable (traverse_, for_)
-import Control.Lens ((^.), (.~), at, non)
+import Data.Foldable (traverse_, for_, foldlM)
+import Control.Lens ((^.), (.~), (&), at, non)
 import Control.Monad.State (MonadState (get, put), modify, State, execState)
 
 
@@ -106,6 +106,35 @@ resetTabulation = do
   traverse_ updateTabulationStartingAt . HS.toList $ s ^. store . toGroups . roots
 
 
+data LoadRefsAndSubsError
+  = ReferenceVersionNotFound VersionId
+  | ReferenceEntityNotFound EntityId
+  | SubscriptionEntityNotFound EntityId
+  deriving (Eq, Show, Read)
+
+loadRefsAndSubs :: VersionId -> Version -> Store -> Temp -> Either LoadRefsAndSubsError Temp
+loadRefsAndSubs vId v s t = do
+  let storeRefs t refId =
+        let t' = t & toReferencesFrom . at refId . non mempty . at vId .~ Just ()
+        in  case s ^. toVersions . at refId of
+              Nothing -> Left (ReferenceVersionNotFound refId)
+              Just refV ->
+                let t = t' & toReferencesFromEntities . at (refV ^. entity) . non mempty . at vId .~ Just ()
+                in  case s ^. toEntities . at (refV ^. entity) of
+                      Nothing -> Left . ReferenceEntityNotFound $ refV ^. entity
+                      Just refE ->
+                        pure $ t
+                          & toReferencesFromSpaces . at (refE ^. space) . non mempty . at vId .~ Just ()
+  t' <- foldlM storeRefs t (HS.toList $ v ^. references)
+  let storeSubs t subId =
+        let t' = t & toSubscriptionsFrom . at subId . non mempty . at vId .~ Just ()
+        in  case s ^. toEntities . at subId of
+              Nothing -> Left (SubscriptionEntityNotFound subId)
+              Just subE ->
+                pure $ t' & toSubscriptionsFromSpaces . at (subE ^. space) . non mempty . at vId .~ Just ()
+  foldlM storeSubs t' (HS.toList $ v ^. subscriptions)
+
+
 tempFromStore :: Store -> Temp
 tempFromStore s = execState go (Temp mempty mempty mempty mempty mempty mempty)
   where
@@ -121,19 +150,9 @@ tempFromStore s = execState go (Temp mempty mempty mempty mempty mempty mempty)
       put $ shared ^. temp
 
     loadVersions :: State Temp ()
-    loadVersions = do
+    loadVersions =
       for_ (HM.toList (s ^. toVersions)) $ \(vId, v) -> do
-        for_ (HS.toList $ v ^. references) $ \refId -> do
-          modify $ toReferencesFrom . at refId . non mempty . at vId .~ Just ()
-          case s ^. toVersions . at refId of
-            Nothing -> error $ "Missing version " <> show refId
-            Just refV -> do
-              modify $ toReferencesFromEntities . at (refV ^. entity) . non mempty . at vId .~ Just ()
-              case s ^. toEntities . at (refV ^. entity) of
-                Nothing -> error $ "Missing entity " <> show (refV ^. entity)
-                Just refE -> modify $ toReferencesFromSpaces . at (refE ^. space) . non mempty . at vId .~ Just ()
-        for_ (HS.toList $ v ^. subscriptions) $ \subId -> do
-          modify $ toSubscriptionsFrom . at subId . non mempty . at vId .~ Just ()
-          case s ^. toEntities . at subId of
-            Nothing -> error $ "Missing entity " <> show subId
-            Just subE -> modify $ toSubscriptionsFromSpaces . at (subE ^. space) . non mempty . at vId .~ Just ()
+        t <- get
+        case loadRefsAndSubs vId v s t of
+          Left e -> error (show e)
+          Right t' -> put t'

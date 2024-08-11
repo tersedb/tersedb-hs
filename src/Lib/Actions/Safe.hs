@@ -13,6 +13,7 @@ module Lib.Actions.Safe where
 
 import Lib.Actions.Tabulation
   ( updateTabulationStartingAt
+  , LoadRefsAndSubsError
   )
 import Lib.Actions.Unsafe
   ( unsafeEmptyShared
@@ -20,7 +21,6 @@ import Lib.Actions.Unsafe
   , unsafeStoreActor
   , unsafeStoreSpace
   , unsafeStoreEntity
-  , StoreVersionError
   , unsafeStoreVersion
   , unsafeAdjustUniversePermission
   , unsafeAdjustOrganizationPermission
@@ -182,7 +182,7 @@ storeForkedEntity
   -> SpaceId -- ^ space in which entity is being forked to
   -> VersionId -- ^ initial version of forked entitiy
   -> VersionId -- ^ previous version of entity (possibly in a different space, definitely in a different entity)
-  -> m (Maybe (Either (Either StoreForkedEntityError StoreVersionError) ()))
+  -> m (Maybe (Either (Either StoreForkedEntityError LoadRefsAndSubsError) ()))
 storeForkedEntity creator eId sId vId prevVId
   | vId == prevVId = pure . Just . Left $ Left ForkingSelf
   | otherwise = do
@@ -206,7 +206,7 @@ storeVersion
   => ActorId -- ^ actor attempting to store a version
   -> EntityId -- ^ entity receiving a new version
   -> VersionId -- ^ version being stored
-  -> m (Maybe (Either StoreVersionError ()))
+  -> m (Maybe (Either LoadRefsAndSubsError ()))
 storeVersion creator eId vId = do
   s <- get
   case s ^. store . toEntities . at eId of

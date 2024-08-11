@@ -16,7 +16,6 @@ module Lib.Actions.Unsafe
   , unsafeAddMember
   , unsafeStoreSpace
   , unsafeStoreEntity
-  , StoreVersionError
   , unsafeStoreVersion
   , LinkGroupError (..)
   , unsafeLinkGroups
@@ -32,6 +31,8 @@ module Lib.Actions.Unsafe
 
 import Lib.Actions.Tabulation
   ( updateTabulationStartingAt
+  , LoadRefsAndSubsError
+  , loadRefsAndSubs
   )
 import Lib.Types.Id (GroupId, SpaceId, EntityId, VersionId, ActorId)
 import Lib.Types.Permission
@@ -141,89 +142,89 @@ unsafeStoreEntity
   -> SpaceId
   -> VersionId
   -> (EntityId -> Version)
-  -> m (Either StoreVersionError ())
+  -> m (Either LoadRefsAndSubsError ())
 unsafeStoreEntity eId sId vId buildVersion = do
   s <- get
   let v = buildVersion eId
       s' = s & store . toEntities . at eId .~ Just (initEntity sId vId)
              & store . toSpaces . ix sId . entities . at eId .~ Just ()
              & store . toVersions . at vId .~ Just (buildVersion eId)
-      storeRefs :: Shared -> VersionId -> Either StoreVersionError Shared
-      storeRefs s' refId =
-        let s = s' & temp . toReferencesFrom . at refId . non mempty . at vId .~ Just ()
-        in case s ^. store . toVersions . at refId of
-            Nothing -> Left $ ReferenceVersionNotFound refId
-            Just ref ->
-              let refEId = ref ^. entity
-                  s' = s & temp . toReferencesFromEntities . at refEId . non mempty . at vId .~ Just ()
-              in  case s' ^. store . toEntities . at refEId of
-                    Nothing -> Left $ ReferenceEntityNotFound refEId
-                    Just refE ->
-                      let refSId = refE ^. space
-                      in  pure $ s' & temp . toReferencesFromSpaces . at refSId . non mempty . at vId .~ Just ()
-      eS = foldlM storeRefs s' (HS.toList $ v ^. references)
-  case eS of
+  case loadRefsAndSubs vId v (s' ^. store) (s' ^. temp) of
     Left e -> pure (Left e)
-    Right s -> do
-      let storeSubs :: Shared -> EntityId -> Either StoreVersionError Shared
-          storeSubs s subId =
-            let s' = s & temp . toSubscriptionsFrom . at subId . non mempty . at vId .~ Just ()
-            in  case s' ^. store . toEntities . at subId of
-                  Nothing -> Left $ SubscriptionEntityNotFound subId
-                  Just sub ->
-                    let subSId = sub ^. space
-                    in  pure $ s' & temp . toSubscriptionsFromSpaces . at subSId . non mempty . at vId .~ Just ()
-          eS = foldlM storeSubs s (HS.toList $ v ^. subscriptions)
-      case eS of
-        Left e -> pure (Left e)
-        Right s -> Right () <$ put s
-
-data StoreVersionError
-  = ReferenceVersionNotFound VersionId
-  | ReferenceEntityNotFound EntityId
-  | SubscriptionEntityNotFound EntityId
-  deriving (Eq, Show, Read)
+    Right t -> Right () <$ put (s' & temp .~ t)
+      -- storeRefs :: Shared -> VersionId -> Either StoreVersionError Shared
+      -- storeRefs s' refId =
+        -- let s = s' & temp . toReferencesFrom . at refId . non mempty . at vId .~ Just ()
+        -- in case s ^. store . toVersions . at refId of
+            -- Nothing -> Left $ ReferenceVersionNotFound refId
+            -- Just ref ->
+              -- let refEId = ref ^. entity
+                  -- s' = s & temp . toReferencesFromEntities . at refEId . non mempty . at vId .~ Just ()
+              -- in  case s' ^. store . toEntities . at refEId of
+                    -- Nothing -> Left $ ReferenceEntityNotFound refEId
+                    -- Just refE ->
+                      -- let refSId = refE ^. space
+                      -- in  pure $ s' & temp . toReferencesFromSpaces . at refSId . non mempty . at vId .~ Just ()
+      -- eS = foldlM storeRefs s' (HS.toList $ v ^. references)
+  -- case eS of
+    -- Left e -> pure (Left e)
+    -- Right s -> do
+      -- let storeSubs :: Shared -> EntityId -> Either StoreVersionError Shared
+          -- storeSubs s subId =
+            -- let s' = s & temp . toSubscriptionsFrom . at subId . non mempty . at vId .~ Just ()
+            -- in  case s' ^. store . toEntities . at subId of
+                  -- Nothing -> Left $ SubscriptionEntityNotFound subId
+                  -- Just sub ->
+                    -- let subSId = sub ^. space
+                    -- in  pure $ s' & temp . toSubscriptionsFromSpaces . at subSId . non mempty . at vId .~ Just ()
+          -- eS = foldlM storeSubs s (HS.toList $ v ^. subscriptions)
+      -- case eS of
+        -- Left e -> pure (Left e)
+        -- Right s -> Right () <$ put s
 
 unsafeStoreVersion
   :: MonadState Shared m
   => EntityId
   -> VersionId
   -> (EntityId -> Version)
-  -> m (Either StoreVersionError ())
+  -> m (Either LoadRefsAndSubsError ())
 unsafeStoreVersion eId vId buildVersion = do
   s <- get
   let v = buildVersion eId
       s' = s & store . toEntities . ix eId %~ flip addVersion vId
              & store . toVersions . at vId .~ Just v
-      storeRefs :: Shared -> VersionId -> Either StoreVersionError Shared
-      storeRefs s' refId =
-        let s = s' & temp . toReferencesFrom . at refId . non mempty . at vId .~ Just ()
-        in case s ^. store . toVersions . at refId of
-            Nothing -> Left $ ReferenceVersionNotFound refId
-            Just ref ->
-              let refEId = ref ^. entity
-                  s' = s & temp . toReferencesFromEntities . at refEId . non mempty . at vId .~ Just ()
-              in  case s' ^. store . toEntities . at refEId of
-                    Nothing -> Left $ ReferenceEntityNotFound refEId
-                    Just refE ->
-                      let refSId = refE ^. space
-                      in  pure $ s' & temp . toReferencesFromSpaces . at refSId . non mempty . at vId .~ Just ()
-      eS = foldlM storeRefs s' (HS.toList $ v ^. references)
-  case eS of
+  case loadRefsAndSubs vId v (s' ^. store) (s' ^. temp) of
     Left e -> pure (Left e)
-    Right s -> do
-      let storeSubs :: Shared -> EntityId -> Either StoreVersionError Shared
-          storeSubs s subId =
-            let s' = s & temp . toSubscriptionsFrom . at subId . non mempty . at vId .~ Just ()
-            in  case s' ^. store . toEntities . at subId of
-                  Nothing -> Left $ SubscriptionEntityNotFound subId
-                  Just sub ->
-                    let subSId = sub ^. space
-                    in  pure $ s' & temp . toSubscriptionsFromSpaces . at subSId . non mempty . at vId .~ Just ()
-          eS = foldlM storeSubs s (HS.toList $ v ^. subscriptions)
-      case eS of
-        Left e -> pure (Left e)
-        Right s -> Right () <$ put s
+    Right t -> Right () <$ put (s' & temp .~ t)
+      -- storeRefs :: Shared -> VersionId -> Either StoreVersionError Shared
+      -- storeRefs s' refId =
+        -- let s = s' & temp . toReferencesFrom . at refId . non mempty . at vId .~ Just ()
+        -- in case s ^. store . toVersions . at refId of
+            -- Nothing -> Left $ ReferenceVersionNotFound refId
+            -- Just ref ->
+              -- let refEId = ref ^. entity
+                  -- s' = s & temp . toReferencesFromEntities . at refEId . non mempty . at vId .~ Just ()
+              -- in  case s' ^. store . toEntities . at refEId of
+                    -- Nothing -> Left $ ReferenceEntityNotFound refEId
+                    -- Just refE ->
+                      -- let refSId = refE ^. space
+                      -- in  pure $ s' & temp . toReferencesFromSpaces . at refSId . non mempty . at vId .~ Just ()
+      -- eS = foldlM storeRefs s' (HS.toList $ v ^. references)
+  -- case eS of
+    -- Left e -> pure (Left e)
+    -- Right s -> do
+      -- let storeSubs :: Shared -> EntityId -> Either StoreVersionError Shared
+          -- storeSubs s subId =
+            -- let s' = s & temp . toSubscriptionsFrom . at subId . non mempty . at vId .~ Just ()
+            -- in  case s' ^. store . toEntities . at subId of
+                  -- Nothing -> Left $ SubscriptionEntityNotFound subId
+                  -- Just sub ->
+                    -- let subSId = sub ^. space
+                    -- in  pure $ s' & temp . toSubscriptionsFromSpaces . at subSId . non mempty . at vId .~ Just ()
+          -- eS = foldlM storeSubs s (HS.toList $ v ^. subscriptions)
+      -- case eS of
+        -- Left e -> pure (Left e)
+        -- Right s -> Right () <$ put s
 
 data LinkGroupError
   = CycleDetected [GroupId]

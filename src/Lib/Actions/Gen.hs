@@ -20,7 +20,7 @@ import Lib.Actions.Safe
   , storeForkedEntity
   , StoreForkedEntityError
   )
-import Lib.Actions.Unsafe (StoreVersionError)
+import Lib.Actions.Tabulation (LoadRefsAndSubsError)
 import Lib.Types.Id (GroupId, SpaceId, EntityId, VersionId, ActorId)
 import Lib.Types.Monad (SheepdogM)
 
@@ -57,7 +57,7 @@ newForkedEntity
   :: ActorId
   -> SpaceId
   -> VersionId
-  -> SheepdogM (Maybe (Either (Either StoreForkedEntityError StoreVersionError) (EntityId, VersionId)))
+  -> SheepdogM (Maybe (Either (Either StoreForkedEntityError LoadRefsAndSubsError) (EntityId, VersionId)))
 newForkedEntity creator sId prevVId = do
   (eId, vId) <- uniformM globalStdGen
   mE <- storeForkedEntity creator eId sId vId prevVId
@@ -67,7 +67,7 @@ newForkedEntity creator sId prevVId = do
 newVersion
   :: ActorId
   -> EntityId
-  -> SheepdogM (Maybe (Either StoreVersionError VersionId))
+  -> SheepdogM (Maybe (Either LoadRefsAndSubsError VersionId))
 newVersion creator eId = do
   vId <- uniformM globalStdGen
   mE <- storeVersion creator eId vId
