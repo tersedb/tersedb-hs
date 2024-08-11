@@ -95,6 +95,10 @@ test-suite sheepdogdb-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
+      Spec.Sample.Store
+      Spec.Sample.Tree
+      Spec.Test.Groups
+      Spec.Test.Simple
       Paths_sheepdogdb
   autogen-modules:
       Paths_sheepdogdb
