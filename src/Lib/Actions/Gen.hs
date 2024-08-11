@@ -20,6 +20,7 @@ import Lib.Actions.Safe
   , storeForkedEntity
   , StoreForkedEntityError
   )
+import Lib.Actions.Unsafe (StoreVersionError)
 import Lib.Types.Id (GroupId, SpaceId, EntityId, VersionId, ActorId)
 import Lib.Types.Monad (SheepdogM)
 
@@ -66,6 +67,8 @@ newForkedEntity creator sId prevVId = do
 newVersion
   :: ActorId
   -> EntityId
-  -> SheepdogM (Maybe VersionId)
-newVersion creator eId =
-  generateWithAuthority (\vId -> storeVersion creator eId vId)
+  -> SheepdogM (Maybe (Either StoreVersionError VersionId))
+newVersion creator eId = do
+  vId <- uniformM globalStdGen
+  mE <- storeVersion creator eId vId
+  pure $ fmap (fmap (const vId)) mE

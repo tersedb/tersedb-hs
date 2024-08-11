@@ -144,8 +144,10 @@ loadSample SampleStore{..} = flip execState (loadSampleTree sampleGroups) $ do
     case vIdsTail of
       Nothing -> pure ()
       Just vIdsTail -> void . (\f -> foldlM f vId vIdsTail) $ \prevVId vId -> do
-        unsafeStoreVersion eId vId (flip forkVersion prevVId)
-        pure vId
+        eWorked <- unsafeStoreVersion eId vId (flip forkVersion prevVId)
+        case eWorked of
+          Left e -> error $ "Error during store version " <> show e
+          Right () -> pure vId
   let loadPermissions :: SampleGroupTree (HashMap SpaceId SinglePermission, HashMap SpaceId CollectionPermission)
                       -> State Store ()
       loadPermissions SampleGroupTree{current, auxPerGroup = (spacesPerms, entityPerms), children} = do
@@ -237,10 +239,12 @@ storeSample SampleStore{..} adminActor adminGroup =
       case vIdsTail of
         Nothing -> pure ()
         Just vIdsTail -> for_ vIdsTail $ \vId -> do
-          succeeded <- storeVersion adminActor eId vId
-          unless succeeded $ do
-            s <- get
-            error $ "Failed to store version " <> show (eId, vId) <> " - " <> LT.unpack (pShowNoColor s)
+          mE <- storeVersion adminActor eId vId
+          case mE of
+            Just (Right ()) -> pure ()
+            _ -> do
+              s <- get
+              error $ "Failed to store version " <> show (mE, eId, vId) <> " - " <> LT.unpack (pShowNoColor s)
     let loadPermissions :: SampleGroupTree (HashMap SpaceId SinglePermission, HashMap SpaceId CollectionPermission)
                         -> State Store ()
         loadPermissions SampleGroupTree{current, auxPerGroup = (spacesPerms, entityPerms), children} = do

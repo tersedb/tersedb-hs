@@ -35,7 +35,10 @@ data Store = Store
   , storeEntities :: HashMap EntityId Entity
   , storeVersions :: HashMap VersionId Version
   , storeReferencesFrom :: HashMap VersionId (HashSet VersionId)
+  , storeReferencesFromEntities :: HashMap EntityId (HashSet VersionId)
+  , storeReferencesFromSpaces :: HashMap SpaceId (HashSet VersionId)
   , storeSubscriptionsFrom :: HashMap EntityId (HashSet VersionId)
+  , storeSubscriptionsFromSpaces :: HashMap SpaceId (HashSet VersionId)
   , storeSpacePermissions :: HashMap GroupId (HashMap SpaceId SinglePermission)
   , storeEntityPermissions :: HashMap GroupId (HashMap SpaceId CollectionPermission)
   , storeGroupPermissions :: HashMap GroupId (HashMap GroupId SinglePermission)
@@ -49,7 +52,10 @@ makeLensesFor
   , ("storeEntities", "toEntities")
   , ("storeVersions", "toVersions")
   , ("storeReferencesFrom", "toReferencesFrom")
+  , ("storeReferencesFromEntities", "toReferencesFromEntities")
+  , ("storeReferencesFromSpaces", "toReferencesFromSpaces")
   , ("storeSubscriptionsFrom", "toSubscriptionsFrom")
+  , ("storeSubscriptionsFromSpaces", "toSubscriptionsFromSpaces")
   , ("storeSpacePermissions", "toSpacePermissions")
   , ("storeEntityPermissions", "toEntityPermissions")
   , ("storeGroupPermissions", "toGroupPermissions")

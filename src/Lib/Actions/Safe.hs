@@ -20,6 +20,7 @@ import Lib.Actions.Unsafe
   , unsafeStoreActor
   , unsafeStoreSpace
   , unsafeStoreEntity
+  , StoreVersionError
   , unsafeStoreVersion
   , unsafeAdjustUniversePermission
   , unsafeAdjustOrganizationPermission
@@ -165,6 +166,7 @@ storeEntity creator eId sId vId = do
 data StoreForkedEntityError
   = PreviousVersionDoesntExist
   | PreviousEntityDoesntExist
+  | ForkingSelf
   deriving (Eq, Show, Read)
 
 storeForkedEntity
@@ -175,7 +177,9 @@ storeForkedEntity
   -> VersionId -- ^ initial version of forked entitiy
   -> VersionId -- ^ previous version of entity (possibly in a different space, definitely in a different entity)
   -> m (Either StoreForkedEntityError Bool)
-storeForkedEntity creator eId sId vId prevVId = do
+storeForkedEntity creator eId sId vId prevVId
+  | vId == prevVId = pure (Left ForkingSelf)
+  | otherwise = do
   s <- get
   case s ^. toVersions . at prevVId of
     Nothing -> pure (Left PreviousVersionDoesntExist)
@@ -194,14 +198,15 @@ storeVersion
   => ActorId -- ^ actor attempting to store a version
   -> EntityId -- ^ entity receiving a new version
   -> VersionId -- ^ version being stored
-  -> m Bool
+  -> m (Maybe (Either StoreVersionError ()))
 storeVersion creator eId vId = do
   s <- get
   case s ^. toEntities . at eId of
-    Nothing -> pure False
-    Just e ->
-      canDo (\t -> t ^. forEntities . at (e ^. space) . non Blind) creator Create >>=
-        conditionally (unsafeStoreVersion eId vId . flip forkVersion . NE.head $ e ^. versions)
+    Nothing -> pure Nothing
+    Just e -> do
+      canAdjust <- canDo (\t -> t ^. forEntities . at (e ^. space) . non Blind) creator Create
+      if not canAdjust then pure Nothing else do
+        fmap Just . unsafeStoreVersion eId vId . flip forkVersion . NE.head $ e ^. versions
 
 -- | Will only update the group if the actor has same or greater permission
 setUniversePermission
