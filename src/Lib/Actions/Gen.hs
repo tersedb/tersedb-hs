@@ -57,11 +57,11 @@ newForkedEntity
   :: ActorId
   -> SpaceId
   -> VersionId
-  -> SheepdogM (Either StoreForkedEntityError (Maybe (EntityId, VersionId)))
+  -> SheepdogM (Maybe (Either (Either StoreForkedEntityError StoreVersionError) (EntityId, VersionId)))
 newForkedEntity creator sId prevVId = do
   (eId, vId) <- uniformM globalStdGen
-  eWorked <- storeForkedEntity creator eId sId vId prevVId
-  pure $ fmap (flip toMaybe (eId, vId)) eWorked
+  mE <- storeForkedEntity creator eId sId vId prevVId
+  pure $ fmap (fmap (const (eId, vId))) mE
 
 -- Adds a version to an existing entity
 newVersion

@@ -62,7 +62,7 @@ import Lib.Types.Store.Version (genesisVersion, forkVersion, entity)
 import qualified Data.HashSet as HS
 import qualified Data.List.NonEmpty as NE
 import Data.Maybe (fromMaybe)
-import Control.Lens ((^.), at, non)
+import Control.Lens ((^.), at, non, _Left, (%~), (&))
 import Control.Monad.State (MonadState (get), execState)
 import Control.Monad.Extra (andM, orM, when)
 
@@ -160,8 +160,12 @@ storeEntity
   -> VersionId -- ^ initial version
   -> m Bool
 storeEntity creator eId sId vId = do
-  canDo (\t -> t ^. forEntities . at sId . non Blind) creator Create >>=
-    conditionally (unsafeStoreEntity eId sId vId genesisVersion)
+  canAdjust <- canDo (\t -> t ^. forEntities . at sId . non Blind) creator Create
+  if not canAdjust then pure False else do
+    eVErr <- unsafeStoreEntity eId sId vId genesisVersion
+    case eVErr of
+      Left e -> error $ "Impossible error - genesis version has undefined reference " <> show (e, eId, sId, vId)
+      Right () -> pure True
 
 data StoreForkedEntityError
   = PreviousVersionDoesntExist
@@ -176,22 +180,24 @@ storeForkedEntity
   -> SpaceId -- ^ space in which entity is being forked to
   -> VersionId -- ^ initial version of forked entitiy
   -> VersionId -- ^ previous version of entity (possibly in a different space, definitely in a different entity)
-  -> m (Either StoreForkedEntityError Bool)
+  -> m (Maybe (Either (Either StoreForkedEntityError StoreVersionError) ()))
 storeForkedEntity creator eId sId vId prevVId
-  | vId == prevVId = pure (Left ForkingSelf)
+  | vId == prevVId = pure . Just . Left $ Left ForkingSelf
   | otherwise = do
   s <- get
   case s ^. toVersions . at prevVId of
-    Nothing -> pure (Left PreviousVersionDoesntExist)
+    Nothing -> pure . Just . Left $ Left PreviousVersionDoesntExist
     Just prevV -> case s ^. toEntities . at (prevV ^. entity) of
-      Nothing -> pure (Left PreviousEntityDoesntExist)
+      Nothing -> pure . Just . Left $ Left PreviousEntityDoesntExist
       Just prevE -> do
         let prevSId = prevE ^. space
         canAdjust <- andM
           [ canDo (\t -> t ^. forEntities . at sId . non Blind) creator Create
           , canDo (\t -> t ^. forEntities . at prevSId . non Blind) creator Read
           ]
-        Right <$> conditionally (unsafeStoreEntity eId sId vId (flip forkVersion prevVId)) canAdjust
+        if not canAdjust then pure Nothing else do
+          eVErr <- unsafeStoreEntity eId sId vId (flip forkVersion prevVId)
+          pure . Just $ eVErr & _Left %~ Right
 
 storeVersion
   :: MonadState Store m

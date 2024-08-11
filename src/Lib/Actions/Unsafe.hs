@@ -133,11 +133,42 @@ unsafeStoreEntity
   -> SpaceId
   -> VersionId
   -> (EntityId -> Version)
-  -> m ()
+  -> m (Either StoreVersionError ())
 unsafeStoreEntity eId sId vId buildVersion = do
-  modify $ toEntities . at eId .~ Just (initEntity sId vId)
-  modify $ toSpaces . ix sId . entities . at eId .~ Just ()
-  modify $ toVersions . at vId .~ Just (buildVersion eId)
+  s <- get
+  let v = buildVersion eId
+      s' = s & toEntities . at eId .~ Just (initEntity sId vId)
+             & toSpaces . ix sId . entities . at eId .~ Just ()
+             & toVersions . at vId .~ Just (buildVersion eId)
+      storeRefs :: Store -> VersionId -> Either StoreVersionError Store
+      storeRefs s' refId =
+        let s = s' & toReferencesFrom . at refId . non mempty . at vId .~ Just ()
+        in case s ^. toVersions . at refId of
+            Nothing -> Left $ ReferenceVersionNotFound refId
+            Just ref ->
+              let refEId = ref ^. entity
+                  s' = s & toReferencesFromEntities . at refEId . non mempty . at vId .~ Just ()
+              in  case s' ^. toEntities . at refEId of
+                    Nothing -> Left $ ReferenceEntityNotFound refEId
+                    Just refE ->
+                      let refSId = refE ^. space
+                      in  pure $ s' & toReferencesFromSpaces . at refSId . non mempty . at vId .~ Just ()
+      eS = foldlM storeRefs s' (HS.toList $ v ^. references)
+  case eS of
+    Left e -> pure (Left e)
+    Right s -> do
+      let storeSubs :: Store -> EntityId -> Either StoreVersionError Store
+          storeSubs s subId =
+            let s' = s & toSubscriptionsFrom . at subId . non mempty . at vId .~ Just ()
+            in  case s' ^. toEntities . at subId of
+                  Nothing -> Left $ SubscriptionEntityNotFound subId
+                  Just sub ->
+                    let subSId = sub ^. space
+                    in  pure $ s' & toSubscriptionsFromSpaces . at subSId . non mempty . at vId .~ Just ()
+          eS = foldlM storeSubs s (HS.toList $ v ^. subscriptions)
+      case eS of
+        Left e -> pure (Left e)
+        Right s -> Right () <$ put s
 
 data StoreVersionError
   = ReferenceVersionNotFound VersionId
@@ -169,7 +200,7 @@ unsafeStoreVersion eId vId buildVersion = do
                     Just refE ->
                       let refSId = refE ^. space
                       in  pure $ s' & toReferencesFromSpaces . at refSId . non mempty . at vId .~ Just ()
-  let eS = foldlM storeRefs s' (HS.toList $ v ^. references)
+      eS = foldlM storeRefs s' (HS.toList $ v ^. references)
   case eS of
     Left e -> pure (Left e)
     Right s -> do
