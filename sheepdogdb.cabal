@@ -31,6 +31,11 @@ library
       Lib.Actions.Safe.Update
       Lib.Actions.Safe.Update.Group
       Lib.Actions.Safe.Verify
+      Lib.Actions.Safe.Verify.Actor
+      Lib.Actions.Safe.Verify.Group
+      Lib.Actions.Safe.Verify.Member
+      Lib.Actions.Safe.Verify.SpaceAndEntity
+      Lib.Actions.Safe.Verify.Utils
       Lib.Actions.Tabulation
       Lib.Actions.Unsafe
       Lib.Actions.Unsafe.Store

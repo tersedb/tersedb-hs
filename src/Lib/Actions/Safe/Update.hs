@@ -11,7 +11,7 @@
 
 module Lib.Actions.Safe.Update where
 
-import Lib.Actions.Safe.Verify (canDo, canDoWithTab, conditionally)
+import Lib.Actions.Safe.Verify (canDeleteEntity, canCreateEntity, conditionally)
 import Lib.Types.Id (SpaceId, EntityId, ActorId)
 import Lib.Types.Permission
   ( CollectionPermission (..)
@@ -39,13 +39,6 @@ import Control.Monad.State (MonadState (get), modify)
 import Control.Monad.Extra (andM, orM)
 
 
-updateSpace :: MonadState Shared m => ActorId -> SpaceId -> m Bool
-updateSpace updater sId =
-  canDoWithTab -- use universe permission if spaces permission isn't set
-    (\t -> fromMaybe (t ^. forUniverse . collectionPermission) (t ^. forSpaces . at sId))
-    updater
-    (\t -> escalate (t ^. forUniverse) Adjust)
-
 -- | Moving an entity between spaces requires delete authority on the current space, and create authority on the destination space
 updateEntitySpace :: MonadState Shared m => ActorId -> EntityId -> SpaceId -> m Bool
 updateEntitySpace updater eId newSId = do
@@ -54,14 +47,8 @@ updateEntitySpace updater eId newSId = do
     Nothing -> pure False -- FIXME
     Just e -> do
       canAdjust <- andM
-        [ orM
-          [ canDo (\t -> t ^. forEntities . at (e ^. space) . non Blind) updater Delete
-          , canDo (\t -> t ^. forUniverse . collectionPermission) updater Delete -- FIXME bypasses exemption check
-          ]
-        , orM
-          [ canDo (\t -> t ^. forEntities . at newSId . non Blind) updater Create
-          , canDo (\t -> t ^. forUniverse . collectionPermission) updater Create -- FIXME bypasses exemption check
-          ]
+        [ canDeleteEntity updater (e ^. space) eId
+        , canCreateEntity updater newSId
         ]
       flip conditionally canAdjust $ do
         modify $ store . toEntities . ix eId . space .~ newSId

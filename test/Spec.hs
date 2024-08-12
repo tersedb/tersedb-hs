@@ -112,7 +112,7 @@ main = sydTest $ do
                 -- "backdate" the granting of space create rights to admin group
                 s <- get
                 for_ (HM.keys $ s ^. store . toSpaces) $ \sId ->
-                  unsafeAdjustEntityPermission (const Create) adminGroup sId
+                  unsafeAdjustEntityPermission (const Update) adminGroup sId
                 resetTabulation
           in  safeStore `shouldBe` unsafeStore
 

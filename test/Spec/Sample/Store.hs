@@ -224,7 +224,7 @@ storeSample SampleStore{..} adminActor adminGroup =
       unless succeeded $ do
         s <- get
         error $ "Failed to store space " <> show sId <> " - " <> LT.unpack (pShowNoColor s)
-      succeeded <- setEntityPermission adminActor Create adminGroup sId 
+      succeeded <- setEntityPermission adminActor Update adminGroup sId 
       unless succeeded $ do
         s <- get
         error $ "Failed to set entity permissions " <> show sId <> " - " <> LT.unpack (pShowNoColor s)

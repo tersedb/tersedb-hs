@@ -11,7 +11,16 @@
 
 module Lib.Actions.Safe.Store where
 
-import Lib.Actions.Safe.Verify (canDo, conditionally)
+import Lib.Actions.Safe.Verify
+  ( canCreateGroup
+  , canCreateActor
+  , canCreateMember
+  , canCreateSpace
+  , canCreateEntity
+  , canUpdateEntity
+  , canReadEntity
+  , conditionally
+  )
 import Lib.Actions.Tabulation (LoadRefsAndSubsError)
 import Lib.Actions.Unsafe.Store
   ( unsafeStoreGroup
@@ -54,8 +63,8 @@ storeGroup
   => ActorId -- ^ actor storing the group
   -> GroupId -- ^ group being stored
   -> m Bool
-storeGroup creator gId = do
-  canDo (\t -> t ^. forOrganization . collectionPermission) creator Create >>=
+storeGroup creator gId =
+  canCreateGroup creator >>=
     conditionally (unsafeStoreGroup gId)
 
 storeActor
@@ -64,7 +73,7 @@ storeActor
   -> ActorId -- ^ created actor being stored
   -> m Bool
 storeActor creator aId =
-  canDo (\t -> t ^. forRecruiter) creator Create >>=
+  canCreateActor creator >>=
     conditionally (unsafeStoreActor aId)
 
 addMember
@@ -74,7 +83,7 @@ addMember
   -> ActorId -- ^ new member
   -> m Bool
 addMember creator gId aId = do
-  canDo (\t -> t ^. forMembers . at gId . non Blind) creator Create >>=
+  canCreateMember creator gId >>=
     conditionally (unsafeAddMember gId aId)
 
 storeSpace
@@ -83,7 +92,7 @@ storeSpace
   -> SpaceId -- ^ space being created
   -> m Bool
 storeSpace creator sId =
-  canDo (\t -> t ^. forUniverse . collectionPermission) creator Create >>=
+  canCreateSpace creator >>=
     conditionally (unsafeStoreSpace sId)
 
 storeEntity
@@ -94,7 +103,7 @@ storeEntity
   -> VersionId -- ^ initial version
   -> m Bool
 storeEntity creator eId sId vId = do
-  canAdjust <- canDo (\t -> t ^. forEntities . at sId . non Blind) creator Create
+  canAdjust <- canCreateEntity creator sId
   if not canAdjust then pure False else do
     eVErr <- unsafeStoreEntity eId sId vId genesisVersion
     case eVErr of
@@ -126,8 +135,8 @@ storeForkedEntity creator eId sId vId prevVId
       Just prevE -> do
         let prevSId = prevE ^. space
         canAdjust <- andM
-          [ canDo (\t -> t ^. forEntities . at sId . non Blind) creator Create
-          , canDo (\t -> t ^. forEntities . at prevSId . non Blind) creator Read
+          [ canCreateEntity creator sId
+          , canReadEntity creator prevSId
           ]
         if not canAdjust then pure Nothing else do
           eVErr <- unsafeStoreEntity eId sId vId (flip forkVersion prevVId)
@@ -144,6 +153,6 @@ storeVersion creator eId vId = do
   case s ^. store . toEntities . at eId of
     Nothing -> pure Nothing
     Just e -> do
-      canAdjust <- canDo (\t -> t ^. forEntities . at (e ^. space) . non Blind) creator Create
-      if not canAdjust then pure Nothing else do
+      canAdjust <- canUpdateEntity creator (e ^. space)
+      if not canAdjust then  pure Nothing else do
         fmap Just . unsafeStoreVersion eId vId . flip forkVersion . NE.head $ e ^. versions

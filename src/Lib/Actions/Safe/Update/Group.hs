@@ -11,7 +11,11 @@
 
 module Lib.Actions.Safe.Update.Group where
 
-import Lib.Actions.Safe.Verify (canDo, canDoWithTab, conditionally, canUpdateGroup)
+import Lib.Actions.Safe.Verify (conditionally, canUpdateGroup)
+import Lib.Actions.Safe.Verify.SpaceAndEntity (hasSpacePermission, hasEntityPermission)
+import Lib.Actions.Safe.Verify.Group (hasGroupPermission)
+import Lib.Actions.Safe.Verify.Member (hasMemberPermission)
+import Lib.Actions.Safe.Verify.Utils (canDo)
 import Lib.Actions.Unsafe.Update.Group
   ( unsafeAdjustUniversePermission
   , unsafeAdjustOrganizationPermission
@@ -101,10 +105,7 @@ setSpacePermission
 setSpacePermission creator p gId sId = do
   canAdjust <- andM
     [ canUpdateGroup creator gId
-    , canDoWithTab -- use universe permission if spaces permission isn't set
-        (\t -> fromMaybe (t ^. forUniverse . collectionPermission) (t ^. forSpaces . at sId))
-        creator
-        (\t -> maybe Read (escalate (t ^. forUniverse)) p)
+    , hasSpacePermission creator sId (fromMaybe Exists p)
     ]
   conditionally
     (unsafeAdjustSpacePermission (const p) gId sId)
@@ -120,10 +121,7 @@ setEntityPermission
 setEntityPermission creator p gId sId = do
   canAdjust <- andM
     [ canUpdateGroup creator gId
-    , orM
-      [ canDo (\t -> t ^. forEntities . at sId . non Blind) creator p -- can you already do stuff with entities?
-      , canDo (\t -> t ^. forUniverse . collectionPermission) creator p -- if not, do you have universe permissions?
-      ]
+    , hasEntityPermission creator sId p
     ]
   conditionally
     (unsafeAdjustEntityPermission (const p) gId sId)
@@ -139,11 +137,7 @@ setGroupPermission
 setGroupPermission creator p gId towardGId = do
   canAdjust <- andM
     [ canUpdateGroup creator gId
-    , canDoWithTab
-        (\t -> fromMaybe (t ^. forOrganization . collectionPermission)
-           (t ^. forGroups . at towardGId)) -- I've already been granted permissions with that group I'm allowing the first permission over
-        creator
-        (\t -> maybe Read (escalate (t ^. forOrganization)) p)
+    , hasGroupPermission creator towardGId (fromMaybe Exists p)
     ]
   conditionally
     (unsafeAdjustGroupPermission (const p) gId towardGId)
@@ -159,10 +153,7 @@ setMemberPermission
 setMemberPermission creator p manipulatorGId manipulatedGId = do
   canAdjust <- andM
     [ canUpdateGroup creator manipulatorGId
-    , orM
-      [ canDo (\t -> t ^. forMembers . at manipulatedGId . non Blind) creator p -- can you already do stuff to manipulated?
-      , canDo (\t -> t ^. forOrganization . collectionPermission) creator p -- if not, do you have organization rights?
-      ]
+    , hasMemberPermission creator manipulatedGId p
     ]
   conditionally
     (unsafeAdjustMemberPermission (const p) manipulatorGId manipulatedGId)
