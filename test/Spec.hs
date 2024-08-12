@@ -68,7 +68,9 @@ main = sydTest $ do
     it "temp data is reproducible from store" $
       property $ \(xs :: SampleStore) ->
         let s = loadSample xs
-        in  s ^. temp `shouldBe` tempFromStore (s ^. store)
+            sTemp = s ^. temp
+            sFrom = tempFromStore (s ^. store)
+        in  shouldSatisfy (s ^. store, sTemp, sFrom) $ \_ -> sTemp == sFrom
     it "all descendants are supersets of roots - build all permissions" $
       property $ \(xs :: SampleStore) ->
         let groups = sampleGroups xs

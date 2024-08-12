@@ -29,6 +29,10 @@ import Lib.Actions.Unsafe.Store
   , unsafeStoreVersion
   , unsafeAddMember
   )
+import Lib.Actions.Unsafe.Update
+  ( unsafeUpdateVersionReferences
+  , unsafeUpdateVersionSubscriptions
+  )
 import Lib.Actions.Unsafe.Update.Group
   ( unsafeAdjustSpacePermission
   , unsafeAdjustEntityPermission
@@ -40,6 +44,10 @@ import Lib.Actions.Safe.Store
   , storeForkedEntity
   , storeVersion
   , addMember
+  )
+import Lib.Actions.Safe.Update
+  ( updateVersionReferences
+  , updateVersionSubscriptions
   )
 import Lib.Actions.Safe.Update.Group
   ( setSpacePermission
@@ -56,7 +64,7 @@ import Data.Maybe (isNothing, fromJust, mapMaybe)
 import Data.List.NonEmpty (NonEmpty, uncons)
 import qualified Data.List.NonEmpty as NE
 import Text.Pretty.Simple (pShowNoColor)
-import Control.Monad (void)
+import Control.Monad (void, replicateM)
 import Control.Monad.Extra (unless)
 import Control.Monad.State (State, execState, modify, get)
 import Control.Lens ((%~), (.~), (^.), at, _1, _2)
@@ -64,57 +72,69 @@ import Test.QuickCheck
   ( Arbitrary (arbitrary, shrink)
   , Gen
   , listOf
+  , listOf1
   , elements
   , chooseInt
   )
 
+type SampleEntity =
+  ( SpaceId
+  , NonEmpty (VersionId, HashSet VersionId, HashSet EntityId)
+  , Maybe VersionId
+  )
 
 data SampleStore = SampleStore
   { sampleSpaces :: HashSet SpaceId
-  , sampleEntities :: HashMap EntityId (SpaceId, NonEmpty VersionId, Maybe VersionId) -- "should be forked"
+  , sampleEntities :: [(EntityId, SampleEntity)] -- "should be forked"
   , sampleActors :: HashMap ActorId (HashSet GroupId)
   , sampleGroups :: SampleGroupTree (HashMap SpaceId SinglePermission, HashMap SpaceId CollectionPermission) -- spaces & entities
   } deriving (Eq, Show, Read)
 
 
-sortSampleEntities :: HashMap EntityId (SpaceId, NonEmpty VersionId, Maybe VersionId)
-                   -> [(EntityId, (SpaceId, NonEmpty VersionId, Maybe VersionId))]
-sortSampleEntities sampleEntities =
-  let es = reverse $ execState backtrackLinks initialLinks ^. _2
-      rebuild eId = (eId, fromJust $ HM.lookup eId sampleEntities)
-  in  concatMap (\es' -> map rebuild (HS.toList es')) es
-  where
-    forksOf :: HashMap VersionId (HashSet EntityId)
-    forksOf = foldr (HM.unionWith HS.union) mempty
-             . mapMaybe
-                (\(eId, (_,_,mFork)) -> fmap (\vId -> HM.singleton vId (HS.singleton eId)) mFork)
-             $ HM.toList sampleEntities
-    backtrackLinks :: State (HashSet VersionId, [HashSet EntityId]) ()
-    backtrackLinks = do
-      (versionsToGet, xs) <- get
-      if null versionsToGet then pure () else do
-        let go :: HashSet VersionId
-               -> VersionId
-               -> State (HashSet VersionId, [HashSet EntityId]) (HashSet VersionId)
-            go nextVs vChildId = case HM.lookup vChildId forksOf of
-              Nothing -> pure nextVs
-              Just es -> do
-                modify $ _2 %~ (es:)
-                let go' eId nextVs' =
-                      let (sId, vIds, _mFork) = fromJust $ HM.lookup eId sampleEntities
-                      in  foldr HS.insert nextVs' vIds
-                pure $ foldr go' nextVs $ HS.toList es
-        nextVersionsToGet <- foldlM go mempty (HS.toList versionsToGet)
-        modify $ _1 .~ nextVersionsToGet
-        backtrackLinks
-    initialLinks :: (HashSet VersionId, [HashSet EntityId])
-    initialLinks = 
-      ( HS.fromList $ concatMap (\(_,(_,vs,_)) -> NE.toList vs) noChildren
-      , [HS.fromList $ map fst noChildren]
-      )
-      where
-        noChildren :: [(EntityId, (SpaceId, NonEmpty VersionId, Maybe VersionId))]
-        noChildren = filter (\(_,(_,_,mFork)) -> isNothing mFork) $ HM.toList sampleEntities
+-- sortSampleEntities :: HashMap EntityId (SpaceId, NonEmpty VersionId, Maybe VersionId)
+--                    -> [(EntityId, (SpaceId, NonEmpty VersionId, Maybe VersionId))]
+-- sortSampleEntities sampleEntities =
+--   let es :: [HashSet EntityId]
+--       es = reverse $ execState backtrackLinks initialLinks ^. _2
+--
+--       rebuild :: EntityId -> (EntityId, (SpaceId, NonEmpty VersionId, Maybe VersionId))
+--       rebuild eId = (eId, fromJust $ HM.lookup eId sampleEntities)
+--
+--   in  concatMap (\es' -> map rebuild (HS.toList es')) es
+--   where
+--     backtrackLinks :: State (HashSet VersionId, [HashSet EntityId]) ()
+--     backtrackLinks = do
+--       (versionsToGet, xs) <- get
+--       if null versionsToGet then pure () else do
+--         let go :: HashSet VersionId
+--                -> VersionId
+--                -> State (HashSet VersionId, [HashSet EntityId]) (HashSet VersionId)
+--             go nextVs vChildId = case HM.lookup vChildId forksOf of
+--               Nothing -> pure nextVs
+--               Just es -> do
+--                 modify $ _2 %~ (es:)
+--                 let go' eId nextVs' =
+--                       let (sId, vIds, _mFork) = fromJust $ HM.lookup eId sampleEntities
+--                       in  foldr HS.insert nextVs' vIds
+--                 pure $ foldr go' nextVs $ HS.toList es
+--         nextVersionsToGet <- foldlM go mempty (HS.toList versionsToGet)
+--         modify $ _1 .~ nextVersionsToGet
+--         backtrackLinks
+--       where
+--         forksOf :: HashMap VersionId (HashSet EntityId)
+--         forksOf = foldr (HM.unionWith HS.union) mempty
+--                  . mapMaybe
+--                     (\(eId, (_,_,mFork)) -> fmap (\vId -> HM.singleton vId (HS.singleton eId)) mFork)
+--                  $ HM.toList sampleEntities
+--
+--     initialLinks :: (HashSet VersionId, [HashSet EntityId])
+--     initialLinks =
+--       ( HS.fromList $ concatMap (\(_,(_,vs,_)) -> NE.toList vs) noChildren
+--       , [HS.fromList $ map fst noChildren]
+--       )
+--       where
+--         noChildren :: [(EntityId, (SpaceId, NonEmpty VersionId, Maybe VersionId))]
+--         noChildren = filter (\(_,(_,_,mFork)) -> isNothing mFork) $ HM.toList sampleEntities
 
 
 instance Arbitrary SampleStore where
@@ -122,25 +142,38 @@ instance Arbitrary SampleStore where
     spaces <- arbitrary
     -- FIXME sample entityId's from set
     entities <- if null spaces then pure mempty else do
-      let go generatedSoFar () = do
+      let go :: [(EntityId, SampleEntity)] -> () -> Gen [(EntityId, SampleEntity)]
+          go generatedSoFar () = do
             entity <- arbitrary
             space <- elements (HS.toList spaces)
-            versions <- arbitrary
+            let entsAndVersions :: HashMap EntityId (HashSet VersionId) -- nonempty HashSet
+                entsAndVersions = HM.fromList $
+                  map
+                    (\(k, (_, vs, _)) -> (k, HS.fromList $ map (\(vId,_,_) -> vId) (NE.toList vs)))
+                    generatedSoFar
+            versions <- fmap NE.fromList . listOf1 $ do
+              (vId :: VersionId) <- arbitrary
+              refs <- do
+                refsCount <- chooseInt (0, 5)
+                if null entsAndVersions then pure mempty else do
+                  fmap HS.fromList . replicateM refsCount $ do
+                    (_, versionsToRefTo) <- elements $ HM.toList entsAndVersions
+                    elements $ HS.toList versionsToRefTo
+              subs <- do
+                subsCount <- chooseInt (0, 5)
+                if null entsAndVersions then pure mempty else do
+                  fmap HS.fromList . replicateM subsCount $ do
+                    elements $ HM.keys entsAndVersions
+              pure (vId, refs, subs)
             fork <- do
               shouldBeForked <- (== 0) <$> chooseInt (0, 10)
               if not shouldBeForked then pure Nothing else do
-                let entsAndVersions :: HashMap EntityId (HashSet VersionId) -- nonempty HashSet, too
-                    entsAndVersions = HM.fromList $
-                      map
-                        (\(k, (_, vs, _)) -> (k, HS.fromList (NE.toList vs)))
-                        generatedSoFar
                 if null entsAndVersions then pure Nothing else do
-                  (entToForkFrom :: EntityId) <- elements $ HM.keys entsAndVersions
-                  versionToForkFrom <- elements . HS.toList . fromJust $ entsAndVersions ^. at entToForkFrom
-                  pure $ Just versionToForkFrom
+                  (_, versionsToForkFrom) <- elements $ HM.toList entsAndVersions
+                  Just <$> elements (HS.toList versionsToForkFrom)
             pure $ (entity, (space, versions, fork)) : generatedSoFar
       count <- arbitrary
-      fmap HM.fromList $ foldlM go [] (replicate count ())
+      reverse <$> foldlM go [] (replicate count ())
     (groupsStructure :: SampleGroupTree ()) <- arbitrary
     let fromSpaces :: Gen (HashMap SpaceId SinglePermission, HashMap SpaceId CollectionPermission) -- Spaces & entities rights 
         fromSpaces =
@@ -181,8 +214,8 @@ loadSample :: SampleStore -> Shared
 loadSample SampleStore{..} = flip execState (loadSampleTree sampleGroups) $ do
   for_ (HS.toList sampleSpaces) $ \sId -> do
     unsafeStoreSpace sId
-  for_ (sortSampleEntities sampleEntities) $ \(eId, (sId, vIds, mFork)) -> do
-    let (vId, vIdsTail) = uncons vIds
+  for_ sampleEntities $ \(eId, (sId, vIds, mFork)) -> do
+    let ((vId, refIds, subIds), vIdsTail) = uncons vIds
     case mFork of
       Nothing -> do
         eWorked <- unsafeStoreEntity eId sId vId genesisVersion
@@ -194,13 +227,29 @@ loadSample SampleStore{..} = flip execState (loadSampleTree sampleGroups) $ do
         case eWorked of
           Left e -> error $ "Error during store fork entity " <> show e
           Right () -> pure ()
+    eWorked <- unsafeUpdateVersionReferences vId refIds
+    case eWorked of
+      Left e -> error $ "Error during version references update " <> show e
+      Right () -> pure ()
+    eWorked <- unsafeUpdateVersionSubscriptions vId subIds
+    case eWorked of
+      Left e -> error $ "Error during version subscriptions update " <> show e
+      Right () -> pure ()
     case vIdsTail of
       Nothing -> pure ()
-      Just vIdsTail -> void . (\f -> foldlM f vId vIdsTail) $ \prevVId vId -> do
+      Just vIdsTail -> void . (\f -> foldlM f vId vIdsTail) $ \prevVId (vId, refIds, subIds) -> do
         eWorked <- unsafeStoreVersion eId vId (flip forkVersion prevVId)
         case eWorked of
           Left e -> error $ "Error during store version " <> show e
-          Right () -> pure vId
+          Right () -> do
+            eWorked <- unsafeUpdateVersionReferences vId refIds
+            case eWorked of
+              Left e -> error $ "Error during version references update " <> show e
+              Right () -> do
+                eWorked <- unsafeUpdateVersionSubscriptions vId subIds
+                case eWorked of
+                  Left e -> error $ "Error during version subscriptions update " <> show e
+                  Right () -> pure vId
   let loadPermissions :: SampleGroupTree (HashMap SpaceId SinglePermission, HashMap SpaceId CollectionPermission)
                       -> State Shared ()
       loadPermissions SampleGroupTree{current, auxPerGroup = (spacesPerms, entityPerms), children} = do
@@ -229,8 +278,8 @@ storeSample SampleStore{..} adminActor adminGroup =
         s <- get
         error $ "Failed to set entity permissions " <> show sId <> " - " <> LT.unpack (pShowNoColor s)
           
-    for_ (sortSampleEntities sampleEntities) $ \(eId, (sId, vIds, mFork)) -> do -- FIXME use a State to keep retrying on fork failure? Or just sort the list?
-      let (vId, vIdsTail) = uncons vIds
+    for_ sampleEntities $ \(eId, (sId, vIds, mFork)) -> do -- FIXME use a State to keep retrying on fork failure? Or just sort the list?
+      let ((vId, refIds, subIds), vIdsTail) = uncons vIds
       case mFork of
         Nothing -> do
           succeeded <- storeEntity adminActor eId sId vId
@@ -244,15 +293,39 @@ storeSample SampleStore{..} adminActor adminGroup =
             _ -> do
               s <- get
               error $ "Failed to store forked entity " <> show (mE, eId, sId, vId, fork) <> " - " <> LT.unpack (pShowNoColor s)
+      mE <- updateVersionReferences adminActor vId refIds
+      case mE of
+        Just (Right ()) -> pure ()
+        _ -> do
+          s <- get
+          error $ "Failed to store version references " <> show (mE, eId, vId) <> " - " <> LT.unpack (pShowNoColor s)
+      mE <- updateVersionSubscriptions adminActor vId subIds
+      case mE of
+        Just (Right ()) -> pure ()
+        _ -> do
+          s <- get
+          error $ "Failed to store version subscriptions " <> show (mE, eId, vId) <> " - " <> LT.unpack (pShowNoColor s)
       case vIdsTail of
         Nothing -> pure ()
-        Just vIdsTail -> for_ vIdsTail $ \vId -> do
+        Just vIdsTail -> for_ vIdsTail $ \(vId, refIds, subIds) -> do
           mE <- storeVersion adminActor eId vId
           case mE of
             Just (Right ()) -> pure ()
             _ -> do
               s <- get
               error $ "Failed to store version " <> show (mE, eId, vId) <> " - " <> LT.unpack (pShowNoColor s)
+          mE <- updateVersionReferences adminActor vId refIds
+          case mE of
+            Just (Right ()) -> pure ()
+            _ -> do
+              s <- get
+              error $ "Failed to store version references " <> show (mE, eId, vId) <> " - " <> LT.unpack (pShowNoColor s)
+          mE <- updateVersionSubscriptions adminActor vId subIds
+          case mE of
+            Just (Right ()) -> pure ()
+            _ -> do
+              s <- get
+              error $ "Failed to store version subscriptions " <> show (mE, eId, vId) <> " - " <> LT.unpack (pShowNoColor s)
     let loadPermissions :: SampleGroupTree (HashMap SpaceId SinglePermission, HashMap SpaceId CollectionPermission)
                         -> State Shared ()
         loadPermissions SampleGroupTree{current, auxPerGroup = (spacesPerms, entityPerms), children} = do

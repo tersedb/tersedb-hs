@@ -9,18 +9,7 @@
   , FlexibleContexts
   #-}
 
-module Lib.Actions.Safe.Verify.SpaceAndEntity
-  ( canReadSpace
-  , canCreateSpace
-  , canUpdateSpace
-  , canDeleteSpace
-  , hasSpacePermission
-  , canReadEntity
-  , canCreateEntity
-  , canUpdateEntity
-  , canDeleteEntity
-  , hasEntityPermission
-  ) where
+module Lib.Actions.Safe.Verify.SpaceAndEntity where
 
 import Lib.Actions.Safe.Verify.Utils (canDo, canDoWithTab)
 import Lib.Types.Store
@@ -124,13 +113,6 @@ canDeleteEntity deleter sId eId = do
     (canReadSpace deleter sId) :
     (map (canUpdateVersion deleter) $ HS.toList refsAndSubs)
 
-canUpdateVersion :: MonadState Shared m => ActorId -> VersionId -> m Bool
-canUpdateVersion updater vId = do
-  s <- get
-  let v = fromJust (s ^. store . toVersions . at vId)
-      e = fromJust (s ^. store . toEntities . at (v ^. entity))
-  canUpdateEntity updater (e ^. space)
-
 hasEntityPermission :: MonadState Shared m => ActorId -> SpaceId -> CollectionPermission -> m Bool
 hasEntityPermission aId sId p = andM
   [ canReadSpace aId sId
@@ -139,3 +121,31 @@ hasEntityPermission aId sId p = andM
     , canDo (\t -> t ^. forUniverse . collectionPermission) aId Update
     ]
   ]
+
+canReadVersion :: MonadState Shared m => ActorId -> VersionId -> m Bool
+canReadVersion updater vId = do
+  s <- get
+  let v = fromJust (s ^. store . toVersions . at vId)
+      e = fromJust (s ^. store . toEntities . at (v ^. entity))
+  canReadEntity updater (e ^. space)
+
+canCreateVersion :: MonadState Shared m => ActorId -> VersionId -> m Bool
+canCreateVersion updater vId = do
+  s <- get
+  let v = fromJust (s ^. store . toVersions . at vId)
+      e = fromJust (s ^. store . toEntities . at (v ^. entity))
+  canCreateEntity updater (e ^. space)
+
+canUpdateVersion :: MonadState Shared m => ActorId -> VersionId -> m Bool
+canUpdateVersion updater vId = do
+  s <- get
+  let v = fromJust (s ^. store . toVersions . at vId)
+      e = fromJust (s ^. store . toEntities . at (v ^. entity))
+  canUpdateEntity updater (e ^. space)
+
+canDeteteVersion :: MonadState Shared m => ActorId -> VersionId -> m Bool
+canDeteteVersion updater vId = do
+  s <- get
+  let v = fromJust (s ^. store . toVersions . at vId)
+      e = fromJust (s ^. store . toEntities . at (v ^. entity))
+  canDeleteEntity updater (e ^. space) (v ^. entity)

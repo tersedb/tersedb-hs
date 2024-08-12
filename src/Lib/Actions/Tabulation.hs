@@ -43,7 +43,13 @@ import Lib.Types.Store.Groups
   , next
   , prev
   )
-import Lib.Types.Store.Version (Version, entity, references, subscriptions)
+import Lib.Types.Store.Version
+  ( Version
+  , entity
+  , references
+  , subscriptions
+  , prevVersion
+  )
 import Lib.Types.Store.Entity (space)
 
 import qualified Data.HashSet as HS
@@ -114,25 +120,27 @@ data LoadRefsAndSubsError
 
 loadRefsAndSubs :: VersionId -> Version -> Store -> Temp -> Either LoadRefsAndSubsError Temp
 loadRefsAndSubs vId v s t = do
-  let storeRefs t refId =
-        let t' = t & toReferencesFrom . at refId . non mempty . at vId .~ Just ()
-        in  case s ^. toVersions . at refId of
-              Nothing -> Left (ReferenceVersionNotFound refId)
-              Just refV ->
-                let t = t' & toReferencesFromEntities . at (refV ^. entity) . non mempty . at vId .~ Just ()
-                in  case s ^. toEntities . at (refV ^. entity) of
-                      Nothing -> Left . ReferenceEntityNotFound $ refV ^. entity
-                      Just refE ->
-                        pure $ t
-                          & toReferencesFromSpaces . at (refE ^. space) . non mempty . at vId .~ Just ()
-  t' <- foldlM storeRefs t (HS.toList $ v ^. references)
-  let storeSubs t subId =
-        let t' = t & toSubscriptionsFrom . at subId . non mempty . at vId .~ Just ()
-        in  case s ^. toEntities . at subId of
-              Nothing -> Left (SubscriptionEntityNotFound subId)
-              Just subE ->
-                pure $ t' & toSubscriptionsFromSpaces . at (subE ^. space) . non mempty . at vId .~ Just ()
+  let refs = v ^. references
+  t' <- foldlM storeRefs t . HS.toList $
+    maybe refs (flip HS.insert refs) (v ^. prevVersion)
   foldlM storeSubs t' (HS.toList $ v ^. subscriptions)
+  where
+    storeRefs t refId = case s ^. toVersions . at refId of
+      Nothing -> Left (ReferenceVersionNotFound refId)
+      Just refV -> case s ^. toEntities . at (refV ^. entity) of
+        Nothing -> Left . ReferenceEntityNotFound $ refV ^. entity
+        Just refE ->
+          pure $ t
+               & toReferencesFromSpaces . at (refE ^. space) . non mempty . at vId .~ Just ()
+               & toReferencesFromEntities . at (refV ^. entity) . non mempty . at vId .~ Just ()
+               & toReferencesFrom . at refId . non mempty . at vId .~ Just ()
+
+    storeSubs t subId = case s ^. toEntities . at subId of
+      Nothing -> Left (SubscriptionEntityNotFound subId)
+      Just subE ->
+        pure $ t
+             & toSubscriptionsFromSpaces . at (subE ^. space) . non mempty . at vId .~ Just ()
+             & toSubscriptionsFrom . at subId . non mempty . at vId .~ Just ()
 
 
 tempFromStore :: Store -> Temp

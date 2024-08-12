@@ -39,6 +39,7 @@ library
       Lib.Actions.Tabulation
       Lib.Actions.Unsafe
       Lib.Actions.Unsafe.Store
+      Lib.Actions.Unsafe.Update
       Lib.Actions.Unsafe.Update.Group
       Lib.Types.Id
       Lib.Types.Monad
@@ -55,6 +56,8 @@ library
       Paths_sheepdogdb
   hs-source-dirs:
       src
+  default-extensions:
+      FlexibleContexts
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
   build-depends:
       QuickCheck
@@ -82,6 +85,8 @@ executable sheepdogdb-exe
       Paths_sheepdogdb
   hs-source-dirs:
       app
+  default-extensions:
+      FlexibleContexts
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       QuickCheck
@@ -115,6 +120,8 @@ test-suite sheepdogdb-test
       Paths_sheepdogdb
   hs-source-dirs:
       test
+  default-extensions:
+      FlexibleContexts
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       QuickCheck
