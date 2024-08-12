@@ -21,24 +21,28 @@ import Lib.Types.Permission
   )
 import Lib.Types.Store (Shared, store, temp)
 import Lib.Types.Store.Version (genesisVersion, forkVersion)
-import Lib.Actions.Unsafe
+import Lib.Actions.Unsafe.Store
   ( unsafeStoreActor
   , unsafeStoreActor
   , unsafeStoreSpace
   , unsafeStoreEntity
   , unsafeStoreVersion
   , unsafeAddMember
-  , unsafeAdjustSpacePermission
+  )
+import Lib.Actions.Unsafe.Update.Group
+  ( unsafeAdjustSpacePermission
   , unsafeAdjustEntityPermission
   )
-import Lib.Actions.Safe
+import Lib.Actions.Safe.Store
   ( storeActor
   , storeSpace
   , storeEntity
   , storeForkedEntity
   , storeVersion
   , addMember
-  , setSpacePermission
+  )
+import Lib.Actions.Safe.Update.Group
+  ( setSpacePermission
   , setEntityPermission
   )
 

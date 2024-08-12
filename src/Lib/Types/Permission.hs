@@ -15,7 +15,6 @@ import Data.Aeson (ToJSON (toJSON), FromJSON (parseJSON), Value (String))
 import Data.Aeson.Types (typeMismatch)
 import Deriving.Aeson.Stock (PrefixedSnake, Generic, CustomJSON (..))
 import Data.Semigroup (Max (..))
-import GHC.Generics (Generic)
 import Control.Lens.TH (makeLensesFor)
 import Test.QuickCheck (Arbitrary (arbitrary), elements)
 

@@ -11,7 +11,7 @@
 
 module Lib.Actions.Gen where
 
-import Lib.Actions.Safe
+import Lib.Actions.Safe.Store
   ( storeVersion
   , storeActor
   , storeGroup

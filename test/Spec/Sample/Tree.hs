@@ -30,17 +30,17 @@ import Lib.Types.Store.Groups
   , prev
   , emptyGroup
   )
-import Lib.Actions.Unsafe
-  ( unsafeEmptyShared
-  , unsafeLinkGroups
+import Lib.Actions.Unsafe (unsafeEmptyShared)
+import Lib.Actions.Unsafe.Update.Group
+  ( unsafeLinkGroups
   , unsafeAdjustUniversePermission
   , unsafeAdjustOrganizationPermission
   , unsafeAdjustRecruiterPermission
   )
-import Lib.Actions.Safe
-  ( emptyShared
-  , storeGroup
-  , setUniversePermission
+import Lib.Actions.Safe (emptyShared)
+import Lib.Actions.Safe.Store (storeGroup)
+import Lib.Actions.Safe.Update.Group
+  ( setUniversePermission
   , setOrganizationPermission
   , setRecruiterPermission
   , setGroupPermission

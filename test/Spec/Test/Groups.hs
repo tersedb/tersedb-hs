@@ -34,7 +34,7 @@ import Lib.Types.Store.Groups
   , emptyGroup
   , emptyGroups
   )
-import Lib.Actions.Unsafe (unsafeUnlinkGroups)
+import Lib.Actions.Unsafe.Update.Group (unsafeUnlinkGroups)
 import Lib.Actions.Tabulation (resetTabulation)
 
 import Data.HashSet (HashSet)

@@ -31,11 +31,13 @@ import Lib.Types.Store
 import Lib.Types.Store.Groups (nodes)
 import Lib.Types.Store.Space (entities)
 import Lib.Types.Store.Entity (space)
-import Lib.Actions.Unsafe
+import Lib.Actions.Unsafe.Store
   ( unsafeStoreGroup
   , unsafeStoreActor
   , unsafeAddMember
-  , unsafeAdjustUniversePermission
+  )
+import Lib.Actions.Unsafe.Update.Group
+  ( unsafeAdjustUniversePermission
   , unsafeAdjustOrganizationPermission
   , unsafeAdjustRecruiterPermission
   , unsafeAdjustGroupPermission

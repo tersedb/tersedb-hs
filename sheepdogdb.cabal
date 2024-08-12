@@ -27,8 +27,14 @@ library
   exposed-modules:
       Lib.Actions.Gen
       Lib.Actions.Safe
+      Lib.Actions.Safe.Store
+      Lib.Actions.Safe.Update
+      Lib.Actions.Safe.Update.Group
+      Lib.Actions.Safe.Verify
       Lib.Actions.Tabulation
       Lib.Actions.Unsafe
+      Lib.Actions.Unsafe.Store
+      Lib.Actions.Unsafe.Update.Group
       Lib.Types.Id
       Lib.Types.Monad
       Lib.Types.Permission
