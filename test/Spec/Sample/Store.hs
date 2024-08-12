@@ -91,52 +91,6 @@ data SampleStore = SampleStore
   } deriving (Eq, Show, Read)
 
 
--- sortSampleEntities :: HashMap EntityId (SpaceId, NonEmpty VersionId, Maybe VersionId)
---                    -> [(EntityId, (SpaceId, NonEmpty VersionId, Maybe VersionId))]
--- sortSampleEntities sampleEntities =
---   let es :: [HashSet EntityId]
---       es = reverse $ execState backtrackLinks initialLinks ^. _2
---
---       rebuild :: EntityId -> (EntityId, (SpaceId, NonEmpty VersionId, Maybe VersionId))
---       rebuild eId = (eId, fromJust $ HM.lookup eId sampleEntities)
---
---   in  concatMap (\es' -> map rebuild (HS.toList es')) es
---   where
---     backtrackLinks :: State (HashSet VersionId, [HashSet EntityId]) ()
---     backtrackLinks = do
---       (versionsToGet, xs) <- get
---       if null versionsToGet then pure () else do
---         let go :: HashSet VersionId
---                -> VersionId
---                -> State (HashSet VersionId, [HashSet EntityId]) (HashSet VersionId)
---             go nextVs vChildId = case HM.lookup vChildId forksOf of
---               Nothing -> pure nextVs
---               Just es -> do
---                 modify $ _2 %~ (es:)
---                 let go' eId nextVs' =
---                       let (sId, vIds, _mFork) = fromJust $ HM.lookup eId sampleEntities
---                       in  foldr HS.insert nextVs' vIds
---                 pure $ foldr go' nextVs $ HS.toList es
---         nextVersionsToGet <- foldlM go mempty (HS.toList versionsToGet)
---         modify $ _1 .~ nextVersionsToGet
---         backtrackLinks
---       where
---         forksOf :: HashMap VersionId (HashSet EntityId)
---         forksOf = foldr (HM.unionWith HS.union) mempty
---                  . mapMaybe
---                     (\(eId, (_,_,mFork)) -> fmap (\vId -> HM.singleton vId (HS.singleton eId)) mFork)
---                  $ HM.toList sampleEntities
---
---     initialLinks :: (HashSet VersionId, [HashSet EntityId])
---     initialLinks =
---       ( HS.fromList $ concatMap (\(_,(_,vs,_)) -> NE.toList vs) noChildren
---       , [HS.fromList $ map fst noChildren]
---       )
---       where
---         noChildren :: [(EntityId, (SpaceId, NonEmpty VersionId, Maybe VersionId))]
---         noChildren = filter (\(_,(_,_,mFork)) -> isNothing mFork) $ HM.toList sampleEntities
-
-
 instance Arbitrary SampleStore where
   arbitrary = do
     spaces <- arbitrary

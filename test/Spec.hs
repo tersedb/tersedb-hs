@@ -15,7 +15,7 @@ import Spec.Sample.Store
 import Spec.Test.Simple (simpleTests)
 import Spec.Test.Groups (groupsTests, testPermissionInheritance)
 
-import Lib.Types.Id (GroupId, ActorId)
+import Lib.Types.Id (GroupId, ActorId, SpaceId)
 import Lib.Types.Permission
   ( CollectionPermission (..)
   , CollectionPermissionWithExemption (..)
@@ -27,6 +27,7 @@ import Lib.Types.Store
   , toGroups
   , toSpaces
   , toEntities
+  , toSpaces
   )
 import Lib.Types.Store.Groups (nodes)
 import Lib.Types.Store.Space (entities)
@@ -44,14 +45,26 @@ import Lib.Actions.Unsafe.Update.Group
   , unsafeAdjustEntityPermission
   , unsafeAdjustMemberPermission
   )
+import Lib.Actions.Safe (emptyShared)
+import Lib.Actions.Safe.Store
+  ( storeActor
+  , storeGroup
+  , addMember
+  , storeSpace
+  )
+import Lib.Actions.Safe.Update.Group
+  ( setUniversePermission
+  , setMemberPermission
+  )
 import Lib.Actions.Tabulation (resetTabulation, tempFromStore)
 
 import qualified Data.HashSet as HS
 import qualified Data.HashMap.Strict as HM
 import Data.Foldable (for_)
+import Data.Maybe (isJust)
 import Control.Monad.Extra (unless)
 import Control.Monad.State (execState, get)
-import Control.Lens ((^.))
+import Control.Lens ((^.), at)
 import Test.Syd (sydTest, describe, it, shouldBe, shouldSatisfy)
 import Test.QuickCheck
   ( property
@@ -117,5 +130,30 @@ main = sydTest $ do
                   unsafeAdjustEntityPermission (const Update) adminGroup sId
                 resetTabulation
           in  safeStore `shouldBe` unsafeStore
-
+      describe "Permissions" $ do
+        describe "Create" $ do
+          it "create a space via universe" $
+            property $ \(adminActor :: ActorId, adminGroup :: GroupId, aId :: ActorId, gId :: GroupId, sId :: SpaceId) ->
+              let s = emptyShared adminActor adminGroup
+                  s' = flip execState s $ do
+                    worked <- storeActor adminActor aId
+                    unless worked $ error $ "Couldn't create actor " <> show aId
+                    worked <- storeGroup adminActor gId
+                    unless worked $ error $ "Couldn't create group " <> show gId
+                    worked <- setMemberPermission adminActor Create adminGroup gId
+                    unless worked $ error $ "Couldn't grant membership creation to admin group " <> show gId
+                    worked <- addMember adminActor gId aId
+                    unless worked $ error $ "Couldn't add member " <> show (gId, aId)
+                    worked <- setUniversePermission adminActor (CollectionPermissionWithExemption Create False) gId
+                    unless worked $ error $ "Couldn't grant universe create permissions " <> show gId
+                    worked <- storeSpace aId sId
+                    unless worked $ error $ "Couldn't store space " <> show (aId, gId, sId)
+              in  shouldSatisfy s' $ \_ -> isJust $ s' ^. store . toSpaces . at sId
+          -- it "create an entity" $
+            -- property $ \(xs :: SampleStore, adminActor :: ActorId, adminGroup :: GroupId, aId :: ActorId, gId :: GroupId, sId :: SpaceId, eId :: EntityId) ->
+              -- let s = storeSample xs adminActor adminGroup
+                  -- (s', mE) = flip runState s $ do
+                    -- worked <- storeActor adminActor aId
+                    -- unless worked $ error $ "Couldn't create actor " <> show aId
+              -- in
 
