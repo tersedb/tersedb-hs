@@ -24,7 +24,6 @@ data Temp = Temp
   , tempSubscriptionsFromSpaces :: HashMap SpaceId (HashSet VersionId)
   , tempTabulatedGroups :: HashMap GroupId TabulatedPermissionsForGroup
   , tempSpacesHiddenTo :: HashMap SpaceId (HashSet GroupId)
-  , tempGroupsHiddenTo :: HashMap GroupId (HashSet GroupId)
   } deriving (Eq, Show, Read)
 makeLensesFor
   [ ("tempReferencesFrom", "toReferencesFrom")
@@ -34,12 +33,11 @@ makeLensesFor
   , ("tempSubscriptionsFromSpaces", "toSubscriptionsFromSpaces")
   , ("tempTabulatedGroups", "toTabulatedGroups")
   , ("tempSpacesHiddenTo", "toSpacesHiddenTo")
-  , ("tempGroupsHiddenTo", "toGroupsHiddenTo")
   ] ''Temp
 
 
 emptyTemp :: Temp
-emptyTemp = Temp mempty mempty mempty mempty mempty mempty mempty mempty
+emptyTemp = Temp mempty mempty mempty mempty mempty mempty mempty
 
 
 data Store = Store

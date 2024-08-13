@@ -1,6 +1,10 @@
 module Lib.Actions.Tabulation where
 
-import Lib.Types.Permission (escalate, CollectionPermission (Blind))
+import Lib.Types.Permission
+  ( escalate
+  , CollectionPermission (Blind)
+  , CollectionPermissionWithExemption (..)
+  )
 import Lib.Types.Id (GroupId, EntityId, VersionId)
 import Lib.Types.Store
   ( Shared (..)
@@ -24,12 +28,12 @@ import Lib.Types.Store
   , toSubscriptionsFrom
   , toSubscriptionsFromSpaces
   , toSpacesHiddenTo
-  , toGroupsHiddenTo
   )
 import Lib.Types.Store.Tabulation.Group
   ( TabulatedPermissionsForGroup (..)
   , forSpaces
   , forGroups
+  , forOrganization
   )
 import Lib.Types.Store.Groups
   ( nodes
@@ -115,15 +119,28 @@ updateTabulationStartingAt gId = do
             if (s ^. temp . toSpacesHiddenTo . at sId) == Just (HS.singleton gId)
             then modify $ temp . toSpacesHiddenTo . at sId .~ Nothing
             else modify $ temp . toSpacesHiddenTo . ix sId . at gId .~ Nothing
-      do  let groupsHidden = HM.filter (<= Blind) (newTab ^. forGroups)
-              groupsVisible = HM.filter (> Blind) (newTab ^. forGroups)
-          for_ (HM.keys groupsHidden) $ \gId' ->
-            modify $ temp . toGroupsHiddenTo . at gId' . non mempty . at gId .~ Just ()
-          for_ (HM.keys groupsVisible) $ \gId' ->
-            modify $ temp . toGroupsHiddenTo . ix gId' . at gId .~ Nothing
+
+      -- do  let (groupsHidden, groupsVisible) = case newTab ^. forOrganization of
+      --           CollectionPermissionWithExemption Blind _ ->
+      --             let visible = HM.keysSet (HM.filter (> Blind) (newTab ^. forGroups))
+      --             in  (allWithoutSelf `HS.difference` visible, visible)
+      --           CollectionPermissionWithExemption _ True ->
+      --             (mempty, allWithoutSelf)
+      --           CollectionPermissionWithExemption _ False ->
+      --             let notVisible = HM.keysSet (HM.filter (== Blind) (newTab ^. forGroups))
+      --             in  (notVisible, allWithoutSelf `HS.difference` notVisible)
+      --           where
+      --             allWithoutSelf = HS.delete gId $ HM.keysSet (s ^. store . toGroups . nodes)
+      --     for_ groupsHidden $ \gId' ->
+      --       modify $ temp . toGroupsHiddenTo . at gId' . non mempty . at gId .~ Just ()
+      --     for_ groupsVisible $ \gId' ->
+      --       if (s ^. temp . toGroupsHiddenTo . at gId') == Just (HS.singleton gId)
+      --       then modify $ temp . toGroupsHiddenTo . at gId' .~ Nothing
+      --       else modify $ temp . toGroupsHiddenTo . ix gId' . at gId .~ Nothing
+
       -- doing fromJust because initTabulatedPermissionsForGroup already checks
       modify $ temp . toTabulatedGroups . at gId .~ Just newTab
-      traverse_ updateTabulationStartingAt . HS.toList $ group ^. next
+      traverse_ updateTabulationStartingAt (group ^. next)
 
 
 resetTabulation :: MonadState Shared m => m ()

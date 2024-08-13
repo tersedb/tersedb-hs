@@ -59,6 +59,17 @@ readTests = describe "Read" $ do
                   let resNew = evalState (canReadSpace aId sId) s
                       resOld = evalState (canReadSpaceOld aId sId) s
                   in  shouldSatisfy (s, aId, sId, resNew, resOld) $ \_ -> resNew == resOld
+    -- it "Groups" $
+    --   property $ \(xs :: SampleStore) ->
+    --     let s = loadSample xs
+    --     in  if null (s ^. store . toActors)
+    --              || null (s ^. store . toGroups . nodes) then property True else
+    --         let genAId = elements . HM.keys $ s ^. store . toActors
+    --             genGId = elements . HM.keys $ s ^. store . toGroups . nodes
+    --         in  forAll ((,) <$> genAId <*> genGId) $ \(aId, gId) ->
+    --               let resNew = evalState (canReadGroup aId gId) s
+    --                   resOld = evalState (canReadGroupOld aId gId) s
+    --               in  shouldSatisfy (s, aId, gId, resNew, resOld) $ \_ -> resNew == resOld
 
 
 -- FIXME each group or space or something should have a set of shit it specifically _can't_ see?

@@ -46,10 +46,6 @@ canReadSpace reader sId = do
             reader
             (CollectionPermissionWithExemption Read True)
       else pure True
-      -- else canDo
-      --       (\t -> t ^. forUniverse . collectionPermission)
-      --       reader
-      --       Read
 
 canReadSpaceOld :: MonadState Shared m => ActorId -> SpaceId -> m Bool
 canReadSpaceOld reader sId = do
