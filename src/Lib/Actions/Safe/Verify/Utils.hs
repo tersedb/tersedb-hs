@@ -33,7 +33,7 @@ canDoWithTab proj creator getP = do
       let perGroup gId =
             let tab = s ^. temp . toTabulatedGroups . at gId . non mempty
             in  proj tab >= getP tab
-      in  any perGroup (HS.toList groups)
+      in  any perGroup groups
     _ -> False
 
 canDo

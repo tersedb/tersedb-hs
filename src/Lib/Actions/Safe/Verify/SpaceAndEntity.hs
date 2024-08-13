@@ -14,7 +14,12 @@ import Lib.Types.Store
   , toActors
   , toSpacesHiddenTo
   )
-import Lib.Types.Store.Tabulation.Group (forUniverse, forSpaces, forEntities)
+import Lib.Types.Store.Tabulation.Group
+  ( TabulatedPermissionsForGroup
+  , forUniverse
+  , forSpaces
+  , forEntities
+  )
 import Lib.Types.Store.Entity (space)
 import Lib.Types.Store.Version (entity)
 import Lib.Types.Id (ActorId, SpaceId, EntityId, VersionId)
@@ -48,22 +53,14 @@ canReadSpace reader sId = do
       else pure True
 
 canReadSpaceOld :: MonadState Shared m => ActorId -> SpaceId -> m Bool
-canReadSpaceOld reader sId = do
-  canDo
-    (\t -> fromMaybe (t ^. forUniverse . collectionPermission) (t ^. forSpaces . at sId))
-    reader
-    Read
+canReadSpaceOld reader sId = canDo (withUniversePermission sId) reader Read
 
 canCreateSpace :: MonadState Shared m => ActorId -> m Bool
 canCreateSpace creater =
   canDo (\t -> t ^. forUniverse . collectionPermission) creater Create
 
 canUpdateSpace :: MonadState Shared m => ActorId -> SpaceId -> m Bool
-canUpdateSpace updater sId =
-  canDo
-    (\t -> fromMaybe (t ^. forUniverse . collectionPermission) (t ^. forSpaces . at sId))
-    updater
-    Update
+canUpdateSpace updater sId = canDo (withUniversePermission sId) updater Update
 
 canDeleteSpace :: MonadState Shared m => ActorId -> SpaceId -> m Bool
 canDeleteSpace deleter sId = do
@@ -74,16 +71,23 @@ canDeleteSpace deleter sId = do
     pure (HS.union refs subs)
   andM $
     (canDo
-      (\t -> fromMaybe (t ^. forUniverse . collectionPermission) (t ^. forSpaces . at sId))
+      (withUniversePermission sId)
       deleter
       Delete) : (map (canUpdateVersion deleter) $ HS.toList refsAndSubs)
 
 hasSpacePermission :: MonadState Shared m => ActorId -> SpaceId -> SinglePermission -> m Bool
 hasSpacePermission aId sId p =
   canDoWithTab
-    (\t -> fromMaybe (t ^. forUniverse . collectionPermission) (t ^. forSpaces . at sId))
+    (withUniversePermission sId)
     aId
     (\t -> escalate (t ^. forUniverse) p)
+
+withUniversePermission :: SpaceId -> TabulatedPermissionsForGroup -> CollectionPermission
+withUniversePermission sId t =
+  maybe
+    (t ^. forUniverse . collectionPermission)
+    (\p -> p `min` (t ^. forUniverse . collectionPermission))
+    (t ^. forSpaces . at sId)
 
 -- * Entities
 

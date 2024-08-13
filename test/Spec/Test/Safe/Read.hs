@@ -29,6 +29,14 @@ import Lib.Types.Store
 import Lib.Types.Store.Groups (emptyGroup, nodes, members)
 import Lib.Types.Store.Space (entities)
 import Lib.Types.Store.Entity (space)
+import Lib.Actions.Safe (emptyShared)
+import Lib.Actions.Safe.Store (storeActor, storeSpace, storeGroup, addMember)
+import Lib.Actions.Safe.Update.Group
+  ( setSpacePermission
+  , setUniversePermission
+  , setGroupPermission
+  , setMemberPermission
+  )
 import Lib.Actions.Safe.Verify.SpaceAndEntity (canReadSpace, canReadSpaceOld)
 import Lib.Actions.Tabulation (resetTabulation, tempFromStore)
 
@@ -59,18 +67,29 @@ readTests = describe "Read" $ do
                   let resNew = evalState (canReadSpace aId sId) s
                       resOld = evalState (canReadSpaceOld aId sId) s
                   in  shouldSatisfy (s, aId, sId, resNew, resOld) $ \_ -> resNew == resOld
-    -- it "Groups" $
-    --   property $ \(xs :: SampleStore) ->
-    --     let s = loadSample xs
-    --     in  if null (s ^. store . toActors)
-    --              || null (s ^. store . toGroups . nodes) then property True else
-    --         let genAId = elements . HM.keys $ s ^. store . toActors
-    --             genGId = elements . HM.keys $ s ^. store . toGroups . nodes
-    --         in  forAll ((,) <$> genAId <*> genGId) $ \(aId, gId) ->
-    --               let resNew = evalState (canReadGroup aId gId) s
-    --                   resOld = evalState (canReadGroupOld aId gId) s
-    --               in  shouldSatisfy (s, aId, gId, resNew, resOld) $ \_ -> resNew == resOld
-
+  describe "Should Succeed" $ do
+    it "Spaces" $
+      property $ \(adminActor :: ActorId, adminGroup :: GroupId, sId :: SpaceId, aId :: ActorId, gId:: GroupId) ->
+        let s = emptyShared adminActor adminGroup
+            go = do
+              worked <- storeSpace adminActor sId
+              unless worked $ error $ "Couldn't make space " <> show sId
+              worked <- storeActor adminActor aId
+              unless worked $ error $ "Couldn't make actor " <> show aId
+              worked <- storeGroup adminActor gId
+              unless worked $ error $ "Couldn't make group " <> show gId
+              worked <- setMemberPermission adminActor Create adminGroup gId
+              unless worked $ error $ "Couldn't set group permission " <> show gId
+              worked <- addMember adminActor gId aId
+              unless worked $ error $ "Couldn't add member " <> show (gId, aId)
+              -- worked <- setSpacePermission adminActor gId Exists sId
+              -- unless worked $ error $ "Couldn't set space permission " <> show (gId, sId)
+              worked <- setUniversePermission adminActor
+                (CollectionPermissionWithExemption Read False) gId
+              unless worked $ error $ "Couldn't set universe permission " <> show gId
+              canReadSpace aId sId
+            s' = execState go s
+        in  shouldSatisfy (s', aId, gId, sId) $ \_ -> evalState go s == True
 
 -- FIXME each group or space or something should have a set of shit it specifically _can't_ see?
 -- i.e., the shit it's blind to? Er, NonExists within the set, assuming read rights are present?

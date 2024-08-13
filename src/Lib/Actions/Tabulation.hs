@@ -34,6 +34,7 @@ import Lib.Types.Store.Tabulation.Group
   , forSpaces
   , forGroups
   , forOrganization
+  , forUniverse
   )
 import Lib.Types.Store.Groups
   ( nodes
@@ -110,8 +111,15 @@ updateTabulationStartingAt gId = do
   case s ^. temp . toTabulatedGroups . at gId of
     Just oldTab | newTab == oldTab -> pure ()
     _ -> do
-      do  let spacesHidden = HM.keysSet (s ^. store . toSpaces) `HS.difference` spacesVisible
-              spacesVisible = HM.keysSet (HM.filter (> Blind) (newTab ^. forSpaces))
+      do  let allSpaces = HM.keysSet (s ^. store . toSpaces)
+              (spacesHidden, spacesVisible) = case newTab ^. forUniverse of
+                CollectionPermissionWithExemption Blind _ -> (allSpaces, mempty)
+                CollectionPermissionWithExemption _ True -> (mempty, allSpaces)
+                CollectionPermissionWithExemption _ False ->
+                  let notVisible = HM.keysSet (HM.filter (== Blind) (newTab ^. forSpaces))
+                  in  (notVisible, allSpaces `HS.difference` notVisible)
+          -- let spacesHidden = HM.keysSet (s ^. store . toSpaces) `HS.difference` spacesVisible
+          --     spacesVisible = HM.keysSet (HM.filter (> Blind) (newTab ^. forSpaces))
           for_ spacesHidden $ \sId ->
             modify $ temp . toSpacesHiddenTo . at sId . non mempty . at gId .~ Just ()
           for_ spacesVisible $ \sId -> do
