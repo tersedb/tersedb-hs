@@ -31,28 +31,17 @@ import Lib.Actions.Unsafe.Store
   , unsafeAddMember
   )
 import Lib.Types.Id (GroupId, SpaceId, EntityId, VersionId, ActorId)
-import Lib.Types.Permission
-  ( CollectionPermission (..)
-  , collectionPermission
-  )
 import Lib.Types.Store
   ( Shared
   , store
   , toEntities
   , toVersions
   )
-import Lib.Types.Store.Tabulation.Group
-  ( forUniverse
-  , forOrganization
-  , forRecruiter
-  , forEntities
-  , forMembers
-  )
 import Lib.Types.Store.Entity (space, versions)
 import Lib.Types.Store.Version (genesisVersion, forkVersion, entity)
 
 import qualified Data.List.NonEmpty as NE
-import Control.Lens ((^.), at, non, _Left, (%~), (&))
+import Control.Lens ((^.), at, _Left, (%~), (&))
 import Control.Monad.State (MonadState (get))
 import Control.Monad.Extra (andM)
 

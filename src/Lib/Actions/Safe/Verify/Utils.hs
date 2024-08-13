@@ -1,14 +1,3 @@
-{-# LANGUAGE
-    GeneralizedNewtypeDeriving
-  , RecordWildCards
-  , DerivingVia
-  , DataKinds
-  , DeriveGeneric
-  , RankNTypes
-  , TemplateHaskell
-  , FlexibleContexts
-  #-}
-
 module Lib.Actions.Safe.Verify.Utils where
 
 import Lib.Types.Id (ActorId)

@@ -58,6 +58,15 @@ library
       src
   default-extensions:
       FlexibleContexts
+      ScopedTypeVariables
+      GeneralizedNewtypeDeriving
+      RecordWildCards
+      NamedFieldPuns
+      DerivingVia
+      DataKinds
+      DeriveGeneric
+      RankNTypes
+      TemplateHaskell
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
   build-depends:
       QuickCheck
@@ -87,6 +96,15 @@ executable sheepdogdb-exe
       app
   default-extensions:
       FlexibleContexts
+      ScopedTypeVariables
+      GeneralizedNewtypeDeriving
+      RecordWildCards
+      NamedFieldPuns
+      DerivingVia
+      DataKinds
+      DeriveGeneric
+      RankNTypes
+      TemplateHaskell
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       QuickCheck
@@ -114,6 +132,10 @@ test-suite sheepdogdb-test
       Spec.Sample.Store
       Spec.Sample.Tree
       Spec.Test.Groups
+      Spec.Test.Safe.Create
+      Spec.Test.Safe.Delete
+      Spec.Test.Safe.Read
+      Spec.Test.Safe.Update
       Spec.Test.Simple
       Paths_sheepdogdb
   autogen-modules:
@@ -122,6 +144,15 @@ test-suite sheepdogdb-test
       test
   default-extensions:
       FlexibleContexts
+      ScopedTypeVariables
+      GeneralizedNewtypeDeriving
+      RecordWildCards
+      NamedFieldPuns
+      DerivingVia
+      DataKinds
+      DeriveGeneric
+      RankNTypes
+      TemplateHaskell
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       QuickCheck

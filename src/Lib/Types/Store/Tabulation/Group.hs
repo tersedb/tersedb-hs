@@ -26,13 +26,22 @@ import Test.QuickCheck (Arbitrary (arbitrary))
 -- TODO tabulate groups that actors belong to, omitting redundant groups already inherited
 
 data TabulatedPermissionsForGroup = TabulatedPermissionsForGroup
-  { tabulatedPermissionsForGroupUniverse :: CollectionPermissionWithExemption -- Collection of spaces
-  , tabulatedPermissionsForGroupOrganization :: CollectionPermissionWithExemption -- Collection of groups
-  , tabulatedPermissionsForGroupRecruiter :: CollectionPermission -- Collection of actors
-  , tabulatedPermissionsForGroupSpaces :: HashMap SpaceId CollectionPermission -- Single spaces, after being applied to universe. Will not reference universe when it doesn't exist
-  , tabulatedPermissionsForGroupEntities :: HashMap SpaceId CollectionPermission -- Collection of entities
-  , tabulatedPermissionsForGroupGroups :: HashMap GroupId CollectionPermission -- Single groups, after being applied to organization. Will not reference organization when it doesn't exist.
-  , tabulatedPermissionsForGroupMembers :: HashMap GroupId CollectionPermission -- Collection of memberships
+  { -- | Collection of spaces
+    tabulatedPermissionsForGroupUniverse :: CollectionPermissionWithExemption
+  , -- | Collection of groups
+    tabulatedPermissionsForGroupOrganization :: CollectionPermissionWithExemption
+  , -- | Collection of actors
+    tabulatedPermissionsForGroupRecruiter :: CollectionPermission
+  , -- | Single spaces, after being applied to universe.
+    -- Will not be applied to universe via 'escalate' when a record doesn't exist
+    tabulatedPermissionsForGroupSpaces :: HashMap SpaceId CollectionPermission
+  , -- | Collection of entities
+    tabulatedPermissionsForGroupEntities :: HashMap SpaceId CollectionPermission
+  , -- | Single groups, after being applied to organization.
+    -- Will not be applied organization via 'escalate' when a record doesn't exist.
+    tabulatedPermissionsForGroupGroups :: HashMap GroupId CollectionPermission
+  , -- | Collection of memberships
+    tabulatedPermissionsForGroupMembers :: HashMap GroupId CollectionPermission
   } deriving (Show, Read)
 makeLensesFor
   [ ("tabulatedPermissionsForGroupUniverse", "forUniverse")

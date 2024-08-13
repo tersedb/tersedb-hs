@@ -19,7 +19,6 @@ import Lib.Types.Store.Entity (space)
 import Data.HashSet (HashSet)
 import qualified Data.HashSet as HS
 import Data.Foldable (foldlM)
-import Data.Traversable (for)
 import Control.Lens ((^.), (.~), (&), at, ix, non)
 import Control.Monad.State (MonadState (get, put))
 

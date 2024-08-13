@@ -1,14 +1,3 @@
-{-# LANGUAGE
-    GeneralizedNewtypeDeriving
-  , RecordWildCards
-  , DerivingVia
-  , DataKinds
-  , DeriveGeneric
-  , RankNTypes
-  , TemplateHaskell
-  , FlexibleContexts
-  #-}
-
 module Lib.Actions.Safe.Update where
 
 import Lib.Actions.Safe.Verify
@@ -24,32 +13,20 @@ import Lib.Actions.Unsafe.Update
   , unsafeUpdateVersionSubscriptions
   )
 import Lib.Types.Id (SpaceId, EntityId, ActorId, VersionId)
-import Lib.Types.Permission
-  ( CollectionPermission (..)
-  , SinglePermission (..)
-  , escalate
-  , collectionPermission
-  )
 import Lib.Types.Store
   ( Shared
   , store
   , toEntities
   , toSpaces
   )
-import Lib.Types.Store.Tabulation.Group
-  ( forUniverse
-  , forSpaces
-  , forEntities
-  )
 import Lib.Types.Store.Space (entities)
 import Lib.Types.Store.Entity (space)
 
-import Data.Maybe (fromMaybe)
 import Data.HashSet (HashSet)
 import qualified Data.HashSet as HS
-import Control.Lens ((^.), at, ix, non, (.~))
+import Control.Lens ((^.), at, ix, (.~))
 import Control.Monad.State (MonadState (get), modify)
-import Control.Monad.Extra (andM, orM, allM)
+import Control.Monad.Extra (andM, allM)
 
 
 -- | Moving an entity between spaces requires delete authority on the current space, and create authority on the destination space

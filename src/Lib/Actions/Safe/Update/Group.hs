@@ -1,14 +1,3 @@
-{-# LANGUAGE
-    GeneralizedNewtypeDeriving
-  , RecordWildCards
-  , DerivingVia
-  , DataKinds
-  , DeriveGeneric
-  , RankNTypes
-  , TemplateHaskell
-  , FlexibleContexts
-  #-}
-
 module Lib.Actions.Safe.Update.Group where
 
 import Lib.Actions.Safe.Verify (conditionally, canUpdateGroup)
@@ -30,24 +19,18 @@ import Lib.Types.Permission
   ( CollectionPermission (..)
   , CollectionPermissionWithExemption (..)
   , SinglePermission (..)
-  , escalate
-  , collectionPermission
   )
 import Lib.Types.Store (Shared)
 import Lib.Types.Store.Tabulation.Group
   ( forUniverse
   , forOrganization
   , forRecruiter
-  , forSpaces
-  , forEntities
-  , forGroups
-  , forMembers
   )
 
 import Data.Maybe (fromMaybe)
-import Control.Lens ((^.), at, non)
+import Control.Lens ((^.))
 import Control.Monad.State (MonadState)
-import Control.Monad.Extra (andM, orM)
+import Control.Monad.Extra (andM)
 
 -- | Will only update the group if the actor has same or greater permission
 setUniversePermission
@@ -65,7 +48,7 @@ setUniversePermission creator p gId = do
     (unsafeAdjustUniversePermission (const p) gId)
     canAdjust
 
-setOrganizationPermission 
+setOrganizationPermission
   :: MonadState Shared m
   => ActorId -- ^ actor attempting to set permission
   -> CollectionPermissionWithExemption -- ^ permission being set
@@ -80,7 +63,7 @@ setOrganizationPermission creator p gId = do
     (unsafeAdjustOrganizationPermission (const p) gId)
     canAdjust
 
-setRecruiterPermission 
+setRecruiterPermission
   :: MonadState Shared m
   => ActorId -- ^ actor attempting to set permission
   -> CollectionPermission -- ^ permission being set
@@ -95,7 +78,7 @@ setRecruiterPermission creator p gId = do
     (unsafeAdjustRecruiterPermission (const p) gId)
     canAdjust
 
-setSpacePermission 
+setSpacePermission
   :: MonadState Shared m
   => ActorId -- ^ actor attempting to set permission
   -> Maybe SinglePermission -- ^ permission being set
@@ -111,7 +94,7 @@ setSpacePermission creator p gId sId = do
     (unsafeAdjustSpacePermission (const p) gId sId)
     canAdjust
 
-setEntityPermission 
+setEntityPermission
   :: MonadState Shared m
   => ActorId -- ^ actor attempting to set permission
   -> CollectionPermission -- ^ permission being set
@@ -127,7 +110,7 @@ setEntityPermission creator p gId sId = do
     (unsafeAdjustEntityPermission (const p) gId sId)
     canAdjust
 
-setGroupPermission 
+setGroupPermission
   :: MonadState Shared m
   => ActorId -- ^ actor attempting to set permission
   -> Maybe SinglePermission -- ^ permission being set
@@ -143,7 +126,7 @@ setGroupPermission creator p gId towardGId = do
     (unsafeAdjustGroupPermission (const p) gId towardGId)
     canAdjust
 
-setMemberPermission 
+setMemberPermission
   :: MonadState Shared m
   => ActorId -- ^ actor attempting to set permission
   -> CollectionPermission -- ^ the permission being granted

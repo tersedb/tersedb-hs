@@ -11,10 +11,7 @@
 
 module Lib.Actions.Unsafe.Store where
 
-import Lib.Actions.Tabulation
-  ( LoadRefsAndSubsError
-  , loadRefsAndSubs
-  )
+import Lib.Actions.Tabulation (LoadRefsAndSubsError, loadRefsAndSubs)
 
 import Lib.Types.Id (GroupId, SpaceId, EntityId, VersionId, ActorId)
 import Lib.Types.Store

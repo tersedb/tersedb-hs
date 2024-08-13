@@ -14,7 +14,7 @@ module Lib.Actions.Unsafe where
 import Lib.Types.Store
   ( Shared (..)
   , Store (..)
-  , Temp (..)
+  , emptyTemp
   )
 import Lib.Types.Store.Groups (emptyGroups)
 
@@ -33,13 +33,6 @@ unsafeEmptyShared = Shared
     , storeGroupPermissions = mempty
     , storeMemberPermissions = mempty
     }
-  , sharedTemp = Temp
-    { tempReferencesFrom = mempty
-    , tempReferencesFromEntities = mempty
-    , tempReferencesFromSpaces = mempty
-    , tempSubscriptionsFrom = mempty
-    , tempSubscriptionsFromSpaces = mempty
-    , tempTabulatedGroups = mempty
-    }
+  , sharedTemp = emptyTemp
   }
 

@@ -1,14 +1,3 @@
-{-# LANGUAGE
-    GeneralizedNewtypeDeriving
-  , RecordWildCards
-  , DerivingVia
-  , DataKinds
-  , DeriveGeneric
-  , RankNTypes
-  , TemplateHaskell
-  , FlexibleContexts
-  #-}
-
 module Lib.Types.Store where
 
 import Lib.Types.Store.Tabulation.Group (TabulatedPermissionsForGroup)
@@ -34,6 +23,8 @@ data Temp = Temp
   , tempSubscriptionsFrom :: HashMap EntityId (HashSet VersionId)
   , tempSubscriptionsFromSpaces :: HashMap SpaceId (HashSet VersionId)
   , tempTabulatedGroups :: HashMap GroupId TabulatedPermissionsForGroup
+  , tempSpacesHiddenTo :: HashMap SpaceId (HashSet GroupId)
+  , tempGroupsHiddenTo :: HashMap GroupId (HashSet GroupId)
   } deriving (Eq, Show, Read)
 makeLensesFor
   [ ("tempReferencesFrom", "toReferencesFrom")
@@ -42,7 +33,13 @@ makeLensesFor
   , ("tempSubscriptionsFrom", "toSubscriptionsFrom")
   , ("tempSubscriptionsFromSpaces", "toSubscriptionsFromSpaces")
   , ("tempTabulatedGroups", "toTabulatedGroups")
+  , ("tempSpacesHiddenTo", "toSpacesHiddenTo")
+  , ("tempGroupsHiddenTo", "toGroupsHiddenTo")
   ] ''Temp
+
+
+emptyTemp :: Temp
+emptyTemp = Temp mempty mempty mempty mempty mempty mempty mempty mempty
 
 
 data Store = Store

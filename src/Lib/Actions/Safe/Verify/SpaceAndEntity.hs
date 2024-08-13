@@ -1,14 +1,3 @@
-{-# LANGUAGE
-    GeneralizedNewtypeDeriving
-  , RecordWildCards
-  , DerivingVia
-  , DataKinds
-  , DeriveGeneric
-  , RankNTypes
-  , TemplateHaskell
-  , FlexibleContexts
-  #-}
-
 module Lib.Actions.Safe.Verify.SpaceAndEntity where
 
 import Lib.Actions.Safe.Verify.Utils (canDo, canDoWithTab)
@@ -22,6 +11,8 @@ import Lib.Types.Store
   , toSubscriptionsFromSpaces
   , toVersions
   , toEntities
+  , toActors
+  , toSpacesHiddenTo
   )
 import Lib.Types.Store.Tabulation.Group (forUniverse, forSpaces, forEntities)
 import Lib.Types.Store.Entity (space)
@@ -29,21 +20,39 @@ import Lib.Types.Store.Version (entity)
 import Lib.Types.Id (ActorId, SpaceId, EntityId, VersionId)
 import Lib.Types.Permission
   ( CollectionPermission (..)
-  , SinglePermission (Exists)
+  , CollectionPermissionWithExemption (..)
+  , SinglePermission (NonExistent)
   , escalate
   , collectionPermission
   )
 
-import Data.Maybe (fromMaybe, fromJust)
+import Data.Maybe (fromMaybe, fromJust, isNothing, isJust)
 import qualified Data.HashSet as HS
-import Control.Lens ((^.), at, non)
+import Control.Lens ((^.), at, non, ix)
 import Control.Monad.State (MonadState, get)
-import Control.Monad.Extra (andM, orM)
+import Control.Monad.Extra (andM, orM, anyM)
 
 -- * Spaces
 
 canReadSpace :: MonadState Shared m => ActorId -> SpaceId -> m Bool
-canReadSpace reader sId =
+canReadSpace reader sId = do
+  s <- get
+  case s ^. store . toActors . at reader of
+    Nothing -> pure False
+    Just gs -> flip anyM (HS.toList gs) $ \gId ->
+      if isJust (s ^. temp . toSpacesHiddenTo . ix sId . at gId)
+      then canDo
+            (\t -> t ^. forUniverse)
+            reader
+            (CollectionPermissionWithExemption Read True)
+      else pure True
+      -- else canDo
+      --       (\t -> t ^. forUniverse . collectionPermission)
+      --       reader
+      --       Read
+
+canReadSpaceOld :: MonadState Shared m => ActorId -> SpaceId -> m Bool
+canReadSpaceOld reader sId = do
   canDo
     (\t -> fromMaybe (t ^. forUniverse . collectionPermission) (t ^. forSpaces . at sId))
     reader
@@ -67,7 +76,7 @@ canDeleteSpace deleter sId = do
     let refs = s ^. temp . toReferencesFromSpaces . at sId . non mempty
         subs = s ^. temp . toSubscriptionsFromSpaces . at sId . non mempty
     pure (HS.union refs subs)
-  andM $ 
+  andM $
     (canDo
       (\t -> fromMaybe (t ^. forUniverse . collectionPermission) (t ^. forSpaces . at sId))
       deleter

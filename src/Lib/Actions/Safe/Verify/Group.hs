@@ -1,33 +1,29 @@
-{-# LANGUAGE
-    GeneralizedNewtypeDeriving
-  , RecordWildCards
-  , DerivingVia
-  , DataKinds
-  , DeriveGeneric
-  , RankNTypes
-  , TemplateHaskell
-  , FlexibleContexts
-  #-}
-
 module Lib.Actions.Safe.Verify.Group where
 
 import Lib.Actions.Safe.Verify.Utils (canDo, canDoWithTab)
-import Lib.Types.Store (Shared)
+import Lib.Types.Store (Shared, toActors, toGroupsHiddenTo, store, temp)
 import Lib.Types.Store.Tabulation.Group (forOrganization, forGroups)
 import Lib.Types.Id (ActorId, GroupId)
 import Lib.Types.Permission
   ( CollectionPermission (..)
-  , SinglePermission (Exists)
+  , SinglePermission
   , escalate
   , collectionPermission
   )
 
-import Data.Maybe (fromMaybe)
-import Control.Lens ((^.), at)
-import Control.Monad.State (MonadState)
+import Data.Maybe (fromMaybe, isNothing)
+import Control.Lens ((^.), at, ix)
+import Control.Monad.State (MonadState, get)
 
 canReadGroup :: MonadState Shared m => ActorId -> GroupId -> m Bool
-canReadGroup reader gId =
+canReadGroup reader gId = do
+  s <- get
+  pure $ case s ^. store . toActors . at reader of
+    Nothing -> False
+    Just gs -> any (\gId' -> isNothing $ s ^. temp . toGroupsHiddenTo . ix gId . at gId') gs
+
+canReadGroupOld :: MonadState Shared m => ActorId -> GroupId -> m Bool
+canReadGroupOld reader gId = do
   canDo
     (\t -> fromMaybe (t ^. forOrganization . collectionPermission) (t ^. forGroups . at gId))
     reader
