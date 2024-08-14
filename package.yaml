@@ -1,23 +1,23 @@
-name: sheepdogdb
+name: tersedb
 version: 0.1.0.0
-github: "githubuser/sheepdogdb"
+github: "tersedb/tersedb-hs"
 license: BSD-3-Clause
-author: "Author name here"
-maintainer: "example@example.com"
-copyright: "2024 Author name here"
+author: "Athan Clark"
+maintainer: "athan.clark@gmail.com"
+copyright: "2024 Athan Clark"
 
 extra-source-files:
   - README.md
   - CHANGELOG.md
 
 # Metadata used when publishing your package
-# synopsis:            Short description of your package
-# category:            Web
+synopsis:            Entity Management System
+category:            Web
 
 # To avoid duplicated efforts in documentation and dealing with the
 # complications of embedding Haddock markup inside cabal files, it is
 # common to point users to the README.md file.
-description: Please see the README on GitHub at <https://github.com/githubuser/sheepdogdb#readme>
+description: Please see the README on GitHub at <https://github.com/tersedb/tersedb-hs#readme>
 
 default-extensions:
   - FlexibleContexts
@@ -71,7 +71,7 @@ executables:
       - -rtsopts
       - -with-rtsopts=-N
     dependencies:
-      - sheepdogdb
+      - tersedb
 
 tests:
   sheepdogdb-test:
@@ -82,7 +82,7 @@ tests:
       - -rtsopts
       - -with-rtsopts=-N
     dependencies:
-      - sheepdogdb
+      - tersedb
       - pretty-simple
       - sydtest
       - topograph
