@@ -1,18 +1,7 @@
-{-# LANGUAGE
-    GeneralizedNewtypeDeriving
-  , RecordWildCards
-  , DerivingVia
-  , DataKinds
-  , DeriveGeneric
-  , RankNTypes
-  , TemplateHaskell
-  , FlexibleContexts
-  #-}
-
 module Lib.Actions.Gen where
 
 import Lib.Actions.Safe.Store
-  ( storeVersion
+  ( storeNextVersion
   , storeActor
   , storeGroup
   , storeSpace
@@ -70,5 +59,5 @@ newVersion
   -> SheepdogM (Maybe (Either LoadRefsAndSubsError VersionId))
 newVersion creator eId = do
   vId <- uniformM globalStdGen
-  mE <- storeVersion creator eId vId
+  mE <- storeNextVersion creator eId vId
   pure $ fmap (fmap (const vId)) mE

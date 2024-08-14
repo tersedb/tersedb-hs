@@ -29,6 +29,7 @@ library
   exposed-modules:
       Lib.Actions.Gen
       Lib.Actions.Safe
+      Lib.Actions.Safe.Remove
       Lib.Actions.Safe.Store
       Lib.Actions.Safe.Update
       Lib.Actions.Safe.Update.Group
@@ -69,7 +70,11 @@ library
       DeriveGeneric
       RankNTypes
       TemplateHaskell
-  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
+      TypeFamilies
+      KindSignatures
+      StandaloneDeriving
+      InstanceSigs
+  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -Wno-name-shadowing
   build-depends:
       QuickCheck
     , aeson
@@ -107,7 +112,11 @@ executable sheepdogdb-exe
       DeriveGeneric
       RankNTypes
       TemplateHaskell
-  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
+      TypeFamilies
+      KindSignatures
+      StandaloneDeriving
+      InstanceSigs
+  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -Wno-name-shadowing -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       QuickCheck
     , aeson
@@ -155,7 +164,11 @@ test-suite sheepdogdb-test
       DeriveGeneric
       RankNTypes
       TemplateHaskell
-  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
+      TypeFamilies
+      KindSignatures
+      StandaloneDeriving
+      InstanceSigs
+  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -Wno-name-shadowing -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       QuickCheck
     , aeson

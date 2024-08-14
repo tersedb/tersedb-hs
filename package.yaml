@@ -30,6 +30,10 @@ default-extensions:
   - DeriveGeneric
   - RankNTypes
   - TemplateHaskell
+  - TypeFamilies
+  - KindSignatures
+  - StandaloneDeriving
+  - InstanceSigs
 
 dependencies:
   - base >= 4.7 && < 5
@@ -54,10 +58,11 @@ ghc-options:
   - -Widentities
   - -Wincomplete-record-updates
   - -Wincomplete-uni-patterns
-  - -Wmissing-export-lists
+  # - -Wmissing-export-lists
   - -Wmissing-home-modules
   - -Wpartial-fields
   - -Wredundant-constraints
+  - -Wno-name-shadowing
 
 library:
   source-dirs: src

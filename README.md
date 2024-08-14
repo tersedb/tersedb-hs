@@ -200,5 +200,22 @@ but it suits the purposes it was designed for well enough.
 - `Read` for a recruiter simply means that all Actors can be seen. There is no way to make
   specific accounts "private" or hidden.
 - `Update` has no meaning for a few concepts within TerseDB:
-  - Memberships
+  - Memberships (memberships are only represented by the group/actor touple)
+  - Recruiter (actors can only inhabit groups, represented as a membership)
+  - Spaces (they cannot be moved to another universe; no such idea exists)
   We still permit the queries if you retain metadata between groups and its member actors.
+- `Read` for memberships doesn't require `Read` for recruiter, because they're considered
+  completely different concepts, even though adding an actor to a group modifies it (which would
+  normally imply `Update` for recruiter).
+
+## Practical Issues
+
+- Because this project is intended to be run on a separate service to your main application
+  and database, and communication between them is performed via an asynchronous channel like
+  HTTP, no atomicity guarantees can be made between your application data and this entity
+  management system. Due to this, there could be race conditions where authority was restricted
+  in TerseDB, but wasn't witnessed by a query, and thus access was granted - due to the latency
+  between TerseDB and your application / database. I still think this project is a valuable concept
+  for smaller projects, but for bigger ones where atomic consistency is a requirement, I advise
+  you to do your research on how to embed your required security policies directly in your
+  database.

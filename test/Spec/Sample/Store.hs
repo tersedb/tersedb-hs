@@ -42,7 +42,7 @@ import Lib.Actions.Safe.Store
   , storeSpace
   , storeEntity
   , storeForkedEntity
-  , storeVersion
+  , storeNextVersion
   , addMember
   )
 import Lib.Actions.Safe.Update
@@ -262,7 +262,7 @@ storeSample SampleStore{..} adminActor adminGroup =
       case vIdsTail of
         Nothing -> pure ()
         Just vIdsTail -> for_ vIdsTail $ \(vId, refIds, subIds) -> do
-          mE <- storeVersion adminActor eId vId
+          mE <- storeNextVersion adminActor eId vId
           case mE of
             Just (Right ()) -> pure ()
             _ -> do

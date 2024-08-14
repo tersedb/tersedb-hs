@@ -69,11 +69,7 @@ updateVersionSubscriptions
   -> m (Maybe (Either EntityId ()))
 updateVersionSubscriptions updater vId subIds = do
   canAdjust <- andM
-    [ flip allM (HS.toList subIds) $ \subId -> do
-        s <- get
-        case s ^. store . toEntities . at subId of
-          Nothing -> pure False
-          Just e -> canReadEntity updater (e ^. space)
+    [ allM (canReadEntity updater) (HS.toList subIds)
     , canUpdateVersion updater vId
     ]
   if not canAdjust then pure Nothing else

@@ -14,24 +14,23 @@ import Spec.Sample.Store
   )
 import Spec.Test.Simple (simpleTests)
 import Spec.Test.Groups (groupsTests, testPermissionInheritance)
-import Spec.Test.Safe.Create (createTests)
 import Spec.Test.Safe.Read (readTests)
+import Spec.Test.Safe.Create (createTests)
+import Spec.Test.Safe.Update (updateTests)
 
-import Lib.Types.Id (GroupId, ActorId, SpaceId, EntityId, VersionId)
+import Lib.Types.Id (GroupId, ActorId)
 import Lib.Types.Permission
   ( CollectionPermission (..)
   , CollectionPermissionWithExemption (..)
   , SinglePermission (Adjust)
   )
 import Lib.Types.Store
-  ( Shared
-  , store
+  ( store
   , temp
   , toGroups
   , toSpaces
   , toEntities
   , toSpaces
-  , toVersions
   )
 import Lib.Types.Store.Groups (nodes)
 import Lib.Types.Store.Space (entities)
@@ -49,29 +48,14 @@ import Lib.Actions.Unsafe.Update.Group
   , unsafeAdjustEntityPermission
   , unsafeAdjustMemberPermission
   )
-import Lib.Actions.Safe (emptyShared)
-import Lib.Actions.Safe.Store
-  ( storeActor
-  , storeGroup
-  , addMember
-  , storeSpace
-  , storeEntity
-  , storeVersion
-  )
-import Lib.Actions.Safe.Update.Group
-  ( setUniversePermission
-  , setMemberPermission
-  , setEntityPermission
-  )
 import Lib.Actions.Tabulation (resetTabulation, tempFromStore)
 
 import qualified Data.HashSet as HS
 import qualified Data.HashMap.Strict as HM
 import Data.Foldable (for_)
-import Data.Maybe (isJust)
 import Control.Monad.Extra (unless)
-import Control.Monad.State (MonadState, execState, get)
-import Control.Lens ((^.), at)
+import Control.Monad.State (execState, get)
+import Control.Lens ((^.))
 import Test.Syd (sydTest, describe, it, shouldBe, shouldSatisfy)
 import Test.QuickCheck
   ( property
@@ -138,5 +122,6 @@ main = sydTest $ do
                 resetTabulation
           in  safeStore `shouldBe` unsafeStore
       describe "Permissions" $ do
-        createTests
         readTests
+        createTests
+        updateTests

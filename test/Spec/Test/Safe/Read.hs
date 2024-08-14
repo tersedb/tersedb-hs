@@ -1,59 +1,46 @@
 module Spec.Test.Safe.Read where
 
-import Spec.Sample.Tree (SampleGroupTree (..))
 import Spec.Sample.Store
   ( SampleStore (..)
   , loadSample
-  , storeSample
   )
-import Spec.Test.Simple (simpleTests)
-import Spec.Test.Groups (groupsTests, testPermissionInheritance)
 
 import Lib.Types.Id (GroupId, ActorId, SpaceId, EntityId, VersionId)
 import Lib.Types.Permission
   ( CollectionPermission (..)
   , CollectionPermissionWithExemption (..)
-  , SinglePermission (Adjust)
   )
 import Lib.Types.Store
   ( Shared
   , store
-  , temp
-  , toGroups
   , toSpaces
-  , toEntities
-  , toSpaces
-  , toVersions
   , toActors
   )
-import Lib.Types.Store.Groups (emptyGroup, nodes, members)
-import Lib.Types.Store.Space (entities)
-import Lib.Types.Store.Entity (space)
 import Lib.Actions.Safe (emptyShared)
-import Lib.Actions.Safe.Store (storeActor, storeSpace, storeGroup, addMember)
+import Lib.Actions.Safe.Store (storeActor, storeSpace, storeGroup, addMember, storeEntity)
 import Lib.Actions.Safe.Update.Group
-  ( setSpacePermission
-  , setUniversePermission
+  ( setUniversePermission
   , setOrganizationPermission
   , setRecruiterPermission
-  , setGroupPermission
   , setMemberPermission
   , setEntityPermission
   )
-import Lib.Actions.Safe.Verify.SpaceAndEntity (canReadSpace, canReadSpaceOld, canReadEntity)
+import Lib.Actions.Safe.Verify.SpaceAndEntity
+  ( canReadSpace
+  , canReadSpaceOld
+  , canReadEntity
+  , canReadAllEntities
+  , canReadVersion
+  )
 import Lib.Actions.Safe.Verify.Group (canReadGroup)
 import Lib.Actions.Safe.Verify.Member (canReadMember)
 import Lib.Actions.Safe.Verify.Actor (canReadActor)
-import Lib.Actions.Tabulation (resetTabulation, tempFromStore)
 
-import qualified Data.HashSet as HS
 import qualified Data.HashMap.Strict as HM
-import Data.Foldable (for_)
-import Data.Maybe (isJust, isNothing)
-import Control.Monad.Extra (unless, when)
-import Control.Monad.State (MonadState, execState, get, evalState, State)
-import Control.Lens ((^.), at, non)
-import Test.Syd (Spec, describe, it, shouldBe, shouldSatisfy)
+import Control.Monad.Extra (unless)
+import Control.Monad.State (execState, evalState, State)
+import Control.Lens ((^.))
+import Test.Syd (Spec, describe, it, shouldSatisfy)
 import Test.QuickCheck
   ( property
   , forAll
@@ -88,7 +75,7 @@ readTests = describe "Read" $ do
               canReadSpace aId sId
             s' = execState go s
         in  shouldSatisfy (s', aId, gId, sId) $ \_ -> evalState go s == True
-    it "Entity" $
+    it "Entities" $
       property $ \(adminActor :: ActorId, adminGroup :: GroupId, sId :: SpaceId, aId :: ActorId, gId:: GroupId) ->
         let s = emptyShared adminActor adminGroup
             go :: State Shared Bool
@@ -101,7 +88,47 @@ readTests = describe "Read" $ do
               unless worked $ error $ "Couldn't set universe permission " <> show gId
               worked <- setEntityPermission adminActor Read gId sId
               unless worked $ error $ "Couldn't set entity permission " <> show gId
-              canReadEntity aId sId
+              canReadAllEntities aId sId
+            s' = execState go s
+        in  shouldSatisfy (s', aId, gId, sId) $ \_ -> evalState go s == True
+    it "Entity" $
+      property $ \(adminActor :: ActorId, adminGroup :: GroupId, sId :: SpaceId, aId :: ActorId, gId:: GroupId, eId :: EntityId, vId :: VersionId) ->
+        let s = emptyShared adminActor adminGroup
+            go :: State Shared Bool
+            go = do
+              setup adminActor adminGroup aId gId
+              worked <- storeSpace adminActor sId
+              unless worked $ error $ "Couldn't make space " <> show sId
+              worked <- setEntityPermission adminActor Create adminGroup sId
+              unless worked $ error $ "Couldn't grant entity permissions " <> show sId
+              worked <- storeEntity adminActor eId sId vId
+              unless worked $ error $ "Couldn't store entity " <> show (eId, vId)
+              worked <- setUniversePermission adminActor
+                (CollectionPermissionWithExemption Read False) gId
+              unless worked $ error $ "Couldn't set universe permission " <> show gId
+              worked <- setEntityPermission adminActor Read gId sId
+              unless worked $ error $ "Couldn't set entity permission " <> show gId
+              canReadEntity aId eId
+            s' = execState go s
+        in  shouldSatisfy (s', aId, gId, sId) $ \_ -> evalState go s == True
+    it "Version" $
+      property $ \(adminActor :: ActorId, adminGroup :: GroupId, sId :: SpaceId, aId :: ActorId, gId:: GroupId, eId :: EntityId, vId :: VersionId) ->
+        let s = emptyShared adminActor adminGroup
+            go :: State Shared Bool
+            go = do
+              setup adminActor adminGroup aId gId
+              worked <- storeSpace adminActor sId
+              unless worked $ error $ "Couldn't make space " <> show sId
+              worked <- setEntityPermission adminActor Create adminGroup sId
+              unless worked $ error $ "Couldn't grant entity permissions " <> show sId
+              worked <- storeEntity adminActor eId sId vId
+              unless worked $ error $ "Couldn't store entity " <> show (eId, vId)
+              worked <- setUniversePermission adminActor
+                (CollectionPermissionWithExemption Read False) gId
+              unless worked $ error $ "Couldn't set universe permission " <> show gId
+              worked <- setEntityPermission adminActor Read gId sId
+              unless worked $ error $ "Couldn't set entity permission " <> show gId
+              canReadVersion aId vId
             s' = execState go s
         in  shouldSatisfy (s', aId, gId, sId) $ \_ -> evalState go s == True
     it "Group" $
@@ -115,8 +142,6 @@ readTests = describe "Read" $ do
               worked <- setOrganizationPermission adminActor
                 (CollectionPermissionWithExemption Read False) gId
               unless worked $ error $ "Couldn't set organization permission " <> show gId
-              -- worked <- setEntityPermission adminActor Read gId sId
-              -- unless worked $ error $ "Couldn't set entity permission " <> show gId
               canReadGroup aId gId'
             s' = execState go s
         in  shouldSatisfy (s', aId, gId, gId') $ \_ -> evalState go s == True
@@ -173,7 +198,7 @@ readTests = describe "Read" $ do
               canReadSpace aId sId
             s' = execState go s
         in  shouldSatisfy (s', aId, gId, sId) $ \_ -> evalState go s == False
-    it "Entity when explicit" $
+    it "Entities when explicit" $
       property $ \(adminActor :: ActorId, adminGroup :: GroupId, sId :: SpaceId, aId :: ActorId, gId:: GroupId) ->
         let s = emptyShared adminActor adminGroup
             go :: State Shared Bool
@@ -186,10 +211,30 @@ readTests = describe "Read" $ do
               unless worked $ error $ "Couldn't set universe permission " <> show gId
               worked <- setEntityPermission adminActor Blind gId sId
               unless worked $ error $ "Couldn't set entity permission " <> show gId
-              canReadEntity aId sId
+              canReadAllEntities aId sId
             s' = execState go s
         in  shouldSatisfy (s', aId, gId, sId) $ \_ -> evalState go s == False
-    it "Entity when implicit" $
+    it "Entity when explicit" $
+      property $ \(adminActor :: ActorId, adminGroup :: GroupId, sId :: SpaceId, aId :: ActorId, gId:: GroupId, eId :: EntityId, vId :: VersionId) ->
+        let s = emptyShared adminActor adminGroup
+            go :: State Shared Bool
+            go = do
+              setup adminActor adminGroup aId gId
+              worked <- storeSpace adminActor sId
+              unless worked $ error $ "Couldn't make space " <> show sId
+              worked <- setEntityPermission adminActor Create adminGroup sId
+              unless worked $ error $ "Couldn't grant entity permissions " <> show sId
+              worked <- storeEntity adminActor eId sId vId
+              unless worked $ error $ "Couldn't make entity " <> show (eId, vId)
+              worked <- setUniversePermission adminActor
+                (CollectionPermissionWithExemption Read False) gId
+              unless worked $ error $ "Couldn't set universe permission " <> show gId
+              worked <- setEntityPermission adminActor Blind gId sId
+              unless worked $ error $ "Couldn't set entity permission " <> show gId
+              canReadEntity aId eId
+            s' = execState go s
+        in  shouldSatisfy (s', aId, gId, sId) $ \_ -> evalState go s == False
+    it "Entities when implicit" $
       property $ \(adminActor :: ActorId, adminGroup :: GroupId, sId :: SpaceId, aId :: ActorId, gId:: GroupId) ->
         let s = emptyShared adminActor adminGroup
             go :: State Shared Bool
@@ -200,7 +245,25 @@ readTests = describe "Read" $ do
               worked <- setUniversePermission adminActor
                 (CollectionPermissionWithExemption Read False) gId
               unless worked $ error $ "Couldn't set universe permission " <> show gId
-              canReadEntity aId sId
+              canReadAllEntities aId sId
+            s' = execState go s
+        in  shouldSatisfy (s', aId, gId, sId) $ \_ -> evalState go s == False
+    it "Entity when implicit" $
+      property $ \(adminActor :: ActorId, adminGroup :: GroupId, sId :: SpaceId, aId :: ActorId, gId:: GroupId, eId :: EntityId, vId :: VersionId) ->
+        let s = emptyShared adminActor adminGroup
+            go :: State Shared Bool
+            go = do
+              setup adminActor adminGroup aId gId
+              worked <- storeSpace adminActor sId
+              unless worked $ error $ "Couldn't make space " <> show sId
+              worked <- setEntityPermission adminActor Create adminGroup sId
+              unless worked $ error $ "Couldn't grant entity permissions " <> show sId
+              worked <- storeEntity adminActor eId sId vId
+              unless worked $ error $ "Couldn't make entity " <> show (eId, vId)
+              worked <- setUniversePermission adminActor
+                (CollectionPermissionWithExemption Read False) gId
+              unless worked $ error $ "Couldn't set universe permission " <> show gId
+              canReadEntity aId eId
             s' = execState go s
         in  shouldSatisfy (s', aId, gId, sId) $ \_ -> evalState go s == False
     it "Group when explicit" $
@@ -291,3 +354,6 @@ readTests = describe "Read" $ do
 
 -- FIXME each group or space or something should have a set of shit it specifically _can't_ see?
 -- i.e., the shit it's blind to? Er, NonExists within the set, assuming read rights are present?
+
+-- TODO test to see if setting SinglePermissions also causes the same effect - and combinations
+-- of whether or not entities are granted, but space isn't, etc.

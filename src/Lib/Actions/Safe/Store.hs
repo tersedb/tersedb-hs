@@ -119,29 +119,27 @@ storeForkedEntity creator eId sId vId prevVId
   s <- get
   case s ^. store . toVersions . at prevVId of
     Nothing -> pure . Just . Left $ Left PreviousVersionDoesntExist
-    Just prevV -> case s ^. store . toEntities . at (prevV ^. entity) of
-      Nothing -> pure . Just . Left $ Left PreviousEntityDoesntExist
-      Just prevE -> do
-        let prevSId = prevE ^. space
-        canAdjust <- andM
-          [ canCreateEntity creator sId
-          , canReadEntity creator prevSId
-          ]
-        if not canAdjust then pure Nothing else do
-          eVErr <- unsafeStoreEntity eId sId vId (flip forkVersion prevVId)
-          pure . Just $ eVErr & _Left %~ Right
+    Just prevV -> do
+      canAdjust <- andM
+        [ canCreateEntity creator sId
+        , canReadEntity creator (prevV ^. entity)
+        ]
+      if not canAdjust then pure Nothing else do
+        -- FIXME will this forked reference be present in references tabulation?
+        eVErr <- unsafeStoreEntity eId sId vId (flip forkVersion prevVId)
+        pure . Just $ eVErr & _Left %~ Right
 
-storeVersion
+storeNextVersion
   :: MonadState Shared m
   => ActorId -- ^ actor attempting to store a version
   -> EntityId -- ^ entity receiving a new version
   -> VersionId -- ^ version being stored
   -> m (Maybe (Either LoadRefsAndSubsError ()))
-storeVersion creator eId vId = do
+storeNextVersion creator eId vId = do
   s <- get
   case s ^. store . toEntities . at eId of
     Nothing -> pure Nothing
     Just e -> do
-      canAdjust <- canUpdateEntity creator (e ^. space)
+      canAdjust <- canUpdateEntity creator eId
       if not canAdjust then  pure Nothing else do
         fmap Just . unsafeStoreVersion eId vId . flip forkVersion . NE.head $ e ^. versions

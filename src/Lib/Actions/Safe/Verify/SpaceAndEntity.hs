@@ -86,11 +86,18 @@ hasSpacePermission aId sId p =
 
 -- * Entities
 
-canReadEntity :: MonadState Shared m => ActorId -> SpaceId -> m Bool
-canReadEntity reader sId = andM
+canReadAllEntities :: MonadState Shared m => ActorId -> SpaceId -> m Bool
+canReadAllEntities reader sId = andM
   [ canDo (\t -> t ^. forEntities . at sId . non Blind) reader Read
   , canReadSpace reader sId
   ]
+
+canReadEntity :: MonadState Shared m => ActorId -> EntityId -> m Bool
+canReadEntity reader eId = do
+  s <- get
+  case s ^. store . toEntities . at eId of
+    Nothing -> pure False
+    Just e -> canReadAllEntities reader (e ^. space)
 
 canCreateEntity :: MonadState Shared m => ActorId -> SpaceId -> m Bool
 canCreateEntity creater sId = andM
@@ -98,13 +105,19 @@ canCreateEntity creater sId = andM
   , canReadSpace creater sId
   ]
 
-canUpdateEntity :: MonadState Shared m => ActorId -> SpaceId -> m Bool
-canUpdateEntity updater sId = andM
+canUpdateAllEntities :: MonadState Shared m => ActorId -> SpaceId -> m Bool
+canUpdateAllEntities updater sId = andM
   [ canDo (\t -> t ^. forEntities . at sId . non Blind) updater Update
   , canReadSpace updater sId
   ]
 
--- FIXME references & subscriptions!
+canUpdateEntity :: MonadState Shared m => ActorId -> EntityId -> m Bool
+canUpdateEntity reader eId = do
+  s <- get
+  case s ^. store . toEntities . at eId of
+    Nothing -> pure False
+    Just e -> canUpdateAllEntities reader (e ^. space)
+
 canDeleteEntity :: MonadState Shared m => ActorId -> SpaceId -> EntityId -> m Bool
 canDeleteEntity deleter sId eId = do
   refsAndSubs <- do
@@ -129,27 +142,33 @@ hasEntityPermission aId sId p = andM
 canReadVersion :: MonadState Shared m => ActorId -> VersionId -> m Bool
 canReadVersion updater vId = do
   s <- get
-  let v = fromJust (s ^. store . toVersions . at vId)
-      e = fromJust (s ^. store . toEntities . at (v ^. entity))
-  canReadEntity updater (e ^. space)
+  case s ^. store . toVersions . at vId of
+    Nothing -> pure False
+    Just v -> canReadEntity updater (v ^. entity)
 
-canCreateVersion :: MonadState Shared m => ActorId -> VersionId -> m Bool
-canCreateVersion updater vId = do
-  s <- get
-  let v = fromJust (s ^. store . toVersions . at vId)
-      e = fromJust (s ^. store . toEntities . at (v ^. entity))
-  canCreateEntity updater (e ^. space)
+canCreateVersion :: MonadState Shared m => ActorId -> EntityId -> m Bool
+canCreateVersion = canUpdateEntity
 
 canUpdateVersion :: MonadState Shared m => ActorId -> VersionId -> m Bool
 canUpdateVersion updater vId = do
   s <- get
-  let v = fromJust (s ^. store . toVersions . at vId)
-      e = fromJust (s ^. store . toEntities . at (v ^. entity))
-  canUpdateEntity updater (e ^. space)
+  case s ^. store . toVersions . at vId of
+    Nothing -> pure False
+    Just v -> canUpdateEntity updater (v ^. entity)
 
+-- | FIXME doesn't check to see if this is the last version in its entity
 canDeteteVersion :: MonadState Shared m => ActorId -> VersionId -> m Bool
 canDeteteVersion updater vId = do
   s <- get
-  let v = fromJust (s ^. store . toVersions . at vId)
-      e = fromJust (s ^. store . toEntities . at (v ^. entity))
-  canDeleteEntity updater (e ^. space) (v ^. entity)
+  case s ^. store . toVersions . at vId of
+    Nothing -> pure False
+    Just v -> canUpdateEntity updater (v ^. entity)
+
+canDeteteVersionAndEntity :: MonadState Shared m => ActorId -> VersionId -> m Bool
+canDeteteVersionAndEntity updater vId = do
+  s <- get
+  case s ^. store . toVersions . at vId of
+    Nothing -> pure False
+    Just v -> case s ^. store . toEntities . at (v ^. entity) of
+      Nothing -> pure False
+      Just e -> canDeleteEntity updater (e ^. space) (v ^. entity)

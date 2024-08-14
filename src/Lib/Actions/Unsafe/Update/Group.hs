@@ -1,14 +1,3 @@
-{-# LANGUAGE
-    GeneralizedNewtypeDeriving
-  , RecordWildCards
-  , DerivingVia
-  , DataKinds
-  , DeriveGeneric
-  , RankNTypes
-  , TemplateHaskell
-  , FlexibleContexts
-  #-}
-
 module Lib.Actions.Unsafe.Update.Group
   ( LinkGroupError (..)
   , unsafeLinkGroups
@@ -21,7 +10,6 @@ module Lib.Actions.Unsafe.Update.Group
   , unsafeAdjustEntityPermission
   , unsafeAdjustMemberPermission
   ) where
-
 
 import Lib.Actions.Tabulation (updateTabulationStartingAt)
 import Lib.Types.Id (GroupId, SpaceId)
