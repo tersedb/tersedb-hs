@@ -114,3 +114,91 @@ Version1-->Version2;
 Version2-->Version3;
 Version3-->Version4;
 ```
+
+The collection of spaces is governed by those with universal rights.
+
+The collections of entities and versions for spaces are governed by those with entity rights for
+those spaces.
+
+### References
+
+Versions can reference other versions anywhere in the universe. The very existence of a reference
+from `V1` to `V2` means that an actor with either `Create` or `Update` access to a version `V1`
+also was able to see `V2` and decided to bind `V2` to `V1`. This can only be unbound by an
+actor with the same permissions.
+
+```mermaid
+flowchart LR;
+  Version1-- Reference -->Version2
+  subgraph Space1
+    subgraph Entity1
+      Version1
+    end
+  end
+  subgraph Space2
+    subgraph Entity2
+      Version2
+    end
+  end
+```
+
+The purpose of a reference is to capture a witnessed state in time.
+
+### Subscriptions
+
+Contrary to references, subscriptions bind to an entity rather than a specific version -
+symbolizing the changing nature of things, and that we might want to subscribe to its latest
+version.
+
+```mermaid
+flowchart LR;
+  Version1-- Subscription -->Entity2
+  subgraph Space1
+    subgraph Entity1
+      Version1
+    end
+  end
+  subgraph Space2
+    subgraph Entity2
+      Version2
+    end
+  end
+```
+
+The purpose of a subscription is to capture a witnessed state, but stay up-to-date with
+its changes over time.
+
+### Scenarios
+
+When starting an instance of TerseDB, you will always have an initial `adminActor` and a
+`adminGroup`, which has the following rights:
+
+- Recruiter `Delete` rights
+- Organization `Delete` rights, with `Exempt`
+- Universe `Delete` rights, with `Exempt`
+
+Without this, nothing could be created!
+
+#### Create an Actor and Group, and make it a Member
+
+1. Have `adminActor` create an actor `A`
+2. Have `adminActor` create a group `G`
+3. Have `adminActor` grant Member `Create` rights to group `adminGroup` on behalf of group `G`
+4. Have `adminActor` create a membership of `A` to `G`
+
+#### Create a Space and let `A` create Entities within it
+
+5. Have `adminActor` grant Universe `Read` rights to group `G`
+6. Have `adminActor` create a space `S`
+7. Have `adminActor` grant Entity `Create` rights to group `G` on behalf of space `S`
+
+## Semantic Inconsistencies
+
+There are a few issues to the design of this system, semantically speaking. It's not perfect,
+but it suits the purposes it was designed for well enough.
+
+- `Read` for a recruiter simply means that all Actors can be seen. There is no way to make
+  specific accounts "private" or hidden.
+- `Update` has no meaning for a few concepts within TerseDB:
+  - Memberships
+  We still permit the queries if you retain metadata between groups and its member actors.
