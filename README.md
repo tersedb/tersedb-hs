@@ -48,6 +48,8 @@ Actors can perform actions to the system - whether its to other actors, groups t
 inhabit, entities being tracked, spaces of entities, or versions within those entities.
 Any action performed on the system will be commited by __one or more__ actors.
 
+The collection of actors are governed by those with recruiter rights.
+
 ### Groups
 
 Groups grant permission to its actors, who are members of the group.
@@ -76,3 +78,39 @@ Group5-->Group6;
 Permissions from each group are strictly additive - the effective permissions granted in
 `Group4` will be the sum (or max, depending on how you want to look at it) of all permissions
 granted individually in `Group1`, `Group2`, and `Group4`.
+
+The collection of groups is governed by those with organizational rights.
+
+The collections of memberships for groups are governed by those with membership rights for those
+groups.
+
+### Spaces, Entities, and Versions
+
+Spaces are the collections of entities. Every entity belongs to exactly 1 space, which makes
+spaces disjoint sets of entities:
+
+```mermaid
+graph TD;
+Entity1-->Space1;
+Entity2-->Space1;
+Entity3-->Space1;
+Entity4-->Space2;
+Entity5-->Space2;
+Entity6-->Space3;
+Entity7-->Space3;
+Entity8-->Space3;
+```
+
+Versions are linked lists, each cohesively belonging to a single entity. Every entity has at least
+one version.
+
+```mermaid
+graph TD;
+Version1-->Entity1;
+Version2-->Entity1;
+Version3-->Entity1;
+Version4-->Entity1;
+Version1-->Version2;
+Version2-->Version3;
+Version3-->Version4;
+```
