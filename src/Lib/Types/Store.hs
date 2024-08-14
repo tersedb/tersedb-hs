@@ -24,6 +24,7 @@ data Temp = Temp
   , tempSubscriptionsFromSpaces :: HashMap SpaceId (HashSet VersionId)
   , tempTabulatedGroups :: HashMap GroupId TabulatedPermissionsForGroup
   , tempSpacesHiddenTo :: HashMap SpaceId (HashSet GroupId)
+  -- FIXME track universe blind groups
   } deriving (Eq, Show, Read)
 makeLensesFor
   [ ("tempReferencesFrom", "toReferencesFrom")

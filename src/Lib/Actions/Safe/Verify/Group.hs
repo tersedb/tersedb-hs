@@ -1,6 +1,6 @@
 module Lib.Actions.Safe.Verify.Group where
 
-import Lib.Actions.Safe.Verify.Utils (canDo, canDoWithTab)
+import Lib.Actions.Safe.Verify.Utils (canDo, canDoWithTab, withCollectionPermission)
 import Lib.Types.Store (Shared, toActors, store, temp)
 import Lib.Types.Store.Tabulation.Group (forOrganization, forGroups)
 import Lib.Types.Id (ActorId, GroupId)
@@ -34,7 +34,7 @@ import Control.Monad.Extra (anyM)
 canReadGroup :: MonadState Shared m => ActorId -> GroupId -> m Bool
 canReadGroup reader gId = do
   canDo
-    (\t -> fromMaybe (t ^. forOrganization . collectionPermission) (t ^. forGroups . at gId))
+    (withCollectionPermission gId forOrganization forGroups)
     reader
     Read
 
@@ -52,20 +52,20 @@ canCreateGroup creater =
 canUpdateGroup :: MonadState Shared m => ActorId -> GroupId -> m Bool
 canUpdateGroup updater gId =
   canDo
-    (\t -> fromMaybe (t ^. forOrganization . collectionPermission) (t ^. forGroups . at gId))
+    (withCollectionPermission gId forOrganization forGroups)
     updater
     Update
 
 canDeleteGroup :: MonadState Shared m => ActorId -> GroupId -> m Bool
 canDeleteGroup deleter gId =
   canDo
-    (\t -> fromMaybe (t ^. forOrganization . collectionPermission) (t ^. forGroups . at gId))
+    (withCollectionPermission gId forOrganization forGroups)
     deleter
     Delete
 
 hasGroupPermission :: MonadState Shared m => ActorId -> GroupId -> SinglePermission -> m Bool
 hasGroupPermission aId gId p =
   canDoWithTab
-    (\t -> fromMaybe (t ^. forOrganization . collectionPermission) (t ^. forGroups . at gId))
+    (withCollectionPermission gId forOrganization forGroups)
     aId
     (\t -> escalate (t ^. forOrganization) p)

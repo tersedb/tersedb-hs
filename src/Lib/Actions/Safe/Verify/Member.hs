@@ -12,7 +12,7 @@
 module Lib.Actions.Safe.Verify.Member where
 
 import Lib.Actions.Safe.Verify.Group (canReadGroup)
-import Lib.Actions.Safe.Verify.Utils (canDo)
+import Lib.Actions.Safe.Verify.Utils (canDo, withCollectionPermission)
 import Lib.Types.Store (Shared)
 import Lib.Types.Store.Tabulation.Group (forMembers, forOrganization)
 import Lib.Types.Id (ActorId, GroupId)

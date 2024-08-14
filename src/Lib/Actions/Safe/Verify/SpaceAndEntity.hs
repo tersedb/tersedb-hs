@@ -1,6 +1,6 @@
 module Lib.Actions.Safe.Verify.SpaceAndEntity where
 
-import Lib.Actions.Safe.Verify.Utils (canDo, canDoWithTab)
+import Lib.Actions.Safe.Verify.Utils (canDo, canDoWithTab, withCollectionPermission)
 import Lib.Types.Store
   ( Shared
   , store
@@ -53,14 +53,16 @@ canReadSpace reader sId = do
       else pure True
 
 canReadSpaceOld :: MonadState Shared m => ActorId -> SpaceId -> m Bool
-canReadSpaceOld reader sId = canDo (withUniversePermission sId) reader Read
+canReadSpaceOld reader sId =
+  canDo (withCollectionPermission sId forUniverse forSpaces) reader Read
 
 canCreateSpace :: MonadState Shared m => ActorId -> m Bool
 canCreateSpace creater =
   canDo (\t -> t ^. forUniverse . collectionPermission) creater Create
 
 canUpdateSpace :: MonadState Shared m => ActorId -> SpaceId -> m Bool
-canUpdateSpace updater sId = canDo (withUniversePermission sId) updater Update
+canUpdateSpace updater sId =
+  canDo (withCollectionPermission sId forUniverse forSpaces) updater Update
 
 canDeleteSpace :: MonadState Shared m => ActorId -> SpaceId -> m Bool
 canDeleteSpace deleter sId = do
@@ -71,23 +73,16 @@ canDeleteSpace deleter sId = do
     pure (HS.union refs subs)
   andM $
     (canDo
-      (withUniversePermission sId)
+      (withCollectionPermission sId forUniverse forSpaces)
       deleter
       Delete) : (map (canUpdateVersion deleter) $ HS.toList refsAndSubs)
 
 hasSpacePermission :: MonadState Shared m => ActorId -> SpaceId -> SinglePermission -> m Bool
 hasSpacePermission aId sId p =
   canDoWithTab
-    (withUniversePermission sId)
+    (withCollectionPermission sId forUniverse forSpaces)
     aId
     (\t -> escalate (t ^. forUniverse) p)
-
-withUniversePermission :: SpaceId -> TabulatedPermissionsForGroup -> CollectionPermission
-withUniversePermission sId t =
-  maybe
-    (t ^. forUniverse . collectionPermission)
-    (\p -> p `min` (t ^. forUniverse . collectionPermission))
-    (t ^. forSpaces . at sId)
 
 -- * Entities
 
@@ -99,13 +94,13 @@ canReadEntity reader sId = andM
 
 canCreateEntity :: MonadState Shared m => ActorId -> SpaceId -> m Bool
 canCreateEntity creater sId = andM
-  [ canDo (\t -> t ^. forEntities . at sId . non Blind) creater Create -- FIXME dilemma of being permitted entity rights but not space rights
+  [ canDo (\t -> t ^. forEntities . at sId . non Blind) creater Create
   , canReadSpace creater sId
   ]
 
 canUpdateEntity :: MonadState Shared m => ActorId -> SpaceId -> m Bool
 canUpdateEntity updater sId = andM
-  [ canDo (\t -> t ^. forEntities . at sId . non Blind) updater Update -- FIXME dilemma of being permitted entity rights but not space rights
+  [ canDo (\t -> t ^. forEntities . at sId . non Blind) updater Update
   , canReadSpace updater sId
   ]
 

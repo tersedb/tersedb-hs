@@ -11,9 +11,16 @@ import Lib.Types.Store
 import Lib.Types.Store.Tabulation.Group
   ( TabulatedPermissionsForGroup (..)
   )
+import Lib.Types.Permission
+  ( CollectionPermission
+  , CollectionPermissionWithExemption
+  , collectionPermission
+  )
 
+import Data.Hashable (Hashable)
+import Data.HashMap.Strict (HashMap)
 import qualified Data.HashSet as HS
-import Control.Lens ((^.), at, non)
+import Control.Lens (Lens', (^.), at, non)
 import Control.Monad.State (MonadState (get))
 import Control.Monad.Extra (when)
 
@@ -47,3 +54,14 @@ canDo a b c = canDoWithTab a b (const c)
 
 conditionally :: Applicative m => m () -> Bool -> m Bool
 conditionally f t = t <$ when t f
+
+withCollectionPermission
+  :: Hashable a
+  => a
+  -> Lens' TabulatedPermissionsForGroup CollectionPermissionWithExemption
+  -> Lens' TabulatedPermissionsForGroup (HashMap a CollectionPermission)
+  -> TabulatedPermissionsForGroup
+  -> CollectionPermission
+withCollectionPermission xId projMajor projMinor t =
+  let maj = t ^. projMajor . collectionPermission
+  in  maybe maj (\p -> p `min` maj) (t ^. projMinor . at xId)
