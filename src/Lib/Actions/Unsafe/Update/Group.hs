@@ -2,6 +2,8 @@ module Lib.Actions.Unsafe.Update.Group
   ( LinkGroupError (..)
   , unsafeLinkGroups
   , unsafeUnlinkGroups
+  , unsafeUpdateGroupParent
+  , unsafeUpdateGroupChildren
   , unsafeAdjustUniversePermission
   , unsafeAdjustOrganizationPermission
   , unsafeAdjustRecruiterPermission
@@ -41,14 +43,16 @@ import Lib.Types.Store.Groups
   , prev
   )
 
+import Data.Foldable (for_, foldlM)
+import Data.HashSet (HashSet)
 import qualified Data.HashSet as HS
-import Control.Lens (Lens', (&), (^.), (.~), (%~), at, non, ix)
-import Control.Monad.State (MonadState (get, put), modify)
+import Data.Maybe (fromJust)
+import Control.Lens (Lens', (&), (^.), (.~), (%~), at, non, ix, (^?), _Just)
+import Control.Monad.State (MonadState (get, put), modify, runState)
 
 
 data LinkGroupError
   = CycleDetected [GroupId]
-  | DuplicateEdge GroupId GroupId
   | MultiParent GroupId
   deriving (Eq, Show, Read)
 
@@ -58,7 +62,7 @@ unsafeLinkGroups from to = do
   s <- get
   let groups = s ^. store . toGroups
   if HS.member (from, to) (groups ^. edges)
-  then pure (Left (DuplicateEdge from to))
+  then pure (Right ())
   else if HS.member to (groups ^. outs)
   then pure (Left (MultiParent to))
   else
@@ -90,6 +94,47 @@ unsafeUnlinkGroups from to = do
   put $ s
       & store . toGroups .~ newGroups
   updateTabulationStartingAt to
+
+unsafeUpdateGroupParent
+  :: MonadState Shared m
+  => GroupId
+  -> Maybe GroupId
+  -> m (Either LinkGroupError ())
+unsafeUpdateGroupParent gId mParent = do
+  s <- get
+  case s ^? store . toGroups . nodes . ix gId . prev . _Just of
+    mOldParent | mOldParent == mParent -> pure (Right ())
+    Nothing -> unsafeLinkGroups (fromJust mParent) gId
+    Just oldParent -> do
+      unsafeUnlinkGroups oldParent gId
+      case mParent of
+        Nothing -> pure (Right ())
+        Just newParent -> unsafeLinkGroups newParent gId
+
+unsafeUpdateGroupChildren
+  :: MonadState Shared m
+  => GroupId
+  -> HashSet GroupId
+  -> m (Either LinkGroupError ())
+unsafeUpdateGroupChildren gId children = do
+  let newChildren = HS.delete gId children
+  s <- get
+  case s ^? store . toGroups . nodes . ix gId . next of
+    Nothing -> pure (Right ()) -- FIXME gId not found - should be error?
+    Just oldChildren -> do
+      let toAdd = newChildren `HS.difference` oldChildren
+          toRemove = oldChildren `HS.difference` newChildren
+          addChild :: Shared -> GroupId -> Either LinkGroupError Shared
+          addChild s toAdd =
+            let (mX :: Either LinkGroupError (), s' :: Shared) =
+                  runState (unsafeLinkGroups gId toAdd) s
+            in  fmap (const s') mX
+      case foldlM addChild s toAdd of
+        Left e -> pure (Left e)
+        Right s' -> do
+          put s'
+          for_ toRemove $ \toRemove -> unsafeUnlinkGroups gId toRemove
+          pure (Right ())
 
 unsafeAdjustPermissionForGroup
   :: MonadState Shared m

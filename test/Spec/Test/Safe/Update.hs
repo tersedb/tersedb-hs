@@ -9,21 +9,29 @@ import Lib.Types.Permission
 import Lib.Types.Store
   ( Shared
   , store
+  , temp
   , toSpaces
   , toEntities
   , toSpaces
   , toGroups
+  , toTabulatedGroups
   )
 import Lib.Types.Store.Space (entities)
 import Lib.Types.Store.Entity (space)
 import Lib.Types.Store.Groups (next, prev, nodes)
+import Lib.Types.Store.Tabulation.Group (hasLessOrEqualPermissionsTo)
 import Lib.Actions.Safe (emptyShared)
 import Lib.Actions.Safe.Store (storeActor, storeSpace, storeGroup, addMember, storeEntity)
-import Lib.Actions.Safe.Update (updateEntitySpace, updateGroupParent)
+import Lib.Actions.Safe.Update
+  ( updateEntitySpace
+  )
 import Lib.Actions.Safe.Update.Group
   ( setUniversePermission
   , setMemberPermission
   , setEntityPermission
+  , updateGroupParent
+  , unlinkGroups
+  , linkGroups
   )
 
 import Data.Maybe (isJust, isNothing, fromJust)
@@ -130,18 +138,50 @@ updateTests = describe "Update" $ do
   describe "Group" $ do
     -- updating what it inherits from / who it inherits to
     describe "Should Succeed" $ do
-      it "deleting parent/child relationship should affect both nodes, and unrelate them" $
+      it "deleting parent relationship should affect both nodes, and unrelate them" $
         property $ \(xs :: SampleStore, adminActor :: ActorId, adminGroup :: GroupId) ->
           let s = storeSample xs adminActor adminGroup
               gsWithParent = HM.filter (\g -> isJust (g ^. prev)) $ s ^. store . toGroups . nodes
           in  if null gsWithParent then property True else
               forAll (elements (HM.toList gsWithParent)) $ \(gId :: GroupId, g) ->
                 let s' = flip execState s $ do
-                      worked <- updateGroupParent adminActor gId Nothing
-                      unless worked $ error $ "Couldn't set group parent " <> show gId
+                      mE <- updateGroupParent adminActor gId Nothing
+                      case mE of
+                        Just (Right ()) -> pure ()
+                        _ -> error $ "Couldn't set group parent " <> show (gId, mE)
+                    parentId = fromJust $ g ^. prev
+                in  shouldSatisfy (s', gId, parentId) $ \_ ->
+                      (s' ^? store . toGroups . nodes . ix gId . prev . _Just) == Nothing
+                      && (s' ^? store . toGroups . nodes . ix parentId . next . ix gId) == Nothing
+      it "deleting child relationship should affect both nodes, and unrelate them" $
+        property $ \(xs :: SampleStore, adminActor :: ActorId, adminGroup :: GroupId) ->
+          let s = storeSample xs adminActor adminGroup
+              gsWithParent = HM.filter (\g -> isJust (g ^. prev)) $ s ^. store . toGroups . nodes
+          in  if null gsWithParent then property True else
+              forAll (elements (HM.toList gsWithParent)) $ \(gId :: GroupId, g) ->
+                let s' = flip execState s $ do
+                      worked <- unlinkGroups adminActor parentId gId
+                      unless worked $ error $ "Couldn't unlink groups " <> show (parentId, gId)
                     parentId = fromJust $ g ^. prev
                 in  (s' ^? store . toGroups . nodes . ix gId . prev . _Just) == Nothing
                       && (s' ^? store . toGroups . nodes . ix parentId . next . ix gId) == Nothing
+      it "adding child relationship should cause inheritance" $
+        property $ \(xs :: SampleStore, adminActor :: ActorId, adminGroup :: GroupId, newGId :: GroupId) ->
+          let s = storeSample xs adminActor adminGroup
+              gsWithParent = HM.filter (\g -> isJust (g ^. prev)) $ s ^. store . toGroups . nodes
+          in  if null gsWithParent then property True else
+              forAll (elements (HM.toList gsWithParent)) $ \(gId :: GroupId, _) ->
+                let s' = flip execState s $ do
+                      worked <- storeGroup adminActor newGId
+                      unless worked $ error $ "Couldn't store group " <> show newGId
+                      mE <- linkGroups adminActor gId newGId
+                      case mE of
+                        Just (Right ()) -> pure ()
+                        _ -> error $ "Couldn't set child " <> show (gId, newGId, mE)
+                in  shouldSatisfy (s', gId, newGId) $ \_ ->
+                      fromJust (s' ^? temp . toTabulatedGroups . ix gId)
+                        `hasLessOrEqualPermissionsTo`
+                          fromJust (s' ^? temp . toTabulatedGroups . ix newGId)
   describe "Member" $
     it "doesn't apply" True
   describe "Actor" $

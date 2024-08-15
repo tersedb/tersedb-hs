@@ -7,31 +7,24 @@ import Lib.Actions.Safe.Verify
   , canReadVersion
   , canUpdateVersion
   , conditionally
-  , canUpdateGroup
   )
 import Lib.Actions.Unsafe.Update
   ( unsafeUpdateVersionReferences
   , unsafeUpdateVersionSubscriptions
-  , unsafeUpdateGroupParent
-  , unsafeAddGroupChild
-  , unsafeRemoveGroupChild
-  , unsafeUpdateGroupChildren
   )
-import Lib.Types.Id (SpaceId, EntityId, ActorId, VersionId, GroupId)
+import Lib.Types.Id (SpaceId, EntityId, ActorId, VersionId)
 import Lib.Types.Store
   ( Shared
   , store
   , toEntities
   , toSpaces
-  , toGroups
   )
-import Lib.Types.Store.Groups (prev, nodes, next)
 import Lib.Types.Store.Space (entities)
 import Lib.Types.Store.Entity (space)
 
 import Data.HashSet (HashSet)
 import qualified Data.HashSet as HS
-import Control.Lens ((^.), at, ix, (.~), (^?), _Just)
+import Control.Lens ((^.), at, ix, (.~))
 import Control.Monad.State (MonadState (get), modify)
 import Control.Monad.Extra (andM, allM)
 
@@ -81,68 +74,3 @@ updateVersionSubscriptions updater vId subIds = do
     ]
   if not canAdjust then pure Nothing else
     Just <$> unsafeUpdateVersionSubscriptions vId subIds
-
-
-updateGroupChildren
-  :: MonadState Shared m
-  => ActorId
-  -> GroupId
-  -> HashSet GroupId
-  -> m Bool
-updateGroupChildren updater gId newChildren = do
-  s <- get
-  case s ^? store . toGroups . nodes . ix gId . next of
-    Nothing -> pure False
-    Just oldChildren -> do
-      canAdjust <- andM $
-        (canUpdateGroup updater gId) :
-        (map (canUpdateGroup updater) (HS.toList (newChildren <> oldChildren)))
-      conditionally (unsafeUpdateGroupChildren gId newChildren) canAdjust
-
-
-addGroupChild
-  :: MonadState Shared m
-  => ActorId
-  -> GroupId
-  -> GroupId
-  -> m Bool
-addGroupChild updater gId childId = do
-  canAdjust <- andM
-    [ canUpdateGroup updater gId
-    , canUpdateGroup updater childId
-    ]
-  conditionally (unsafeAddGroupChild gId childId) canAdjust
-
-
-removeGroupChild
-  :: MonadState Shared m
-  => ActorId
-  -> GroupId
-  -> GroupId
-  -> m Bool
-removeGroupChild updater gId childId = do
-  canAdjust <- andM
-    [ canUpdateGroup updater gId
-    , canUpdateGroup updater childId
-    ]
-  conditionally (unsafeRemoveGroupChild gId childId) canAdjust
-
-
-updateGroupParent
-  :: MonadState Shared m
-  => ActorId
-  -> GroupId
-  -> Maybe GroupId
-  -> m Bool
-updateGroupParent updater gId mParent = do
-  canAdjust <- andM
-    [ canUpdateGroup updater gId
-    , do  s <- get
-          case s ^? store . toGroups . nodes . ix gId . prev . _Just of
-            Nothing -> pure True
-            Just oldParent -> canUpdateGroup updater oldParent
-    , case mParent of
-        Nothing -> pure True
-        Just newParent -> canUpdateGroup updater newParent
-    ]
-  conditionally (unsafeUpdateGroupParent gId mParent) canAdjust
