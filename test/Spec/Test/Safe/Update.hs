@@ -25,7 +25,7 @@ import Lib.Actions.Safe.Update.Group
 
 import Data.Maybe (isJust, isNothing)
 import Control.Monad.Extra (unless)
-import Control.Monad.State (MonadState, execState)
+import Control.Monad.State (MonadState, execState, evalState)
 import Control.Lens ((^.), (^?), at, non, ix)
 import Test.Syd (Spec, describe, it, shouldSatisfy)
 import Test.QuickCheck
@@ -38,35 +38,84 @@ updateTests = describe "Update" $ do
   describe "Space" $
     it "doesn't apply" True
   describe "Entity" $ do
-    it "Move An Entity" $
-      property $ \(adminActor :: ActorId, adminGroup :: GroupId, aId :: ActorId, gId :: GroupId, sId :: SpaceId, sId' :: SpaceId, eId :: EntityId, vId :: VersionId) ->
-        let s = emptyShared adminActor adminGroup
-            s' = flip execState s $ do
-              setStage adminActor adminGroup aId gId
-              worked <- setUniversePermission adminActor
-                (CollectionPermissionWithExemption Read False) gId
-              unless worked $ error $ "Couldn't grant read universe permission " <> show aId
-              worked <- storeSpace adminActor sId
-              unless worked $ error $ "Couldn't store space " <> show sId
-              worked <- storeSpace adminActor sId'
-              unless worked $ error $ "Couldn't store space " <> show sId'
-              worked <- setEntityPermission adminActor Create adminGroup sId
-              unless worked $ error $ "Couldn't set entity permission " <> show sId
-              worked <- storeEntity adminActor eId sId vId
-              unless worked $ error $ "Couldn't store entity " <> show (eId, vId)
-              worked <- setEntityPermission adminActor Create gId sId'
-              unless worked $ error $ "Couldn't set entity permission " <> show sId'
-              worked <- setEntityPermission adminActor Delete gId sId
-              unless worked $ error $ "Couldn't set entity permission " <> show sId
-              worked <- updateEntitySpace aId eId sId'
-              unless worked $ error $ "Couldn't move entity " <> show eId
-        in  shouldSatisfy s' $ \_ ->
-              isNothing (s' ^. store . toSpaces . at sId . non mempty . entities . at eId)
-              && isJust (s' ^. store . toSpaces . at sId' . non mempty . entities . at eId)
-              && (s' ^? store . toEntities . ix eId . space) == Just sId'
+    describe "Should Succeed" $ do
+      it "Move An Entity to different Space" $
+        property $ \(adminActor :: ActorId, adminGroup :: GroupId, aId :: ActorId, gId :: GroupId, sId :: SpaceId, sId' :: SpaceId, eId :: EntityId, vId :: VersionId) ->
+          let s = emptyShared adminActor adminGroup
+              s' = flip execState s $ do
+                setStage adminActor adminGroup aId gId
+                worked <- setUniversePermission adminActor
+                  (CollectionPermissionWithExemption Read False) gId
+                unless worked $ error $ "Couldn't grant read universe permission " <> show aId
+                worked <- storeSpace adminActor sId
+                unless worked $ error $ "Couldn't store space " <> show sId
+                worked <- storeSpace adminActor sId'
+                unless worked $ error $ "Couldn't store space " <> show sId'
+                worked <- setEntityPermission adminActor Create adminGroup sId
+                unless worked $ error $ "Couldn't set entity permission " <> show sId
+                worked <- storeEntity adminActor eId sId vId
+                unless worked $ error $ "Couldn't store entity " <> show (eId, vId)
+                worked <- setEntityPermission adminActor Create gId sId'
+                unless worked $ error $ "Couldn't set entity permission " <> show sId'
+                worked <- setEntityPermission adminActor Delete gId sId
+                unless worked $ error $ "Couldn't set entity permission " <> show sId
+                worked <- updateEntitySpace aId eId sId'
+                unless worked $ error $ "Couldn't move entity " <> show eId
+          in  shouldSatisfy s' $ \_ ->
+                isNothing (s' ^. store . toSpaces . at sId . non mempty . entities . at eId)
+                && isJust (s' ^. store . toSpaces . at sId' . non mempty . entities . at eId)
+                && (s' ^? store . toEntities . ix eId . space) == Just sId'
+    describe "Should Fail" $ do
+      it "Move An Entity to different Space without delete access" $
+        property $ \(adminActor :: ActorId, adminGroup :: GroupId, aId :: ActorId, gId :: GroupId, sId :: SpaceId, sId' :: SpaceId, eId :: EntityId, vId :: VersionId) ->
+          let s = emptyShared adminActor adminGroup
+              go = do
+                setStage adminActor adminGroup aId gId
+                worked <- setUniversePermission adminActor
+                  (CollectionPermissionWithExemption Read False) gId
+                unless worked $ error $ "Couldn't grant read universe permission " <> show aId
+                worked <- storeSpace adminActor sId
+                unless worked $ error $ "Couldn't store space " <> show sId
+                worked <- storeSpace adminActor sId'
+                unless worked $ error $ "Couldn't store space " <> show sId'
+                worked <- setEntityPermission adminActor Create adminGroup sId
+                unless worked $ error $ "Couldn't set entity permission " <> show sId
+                worked <- storeEntity adminActor eId sId vId
+                unless worked $ error $ "Couldn't store entity " <> show (eId, vId)
+                worked <- setEntityPermission adminActor Create gId sId'
+                unless worked $ error $ "Couldn't set entity permission " <> show sId'
+                updateEntitySpace aId eId sId'
+              s' = execState go s
+          in  shouldSatisfy s' $ \_ -> evalState go s == False
+                && isJust (s' ^. store . toSpaces . at sId . non mempty . entities . at eId)
+                && isNothing (s' ^. store . toSpaces . at sId' . non mempty . entities . at eId)
+                && (s' ^? store . toEntities . ix eId . space) == Just sId
+      it "Move An Entity to different Space without create access" $
+        property $ \(adminActor :: ActorId, adminGroup :: GroupId, aId :: ActorId, gId :: GroupId, sId :: SpaceId, sId' :: SpaceId, eId :: EntityId, vId :: VersionId) ->
+          let s = emptyShared adminActor adminGroup
+              go = do
+                setStage adminActor adminGroup aId gId
+                worked <- setUniversePermission adminActor
+                  (CollectionPermissionWithExemption Read False) gId
+                unless worked $ error $ "Couldn't grant read universe permission " <> show aId
+                worked <- storeSpace adminActor sId
+                unless worked $ error $ "Couldn't store space " <> show sId
+                worked <- storeSpace adminActor sId'
+                unless worked $ error $ "Couldn't store space " <> show sId'
+                worked <- setEntityPermission adminActor Create adminGroup sId
+                unless worked $ error $ "Couldn't set entity permission " <> show sId
+                worked <- storeEntity adminActor eId sId vId
+                unless worked $ error $ "Couldn't store entity " <> show (eId, vId)
+                worked <- setEntityPermission adminActor Delete gId sId
+                unless worked $ error $ "Couldn't set entity permission " <> show sId
+                updateEntitySpace aId eId sId'
+              s' = execState go s
+          in  shouldSatisfy s' $ \_ -> evalState go s == False
+                && isJust (s' ^. store . toSpaces . at sId . non mempty . entities . at eId)
+                && isNothing (s' ^. store . toSpaces . at sId' . non mempty . entities . at eId)
+                && (s' ^? store . toEntities . ix eId . space) == Just sId
     -- updating an entity occurs when you store a version or modify the set of an entity's versions
     -- or changing what space it belongs to (requires create/entity rights on target space)
-    pure ()
   describe "Version" $ do
     -- updating a version occurs when you modify an existing one; still subject to modifying the
     -- entity by extension. Modifying a version - changing its references / subscriptions,

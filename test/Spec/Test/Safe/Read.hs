@@ -9,6 +9,7 @@ import Lib.Types.Id (GroupId, ActorId, SpaceId, EntityId, VersionId)
 import Lib.Types.Permission
   ( CollectionPermission (..)
   , CollectionPermissionWithExemption (..)
+  , SinglePermission (NonExistent)
   )
 import Lib.Types.Store
   ( Shared
@@ -24,6 +25,8 @@ import Lib.Actions.Safe.Update.Group
   , setRecruiterPermission
   , setMemberPermission
   , setEntityPermission
+  , setSpacePermission
+  , setGroupPermission
   )
 import Lib.Actions.Safe.Verify.SpaceAndEntity
   ( canReadSpace
@@ -173,7 +176,7 @@ readTests = describe "Read" $ do
             s' = execState go s
         in  shouldSatisfy (s', aId, gId) $ \_ -> evalState go s == True
   describe "Should Fail" $ do
-    it "Spaces when explicit" $
+    it "Spaces when explicit via universe" $
       property $ \(adminActor :: ActorId, adminGroup :: GroupId, sId :: SpaceId, aId :: ActorId, gId:: GroupId) ->
         let s = emptyShared adminActor adminGroup
             go :: State Shared Bool
@@ -184,6 +187,22 @@ readTests = describe "Read" $ do
               worked <- setUniversePermission adminActor
                 (CollectionPermissionWithExemption Blind False) gId
               unless worked $ error $ "Couldn't set universe permission " <> show gId
+              canReadSpace aId sId
+            s' = execState go s
+        in  shouldSatisfy (s', aId, gId, sId) $ \_ -> evalState go s == False
+    it "Spaces when explicit" $
+      property $ \(adminActor :: ActorId, adminGroup :: GroupId, sId :: SpaceId, aId :: ActorId, gId:: GroupId) ->
+        let s = emptyShared adminActor adminGroup
+            go :: State Shared Bool
+            go = do
+              setup adminActor adminGroup aId gId
+              worked <- storeSpace adminActor sId
+              unless worked $ error $ "Couldn't make space " <> show sId
+              worked <- setUniversePermission adminActor
+                (CollectionPermissionWithExemption Read False) gId
+              unless worked $ error $ "Couldn't set universe permission " <> show gId
+              worked <- setSpacePermission adminActor (Just NonExistent) gId sId
+              unless worked $ error $ "Couldn't set spaces permission " <> show (gId, sId)
               canReadSpace aId sId
             s' = execState go s
         in  shouldSatisfy (s', aId, gId, sId) $ \_ -> evalState go s == False
@@ -266,7 +285,7 @@ readTests = describe "Read" $ do
               canReadEntity aId eId
             s' = execState go s
         in  shouldSatisfy (s', aId, gId, sId) $ \_ -> evalState go s == False
-    it "Group when explicit" $
+    it "Group when explicit via universe" $
       property $ \(adminActor :: ActorId, adminGroup :: GroupId, gId' :: GroupId, aId :: ActorId, gId:: GroupId) ->
         let s = emptyShared adminActor adminGroup
             go :: State Shared Bool
@@ -277,6 +296,22 @@ readTests = describe "Read" $ do
               worked <- setOrganizationPermission adminActor
                 (CollectionPermissionWithExemption Blind False) gId
               unless worked $ error $ "Couldn't set organization permission " <> show gId
+              canReadGroup aId gId'
+            s' = execState go s
+        in  shouldSatisfy (s', aId, gId, gId') $ \_ -> evalState go s == False
+    it "Group when explicit" $
+      property $ \(adminActor :: ActorId, adminGroup :: GroupId, gId' :: GroupId, aId :: ActorId, gId:: GroupId) ->
+        let s = emptyShared adminActor adminGroup
+            go :: State Shared Bool
+            go = do
+              setup adminActor adminGroup aId gId
+              worked <- storeGroup adminActor gId'
+              unless worked $ error $ "Couldn't make group " <> show gId'
+              worked <- setOrganizationPermission adminActor
+                (CollectionPermissionWithExemption Read False) gId
+              unless worked $ error $ "Couldn't set organization permission " <> show gId
+              worked <- setGroupPermission adminActor (Just NonExistent) gId gId'
+              unless worked $ error $ "Couldn't set group permission " <> show (gId, gId')
               canReadGroup aId gId'
             s' = execState go s
         in  shouldSatisfy (s', aId, gId, gId') $ \_ -> evalState go s == False

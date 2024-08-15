@@ -210,12 +210,29 @@ but it suits the purposes it was designed for well enough.
 
 ## Practical Issues
 
-- Because this project is intended to be run on a separate service to your main application
-  and database, and communication between them is performed via an asynchronous channel like
-  HTTP, no atomicity guarantees can be made between your application data and this entity
-  management system. Due to this, there could be race conditions where authority was restricted
-  in TerseDB, but wasn't witnessed by a query, and thus access was granted - due to the latency
-  between TerseDB and your application / database. I still think this project is a valuable concept
-  for smaller projects, but for bigger ones where atomic consistency is a requirement, I advise
-  you to do your research on how to embed your required security policies directly in your
-  database.
+### Atomicity
+
+Because this project is intended to be run on a separate service to your main application
+and database, and communication between them is performed via an asynchronous channel like
+HTTP, no atomicity guarantees can be made between your application data and this entity
+management system. Due to this, there could be race conditions where authority was restricted
+in TerseDB, but wasn't witnessed by a query, and thus access was granted - due to the latency
+between TerseDB and your application / database. I still think this project is a valuable concept
+for smaller projects, but for bigger ones where atomic consistency is a requirement, I advise
+you to do your research on how to embed your required security policies directly in your
+database.
+
+However, there's a slight solution you could apply:
+
+```mermaid
+flowchart LR
+    terse{{TerseDB}}
+    server[/Server\]
+    db[(Database)]
+    terse <--> server
+    server <--> db
+```
+
+A consideration you could take is that, if you've applied a _permission change_ to `TerseDB`
+from `Server`, you could _throw away_ all pending responses and re-try them after receiving
+the response from the permission change; but this is expensive.
