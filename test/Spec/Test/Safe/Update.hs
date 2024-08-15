@@ -1,5 +1,6 @@
 module Spec.Test.Safe.Update where
 
+import Spec.Sample.Store (SampleStore, storeSample)
 import Lib.Types.Id (GroupId, ActorId, SpaceId, EntityId, VersionId)
 import Lib.Types.Permission
   ( CollectionPermission (..)
@@ -11,25 +12,30 @@ import Lib.Types.Store
   , toSpaces
   , toEntities
   , toSpaces
+  , toGroups
   )
 import Lib.Types.Store.Space (entities)
 import Lib.Types.Store.Entity (space)
+import Lib.Types.Store.Groups (next, prev, nodes)
 import Lib.Actions.Safe (emptyShared)
 import Lib.Actions.Safe.Store (storeActor, storeSpace, storeGroup, addMember, storeEntity)
-import Lib.Actions.Safe.Update (updateEntitySpace)
+import Lib.Actions.Safe.Update (updateEntitySpace, updateGroupParent)
 import Lib.Actions.Safe.Update.Group
   ( setUniversePermission
   , setMemberPermission
   , setEntityPermission
   )
 
-import Data.Maybe (isJust, isNothing)
+import Data.Maybe (isJust, isNothing, fromJust)
+import qualified Data.HashMap.Strict as HM
 import Control.Monad.Extra (unless)
 import Control.Monad.State (MonadState, execState, evalState)
-import Control.Lens ((^.), (^?), at, non, ix)
+import Control.Lens ((^.), (^?), at, non, ix, _Just)
 import Test.Syd (Spec, describe, it, shouldSatisfy)
 import Test.QuickCheck
   ( property
+  , elements
+  , forAll
   )
 
 
@@ -123,7 +129,19 @@ updateTests = describe "Update" $ do
     pure ()
   describe "Group" $ do
     -- updating what it inherits from / who it inherits to
-    pure ()
+    describe "Should Succeed" $ do
+      it "deleting parent/child relationship should affect both nodes, and unrelate them" $
+        property $ \(xs :: SampleStore, adminActor :: ActorId, adminGroup :: GroupId) ->
+          let s = storeSample xs adminActor adminGroup
+              gsWithParent = HM.filter (\g -> isJust (g ^. prev)) $ s ^. store . toGroups . nodes
+          in  if null gsWithParent then property True else
+              forAll (elements (HM.toList gsWithParent)) $ \(gId :: GroupId, g) ->
+                let s' = flip execState s $ do
+                      worked <- updateGroupParent adminActor gId Nothing
+                      unless worked $ error $ "Couldn't set group parent " <> show gId
+                    parentId = fromJust $ g ^. prev
+                in  (s' ^? store . toGroups . nodes . ix gId . prev . _Just) == Nothing
+                      && (s' ^? store . toGroups . nodes . ix parentId . next . ix gId) == Nothing
   describe "Member" $
     it "doesn't apply" True
   describe "Actor" $

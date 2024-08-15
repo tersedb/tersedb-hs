@@ -1,14 +1,3 @@
-{-# LANGUAGE
-    GeneralizedNewtypeDeriving
-  , RecordWildCards
-  , DerivingVia
-  , DataKinds
-  , DeriveGeneric
-  , RankNTypes
-  , TemplateHaskell
-  , FlexibleContexts
-  #-}
-
 module Lib.Actions.Safe.Store where
 
 import Lib.Actions.Safe.Verify
@@ -37,7 +26,7 @@ import Lib.Types.Store
   , toEntities
   , toVersions
   )
-import Lib.Types.Store.Entity (space, versions)
+import Lib.Types.Store.Entity (versions)
 import Lib.Types.Store.Version (genesisVersion, forkVersion, entity)
 
 import qualified Data.List.NonEmpty as NE

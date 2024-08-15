@@ -32,8 +32,6 @@ import Lib.Types.Store
 import Lib.Types.Store.Tabulation.Group
   ( TabulatedPermissionsForGroup (..)
   , forSpaces
-  , forGroups
-  , forOrganization
   , forUniverse
   )
 import Lib.Types.Store.Groups

@@ -15,8 +15,7 @@ import Lib.Types.Store
   , toSpacesHiddenTo
   )
 import Lib.Types.Store.Tabulation.Group
-  ( TabulatedPermissionsForGroup
-  , forUniverse
+  ( forUniverse
   , forSpaces
   , forEntities
   )
@@ -26,12 +25,12 @@ import Lib.Types.Id (ActorId, SpaceId, EntityId, VersionId)
 import Lib.Types.Permission
   ( CollectionPermission (..)
   , CollectionPermissionWithExemption (..)
-  , SinglePermission (NonExistent)
+  , SinglePermission
   , escalate
   , collectionPermission
   )
 
-import Data.Maybe (fromMaybe, fromJust, isNothing, isJust)
+import Data.Maybe (isJust)
 import qualified Data.HashSet as HS
 import Control.Lens ((^.), at, non, ix)
 import Control.Monad.State (MonadState, get)

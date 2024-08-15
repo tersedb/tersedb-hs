@@ -3,7 +3,6 @@ module Lib.Actions.Unsafe.Store where
 import Lib.Actions.Tabulation
   ( LoadRefsAndSubsError
   , loadRefsAndSubs
-  , resetTabulation
   , updateTabulationStartingAt
   )
 import Lib.Types.Id (GroupId, SpaceId, EntityId, VersionId, ActorId)
