@@ -23,13 +23,14 @@ import Lib.Types.Store
 import Lib.Types.Store.Space (entities)
 import Lib.Types.Store.Entity (space)
 import Lib.Types.Store.Groups (next, prev, nodes)
-import Lib.Types.Store.Version (references, entity)
+import Lib.Types.Store.Version (references, entity, prevVersion)
 import Lib.Types.Store.Tabulation.Group (hasLessOrEqualPermissionsTo)
 import Lib.Actions.Safe (emptyShared)
 import Lib.Actions.Safe.Store (storeActor, storeSpace, storeGroup, addMember, storeEntity)
 import Lib.Actions.Safe.Update
   ( updateEntitySpace
   , addReference
+  , removeReference
   )
 import Lib.Actions.Safe.Update.Group
   ( setUniversePermission
@@ -42,6 +43,7 @@ import Lib.Actions.Safe.Update.Group
 
 import Data.Maybe (isJust, isNothing, fromJust)
 import qualified Data.HashMap.Strict as HM
+import qualified Data.HashSet as HS
 import Control.Monad.Extra (unless)
 import Control.Monad.State (MonadState, execState, evalState)
 import Control.Lens ((^.), (^?), at, non, ix, _Just)
@@ -149,7 +151,7 @@ updateTests = describe "Update" $ do
                           mE <- addReference adminActor vId refId
                           case mE of
                             Just (Right ()) -> pure ()
-                            _ -> error $ "Couldn't add subscription " <> show (vId, refId, mE)
+                            _ -> error $ "Couldn't add reference " <> show (vId, refId, mE)
                     in  shouldSatisfy (s', vId, refId) $ \_ ->
                           isJust (s' ^? store . toVersions . ix vId . references . ix refId)
                           && isJust (s' ^? temp . toReferencesFrom . ix refId . ix vId)
@@ -160,6 +162,30 @@ updateTests = describe "Update" $ do
                                       (fromJust $ s' ^? store . toVersions . ix refId . entity)
                                      . space
                                      ) . ix vId)
+      it "Remove Reference" $
+        property $ \(xs :: SampleStore, adminActor :: ActorId, adminGroup :: GroupId) ->
+          let s = storeSample xs adminActor adminGroup
+              refs = HM.mapMaybeWithKey overVIds (s ^. temp . toReferencesFrom)
+                where
+                  overVIds refId vIds =
+                    let elligibleVIds = HS.filter (not . isVIdForkedFromRefId) vIds
+                          where
+                            isVIdForkedFromRefId vId =
+                              (s ^? store . toVersions . ix vId . prevVersion . _Just)
+                                == Just refId
+                    in  if null elligibleVIds then Nothing else Just elligibleVIds
+          in  if HM.size refs < 2 then property True else
+                forAll (elements $ HM.keys refs) $ \refId ->
+                  forAll (elements . HS.toList . fromJust $ HM.lookup refId refs) $ \vId ->
+                    -- FIXME select a vId that doesn't fork from refId
+                    let s' = flip execState s $ do
+                          mE <- removeReference adminActor vId refId
+                          case mE of
+                            Just (Right ()) -> pure ()
+                            _ -> error $ "Couldn't remove reference " <> show (vId, refId, mE)
+                    in  shouldSatisfy (s', vId, refId) $ \_ ->
+                          isNothing (s' ^? store . toVersions . ix vId . references . ix refId)
+                          && isNothing (s' ^? temp . toReferencesFrom . ix refId . ix vId)
     -- updating a version occurs when you modify an existing one; still subject to modifying the
     -- entity by extension. Modifying a version - changing its references / subscriptions,
     -- changing what it forks from

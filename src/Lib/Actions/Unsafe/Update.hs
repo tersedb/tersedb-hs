@@ -4,6 +4,7 @@ import Lib.Actions.Tabulation (updateTabulationStartingAt)
 import Lib.Types.Id (VersionId, EntityId, GroupId)
 import Lib.Types.Store
   ( Shared
+  , Temp
   , store
   , temp
   , toVersions
@@ -16,7 +17,7 @@ import Lib.Types.Store
   , toSubscriptionsFromSpaces
   )
 import Lib.Types.Store.Groups (prev, nodes, next)
-import Lib.Types.Store.Version (entity, references, subscriptions)
+import Lib.Types.Store.Version (entity, references, subscriptions, prevVersion)
 import Lib.Types.Store.Entity (space)
 
 import Data.HashSet (HashSet)
@@ -33,25 +34,50 @@ unsafeUpdateVersionReferences
   -> m (Either (Either VersionId EntityId) ())
 unsafeUpdateVersionReferences vId refIds = do
   s <- get
-  eTemp' <- (\f -> foldlM f (Right (s ^. temp)) (HS.toList refIds)) $ \eTemp refId ->
-    case eTemp of
-      Left e -> pure (Left e)
-      Right t -> case s ^. store . toVersions . at refId of
-        Nothing -> pure . Left $ Left refId
-        Just v -> case s ^. store . toEntities . at (v ^. entity) of
-          Nothing -> pure . Left . Right $ v ^. entity
-          Just e -> pure . Right
-            $ t
-            & toReferencesFrom . at refId . non mempty . at vId .~ Just ()
-            & toReferencesFromEntities . at (v ^. entity) . non mempty . at vId .~ Just ()
-            & toReferencesFromSpaces . at (e ^. space) . non mempty . at vId .~ Just ()
-  case eTemp' of
-    Left e -> pure (Left e)
-    Right t -> do
-      put $ s
-          & temp .~ t
-          & store . toVersions . ix vId . references .~ refIds
-      pure (Right ())
+  case s ^. store . toVersions . at vId of
+    Nothing -> pure . Left $ Left vId
+    Just v -> do
+      let oldRefs = v ^. references
+          refsToAdd = refIds `HS.difference` oldRefs
+          refsToRemove = (maybe id HS.delete (v ^. prevVersion)) (oldRefs `HS.difference` refIds)
+
+          addNewRefs :: Temp -> VersionId -> Either (Either VersionId EntityId) Temp
+          addNewRefs t refId = case s ^. store . toVersions . at refId of
+            Nothing -> Left $ Left refId
+            Just v -> case s ^. store . toEntities . at (v ^. entity) of
+              Nothing -> Left . Right $ v ^. entity
+              Just e -> pure
+                $ t
+                & toReferencesFrom . at refId . non mempty . at vId .~ Just ()
+                & toReferencesFromEntities . at (v ^. entity) . non mempty . at vId .~ Just ()
+                & toReferencesFromSpaces . at (e ^. space) . non mempty . at vId .~ Just ()
+
+          removeRefs :: Temp -> VersionId -> Either (Either VersionId EntityId) Temp
+          removeRefs t refId = case s ^. store . toVersions . at refId of
+            Nothing -> Left $ Left refId
+            Just v -> case s ^. store . toEntities . at (v ^. entity) of
+              Nothing -> Left . Right $ v ^. entity
+              Just e ->
+                let t' = t
+                      & toReferencesFrom . ix refId . at vId .~ Nothing
+                      & toReferencesFromEntities . ix (v ^. entity) . at vId .~ Nothing
+                      & toReferencesFromSpaces . ix (e ^. space) . at vId .~ Nothing
+                    t'' = t'
+                      & toReferencesFrom . at refId
+                      %~ maybe Nothing (\x -> if null x then Nothing else Just x)
+                      & toReferencesFromEntities . at (v ^. entity)
+                      %~ maybe Nothing (\x -> if null x then Nothing else Just x)
+                      & toReferencesFromSpaces . at (e ^. space)
+                      %~ maybe Nothing (\x -> if null x then Nothing else Just x)
+                in  pure t''
+      case do t <- foldlM addNewRefs (s ^. temp) (HS.toList refsToAdd)
+              foldlM removeRefs t (HS.toList refsToRemove) of
+        Left e -> pure (Left e)
+        Right t -> do
+          put $ s
+              & temp .~ t
+              & store . toVersions . ix vId . references .~ refIds
+          pure (Right ())
 
 
 unsafeAddReference
