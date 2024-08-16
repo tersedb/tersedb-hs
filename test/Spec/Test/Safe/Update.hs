@@ -16,11 +16,14 @@ import Lib.Types.Store
   , toGroups
   , toVersions
   , toTabulatedGroups
+  , toReferencesFrom
+  , toReferencesFromEntities
+  , toReferencesFromSpaces
   )
 import Lib.Types.Store.Space (entities)
 import Lib.Types.Store.Entity (space)
 import Lib.Types.Store.Groups (next, prev, nodes)
-import Lib.Types.Store.Version (references)
+import Lib.Types.Store.Version (references, entity)
 import Lib.Types.Store.Tabulation.Group (hasLessOrEqualPermissionsTo)
 import Lib.Actions.Safe (emptyShared)
 import Lib.Actions.Safe.Store (storeActor, storeSpace, storeGroup, addMember, storeEntity)
@@ -149,7 +152,14 @@ updateTests = describe "Update" $ do
                             _ -> error $ "Couldn't add subscription " <> show (vId, refId, mE)
                     in  shouldSatisfy (s', vId, refId) $ \_ ->
                           isJust (s' ^? store . toVersions . ix vId . references . ix refId)
-                          -- && isJust (s') FIXME check subscription is present from refId
+                          && isJust (s' ^? temp . toReferencesFrom . ix refId . ix vId)
+                          && isJust (s' ^? temp . toReferencesFromEntities
+                                . ix (fromJust $ s' ^? store . toVersions . ix refId . entity) . ix vId)
+                          && isJust (s' ^? temp . toReferencesFromSpaces
+                                . ix (fromJust $ s' ^? store . toEntities . ix
+                                      (fromJust $ s' ^? store . toVersions . ix refId . entity)
+                                     . space
+                                     ) . ix vId)
     -- updating a version occurs when you modify an existing one; still subject to modifying the
     -- entity by extension. Modifying a version - changing its references / subscriptions,
     -- changing what it forks from
