@@ -19,11 +19,13 @@ import Lib.Types.Store
   , toReferencesFrom
   , toReferencesFromEntities
   , toReferencesFromSpaces
+  , toSubscriptionsFrom
+  , toSubscriptionsFromSpaces
   )
 import Lib.Types.Store.Space (entities)
-import Lib.Types.Store.Entity (space)
+import Lib.Types.Store.Entity (space, versions)
 import Lib.Types.Store.Groups (next, prev, nodes)
-import Lib.Types.Store.Version (references, entity, prevVersion)
+import Lib.Types.Store.Version (references, entity, prevVersion, subscriptions)
 import Lib.Types.Store.Tabulation.Group (hasLessOrEqualPermissionsTo)
 import Lib.Actions.Safe (emptyShared)
 import Lib.Actions.Safe.Store (storeActor, storeSpace, storeGroup, addMember, storeEntity)
@@ -31,6 +33,8 @@ import Lib.Actions.Safe.Update
   ( updateEntitySpace
   , addReference
   , removeReference
+  , addSubscription
+  , removeSubscription
   )
 import Lib.Actions.Safe.Update.Group
   ( setUniversePermission
@@ -44,6 +48,7 @@ import Lib.Actions.Safe.Update.Group
 import Data.Maybe (isJust, isNothing, fromJust)
 import qualified Data.HashMap.Strict as HM
 import qualified Data.HashSet as HS
+import qualified Data.List.NonEmpty as NE
 import Control.Monad.Extra (unless)
 import Control.Monad.State (MonadState, execState, evalState)
 import Control.Lens ((^.), (^?), at, non, ix, _Just)
@@ -186,6 +191,43 @@ updateTests = describe "Update" $ do
                     in  shouldSatisfy (s', vId, refId) $ \_ ->
                           isNothing (s' ^? store . toVersions . ix vId . references . ix refId)
                           && isNothing (s' ^? temp . toReferencesFrom . ix refId . ix vId)
+      it "Add Subscription" $
+        property $ \(xs :: SampleStore, adminActor :: ActorId, adminGroup :: GroupId) ->
+          let s = storeSample xs adminActor adminGroup
+              entities =  s ^. store . toEntities
+              selectVersionAndEntity = do
+                (eId, e) <- elements $ HM.toList entities
+                vId <- elements . NE.toList $ e ^. versions
+                pure (eId, vId)
+          in  if HM.size entities < 2 then property True else
+                forAll selectVersionAndEntity $ \(eIdOfVId, vId) ->
+                  forAll (elements . HM.keys $ HM.delete eIdOfVId entities) $ \subId ->
+                    let s' = flip execState s $ do
+                          mE <- addSubscription adminActor vId subId
+                          case mE of
+                            Just (Right ()) -> pure ()
+                            _ -> error $ "Couldn't add subscription " <> show (vId, subId, mE)
+                    in  shouldSatisfy (s', vId, subId) $ \_ ->
+                          isJust (s' ^? store . toVersions . ix vId . subscriptions . ix subId)
+                          && isJust (s' ^? temp . toSubscriptionsFrom . ix subId . ix vId)
+                          && isJust (s' ^? temp . toSubscriptionsFromSpaces
+                                . ix (fromJust $ s' ^? store . toEntities . ix subId . space) . ix vId)
+      it "Remove Subscription" $
+        property $ \(xs :: SampleStore, adminActor :: ActorId, adminGroup :: GroupId) ->
+          let s = storeSample xs adminActor adminGroup
+              subs = s ^. temp . toSubscriptionsFrom
+          in  if HM.size subs < 1 then property True else
+                forAll (elements $ HM.keys subs) $ \subId ->
+                  forAll (elements . HS.toList . fromJust $ HM.lookup subId subs) $ \vId ->
+                    -- FIXME select a vId that doesn't fork from refId
+                    let s' = flip execState s $ do
+                          mE <- removeSubscription adminActor vId subId
+                          case mE of
+                            Just (Right ()) -> pure ()
+                            _ -> error $ "Couldn't remove subscription " <> show (vId, subId, mE)
+                    in  shouldSatisfy (s', vId, subId) $ \_ ->
+                          isNothing (s' ^? store . toVersions . ix vId . subscriptions . ix subId)
+                          && isNothing (s' ^? temp . toSubscriptionsFrom . ix subId . ix vId)
     -- updating a version occurs when you modify an existing one; still subject to modifying the
     -- entity by extension. Modifying a version - changing its references / subscriptions,
     -- changing what it forks from

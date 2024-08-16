@@ -98,7 +98,7 @@ updateVersionSubscriptions
   => ActorId
   -> VersionId
   -> HashSet EntityId
-  -> m (Maybe (Either EntityId ()))
+  -> m (Maybe (Either (Either VersionId EntityId) ()))
 updateVersionSubscriptions updater vId subIds = do
   canAdjust <- andM
     [ allM (canReadEntity updater) (HS.toList subIds)

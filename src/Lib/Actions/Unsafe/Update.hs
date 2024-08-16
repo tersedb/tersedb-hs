@@ -107,25 +107,46 @@ unsafeUpdateVersionSubscriptions
   :: MonadState Shared m
   => VersionId
   -> HashSet EntityId
-  -> m (Either EntityId ())
+  -> m (Either (Either VersionId EntityId) ())
 unsafeUpdateVersionSubscriptions vId subIds = do
   s <- get
-  eTemp' <- (\f -> foldlM f (Right (s ^. temp)) (HS.toList subIds)) $ \eTemp subId ->
-    case eTemp of
-      Left e -> pure (Left e)
-      Right t -> case s ^. store . toEntities . at subId of
-        Nothing -> pure $ Left subId
-        Just e -> pure . Right
-          $ t
-          & toSubscriptionsFrom . at subId . non mempty . at vId .~ Just ()
-          & toSubscriptionsFromSpaces . at (e ^. space) . non mempty . at vId .~ Just ()
-  case eTemp' of
-    Left e -> pure (Left e)
-    Right t -> do
-      put $ s
-          & temp .~ t
-          & store . toVersions . ix vId . subscriptions .~ subIds
-      pure (Right ())
+  case s ^. store . toVersions . at vId of
+    Nothing -> pure . Left $ Left vId
+    Just v -> do
+      let oldSubs = v ^. subscriptions
+          subsToAdd = subIds `HS.difference` oldSubs
+          subsToRemove = oldSubs `HS.difference` subIds
+
+          addNewSubs :: Temp -> EntityId -> Either (Either VersionId EntityId) Temp
+          addNewSubs t subId = case s ^. store . toEntities . at subId of
+            Nothing -> Left $ Right subId
+            Just e -> pure
+              $ t
+              & toSubscriptionsFrom . at subId . non mempty . at vId .~ Just ()
+              & toSubscriptionsFromSpaces . at (e ^. space) . non mempty . at vId .~ Just ()
+
+          removeSubs :: Temp -> EntityId -> Either (Either VersionId EntityId) Temp
+          removeSubs t subId = case s ^. store . toEntities . at subId of
+            Nothing -> Left . Right $ subId
+            Just e ->
+              let t' = t
+                    & toSubscriptionsFrom . ix subId . at vId .~ Nothing
+                    & toSubscriptionsFromSpaces . ix (e ^. space) . at vId .~ Nothing
+                  t'' = t'
+                    & toSubscriptionsFrom . at subId
+                    %~ maybe Nothing (\x -> if null x then Nothing else Just x)
+                    & toSubscriptionsFromSpaces . at (e ^. space)
+                    %~ maybe Nothing (\x -> if null x then Nothing else Just x)
+              in  pure t''
+
+      case do t <- foldlM addNewSubs (s ^. temp) (HS.toList subsToAdd)
+              foldlM removeSubs t (HS.toList subsToRemove) of
+        Left e -> pure (Left e)
+        Right t -> do
+          put $ s
+              & temp .~ t
+              & store . toVersions . ix vId . subscriptions .~ subIds
+          pure (Right ())
 
 
 unsafeAddSubscription
@@ -137,7 +158,7 @@ unsafeAddSubscription vId subId = do
   s <- get
   case s ^? store . toVersions . ix vId . subscriptions of
     Nothing -> pure (Left (Left vId))
-    Just subs -> (_Left %~ Right) <$> unsafeUpdateVersionSubscriptions vId (HS.insert subId subs)
+    Just subs -> unsafeUpdateVersionSubscriptions vId (HS.insert subId subs)
 
 unsafeRemoveSubscription
   :: MonadState Shared m
@@ -148,4 +169,4 @@ unsafeRemoveSubscription vId subId = do
   s <- get
   case s ^? store . toVersions . ix vId . subscriptions of
     Nothing -> pure (Left (Left vId))
-    Just subs -> (_Left %~ Right) <$> unsafeUpdateVersionSubscriptions vId (HS.delete subId subs)
+    Just subs -> unsafeUpdateVersionSubscriptions vId (HS.delete subId subs)
