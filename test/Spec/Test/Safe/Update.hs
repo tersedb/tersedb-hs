@@ -14,16 +14,19 @@ import Lib.Types.Store
   , toEntities
   , toSpaces
   , toGroups
+  , toVersions
   , toTabulatedGroups
   )
 import Lib.Types.Store.Space (entities)
 import Lib.Types.Store.Entity (space)
 import Lib.Types.Store.Groups (next, prev, nodes)
+import Lib.Types.Store.Version (references)
 import Lib.Types.Store.Tabulation.Group (hasLessOrEqualPermissionsTo)
 import Lib.Actions.Safe (emptyShared)
 import Lib.Actions.Safe.Store (storeActor, storeSpace, storeGroup, addMember, storeEntity)
 import Lib.Actions.Safe.Update
   ( updateEntitySpace
+  , addReference
   )
 import Lib.Actions.Safe.Update.Group
   ( setUniversePermission
@@ -131,10 +134,25 @@ updateTests = describe "Update" $ do
     -- updating an entity occurs when you store a version or modify the set of an entity's versions
     -- or changing what space it belongs to (requires create/entity rights on target space)
   describe "Version" $ do
+    describe "Should Succeed" $ do
+      it "Add Reference" $
+        property $ \(xs :: SampleStore, adminActor :: ActorId, adminGroup :: GroupId) ->
+          let s = storeSample xs adminActor adminGroup
+              versions =  s ^. store . toVersions
+          in  if HM.size versions < 2 then property True else
+                forAll (elements $ HM.keys versions) $ \vId ->
+                  forAll (elements . HM.keys $ HM.delete vId versions) $ \refId ->
+                    let s' = flip execState s $ do
+                          mE <- addReference adminActor vId refId
+                          case mE of
+                            Just (Right ()) -> pure ()
+                            _ -> error $ "Couldn't add subscription " <> show (vId, refId, mE)
+                    in  shouldSatisfy (s', vId, refId) $ \_ ->
+                          isJust (s' ^? store . toVersions . ix vId . references . ix refId)
+                          -- && isJust (s') FIXME check subscription is present from refId
     -- updating a version occurs when you modify an existing one; still subject to modifying the
     -- entity by extension. Modifying a version - changing its references / subscriptions,
     -- changing what it forks from
-    pure ()
   describe "Group" $ do
     -- updating what it inherits from / who it inherits to
     describe "Should Succeed" $ do

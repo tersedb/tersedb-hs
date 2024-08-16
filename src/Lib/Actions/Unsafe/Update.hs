@@ -22,7 +22,7 @@ import Lib.Types.Store.Entity (space)
 import Data.HashSet (HashSet)
 import qualified Data.HashSet as HS
 import Data.Foldable (foldlM)
-import Control.Lens ((^.), (.~), (&), at, ix, non)
+import Control.Lens ((^.), (.~), (&), (^?), (%~), at, ix, non, _Left)
 import Control.Monad.State (MonadState (get, put), modify)
 
 
@@ -54,6 +54,29 @@ unsafeUpdateVersionReferences vId refIds = do
       pure (Right ())
 
 
+unsafeAddReference
+  :: MonadState Shared m
+  => VersionId
+  -> VersionId
+  -> m (Either (Either VersionId EntityId) ())
+unsafeAddReference vId refId = do
+  s <- get
+  case s ^? store . toVersions . ix vId . references of
+    Nothing -> pure (Left (Left vId))
+    Just refs -> unsafeUpdateVersionReferences vId (HS.insert refId refs)
+
+unsafeRemoveReference
+  :: MonadState Shared m
+  => VersionId
+  -> VersionId
+  -> m (Either (Either VersionId EntityId) ())
+unsafeRemoveReference vId refId = do
+  s <- get
+  case s ^? store . toVersions . ix vId . references of
+    Nothing -> pure (Left (Left vId))
+    Just refs -> unsafeUpdateVersionReferences vId (HS.delete refId refs)
+
+
 unsafeUpdateVersionSubscriptions
   :: MonadState Shared m
   => VersionId
@@ -79,3 +102,24 @@ unsafeUpdateVersionSubscriptions vId subIds = do
       pure (Right ())
 
 
+unsafeAddSubscription
+  :: MonadState Shared m
+  => VersionId
+  -> EntityId
+  -> m (Either (Either VersionId EntityId) ())
+unsafeAddSubscription vId subId = do
+  s <- get
+  case s ^? store . toVersions . ix vId . subscriptions of
+    Nothing -> pure (Left (Left vId))
+    Just subs -> (_Left %~ Right) <$> unsafeUpdateVersionSubscriptions vId (HS.insert subId subs)
+
+unsafeRemoveSubscription
+  :: MonadState Shared m
+  => VersionId
+  -> EntityId
+  -> m (Either (Either VersionId EntityId) ())
+unsafeRemoveSubscription vId subId = do
+  s <- get
+  case s ^? store . toVersions . ix vId . subscriptions of
+    Nothing -> pure (Left (Left vId))
+    Just subs -> (_Left %~ Right) <$> unsafeUpdateVersionSubscriptions vId (HS.delete subId subs)

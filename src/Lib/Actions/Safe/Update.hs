@@ -10,7 +10,11 @@ import Lib.Actions.Safe.Verify
   )
 import Lib.Actions.Unsafe.Update
   ( unsafeUpdateVersionReferences
+  , unsafeAddReference
+  , unsafeRemoveReference
   , unsafeUpdateVersionSubscriptions
+  , unsafeAddSubscription
+  , unsafeRemoveSubscription
   )
 import Lib.Types.Id (SpaceId, EntityId, ActorId, VersionId)
 import Lib.Types.Store
@@ -60,6 +64,34 @@ updateVersionReferences updater vId refIds = do
   if not canAdjust then pure Nothing else
     Just <$> unsafeUpdateVersionReferences vId refIds
 
+addReference
+  :: MonadState Shared m
+  => ActorId
+  -> VersionId
+  -> VersionId
+  -> m (Maybe (Either (Either VersionId EntityId) ()))
+addReference updater vId refId = do
+  canAdjust <- andM
+    [ canReadVersion updater refId
+    , canUpdateVersion updater vId
+    ]
+  if not canAdjust then pure Nothing else
+    Just <$> unsafeAddReference vId refId
+
+removeReference
+  :: MonadState Shared m
+  => ActorId
+  -> VersionId
+  -> VersionId
+  -> m (Maybe (Either (Either VersionId EntityId) ()))
+removeReference updater vId refId = do
+  canAdjust <- andM
+    [ canReadVersion updater refId
+    , canUpdateVersion updater vId
+    ]
+  if not canAdjust then pure Nothing else
+    Just <$> unsafeRemoveReference vId refId
+
 
 updateVersionSubscriptions
   :: MonadState Shared m
@@ -74,3 +106,31 @@ updateVersionSubscriptions updater vId subIds = do
     ]
   if not canAdjust then pure Nothing else
     Just <$> unsafeUpdateVersionSubscriptions vId subIds
+
+addSubscription
+  :: MonadState Shared m
+  => ActorId
+  -> VersionId
+  -> EntityId
+  -> m (Maybe (Either (Either VersionId EntityId) ()))
+addSubscription updater vId subId = do
+  canAdjust <- andM
+    [ canReadEntity updater subId
+    , canUpdateVersion updater vId
+    ]
+  if not canAdjust then pure Nothing else
+    Just <$> unsafeAddSubscription vId subId
+
+removeSubscription
+  :: MonadState Shared m
+  => ActorId
+  -> VersionId
+  -> EntityId
+  -> m (Maybe (Either (Either VersionId EntityId) ()))
+removeSubscription updater vId subId = do
+  canAdjust <- andM
+    [ canReadEntity updater subId
+    , canUpdateVersion updater vId
+    ]
+  if not canAdjust then pure Nothing else
+    Just <$> unsafeRemoveSubscription vId subId
