@@ -170,3 +170,32 @@ unsafeRemoveSubscription vId subId = do
   case s ^? store . toVersions . ix vId . subscriptions of
     Nothing -> pure (Left (Left vId))
     Just subs -> unsafeUpdateVersionSubscriptions vId (HS.delete subId subs)
+
+
+-- | Only works if this is the newest version in its owner entity
+unsafeMoveVersionToNewFork
+  :: MonadState Shared m
+  => VersionId -- ^ Last version in a different entity
+  -> EntityId -- ^ New, empty parent entity
+  -> m Bool
+
+
+-- | Deletes a version from an entity iff. there's another replacement version in it
+unsafePruneVersion
+  :: MonadState Shared m
+  => VersionId
+  -> m Bool
+
+-- TODO could delete versions
+unsafeReSortVersions
+  :: MonadState Shared m
+  => EntityId
+  -> (Int -> [Int]) -- ^ Return a list of indicies to retain, and their new order (no duplicates)
+  -> m Bool
+
+-- TODO could delete versions
+unsafeUpdateVersions
+  :: MonadSTate Shared m
+  => EntityId
+  -> (NonEmpty VersionId -> NonEmpty VersionId)
+  -> m Bool

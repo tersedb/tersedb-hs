@@ -134,3 +134,7 @@ removeSubscription updater vId subId = do
     ]
   if not canAdjust then pure Nothing else
     Just <$> unsafeRemoveSubscription vId subId
+
+
+moveVersionToNewFork
+  :: 
