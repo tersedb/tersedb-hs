@@ -3,9 +3,11 @@ module Lib.Actions.Safe.Update where
 import Lib.Actions.Safe.Verify
   ( canDeleteEntity
   , canCreateEntity
+  , canUpdateEntity
   , canReadEntity
   , canReadVersion
   , canUpdateVersion
+  , canDeleteVersion
   , conditionally
   )
 import Lib.Actions.Unsafe.Update
@@ -15,20 +17,25 @@ import Lib.Actions.Unsafe.Update
   , unsafeUpdateVersionSubscriptions
   , unsafeAddSubscription
   , unsafeRemoveSubscription
+  , unsafeRemoveVersion
   )
 import Lib.Types.Id (SpaceId, EntityId, ActorId, VersionId)
 import Lib.Types.Store
   ( Shared
   , store
+  , temp
   , toEntities
   , toSpaces
+  , toVersions
+  , toReferencesFrom
   )
 import Lib.Types.Store.Space (entities)
 import Lib.Types.Store.Entity (space)
+import Lib.Types.Store.Version (subscriptions, references)
 
 import Data.HashSet (HashSet)
 import qualified Data.HashSet as HS
-import Control.Lens ((^.), at, ix, (.~))
+import Control.Lens ((^.), at, ix, (.~), (^?))
 import Control.Monad.State (MonadState (get), modify)
 import Control.Monad.Extra (andM, allM)
 
@@ -136,5 +143,26 @@ removeSubscription updater vId subId = do
     Just <$> unsafeRemoveSubscription vId subId
 
 
-moveVersionToNewFork
-  :: 
+removeVersion
+  :: MonadState Shared m
+  => ActorId
+  -> VersionId
+  -> m (Maybe (Either (Either VersionId EntityId) ()))
+removeVersion remover vId = do
+  s <- get
+  canAdjust <- andM
+    [ canDeleteVersion remover vId
+    , case s ^? temp . toReferencesFrom . ix vId of
+        Nothing -> pure True
+        Just refs -> andM
+          [ allM (canUpdateVersion remover) . HS.toList $ refs
+          -- NOTE we don't need to check for `canReadVersion` or `canReadEntity` for
+          -- this version's references and subscriptions, because we're essentially
+          -- making this version blind to them by deleting it
+          ]
+    ]
+  if not canAdjust then pure Nothing else
+    Just <$> unsafeRemoveVersion vId
+
+-- moveVersionToNewFork
+--   :: 

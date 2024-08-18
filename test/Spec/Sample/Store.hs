@@ -20,7 +20,6 @@ import Lib.Types.Permission
   , SinglePermission
   )
 import Lib.Types.Store (Shared, store, temp)
-import Lib.Types.Store.Version (genesisVersion, forkVersion)
 import Lib.Actions.Unsafe.Store
   ( unsafeStoreActor
   , unsafeStoreActor
@@ -41,7 +40,6 @@ import Lib.Actions.Safe.Store
   ( storeActor
   , storeSpace
   , storeEntity
-  , storeForkedEntity
   , storeNextVersion
   , addMember
   )
@@ -172,12 +170,12 @@ loadSample SampleStore{..} = flip execState (loadSampleTree sampleGroups) $ do
     let ((vId, refIds, subIds), vIdsTail) = uncons vIds
     case mFork of
       Nothing -> do
-        eWorked <- unsafeStoreEntity eId sId vId genesisVersion
+        eWorked <- unsafeStoreEntity eId sId vId Nothing
         case eWorked of
           Left e -> error $ "Error during store genesis entity " <> show e
           Right () -> pure ()
       Just fork -> do
-        eWorked <- unsafeStoreEntity eId sId vId (flip forkVersion fork)
+        eWorked <- unsafeStoreEntity eId sId vId (Just fork)
         case eWorked of
           Left e -> error $ "Error during store fork entity " <> show e
           Right () -> pure ()
@@ -192,7 +190,7 @@ loadSample SampleStore{..} = flip execState (loadSampleTree sampleGroups) $ do
     case vIdsTail of
       Nothing -> pure ()
       Just vIdsTail -> void . (\f -> foldlM f vId vIdsTail) $ \prevVId (vId, refIds, subIds) -> do
-        eWorked <- unsafeStoreVersion eId vId (flip forkVersion prevVId)
+        eWorked <- unsafeStoreVersion eId vId
         case eWorked of
           Left e -> error $ "Error during store version " <> show e
           Right () -> do
@@ -227,21 +225,22 @@ storeSample SampleStore{..} adminActor adminGroup =
       unless succeeded $ do
         s <- get
         error $ "Failed to store space " <> show sId <> " - " <> LT.unpack (pShowNoColor s)
-      succeeded <- setEntityPermission adminActor Update adminGroup sId 
+      succeeded <- setEntityPermission adminActor Update adminGroup sId
       unless succeeded $ do
         s <- get
         error $ "Failed to set entity permissions " <> show sId <> " - " <> LT.unpack (pShowNoColor s)
-          
     for_ sampleEntities $ \(eId, (sId, vIds, mFork)) -> do -- FIXME use a State to keep retrying on fork failure? Or just sort the list?
       let ((vId, refIds, subIds), vIdsTail) = uncons vIds
       case mFork of
         Nothing -> do
-          succeeded <- storeEntity adminActor eId sId vId
-          unless succeeded $ do
-            s <- get
-            error $ "Failed to store entity " <> show (eId, sId, vId) <> " - " <> LT.unpack (pShowNoColor s)
+          mWorked <- storeEntity adminActor eId sId vId Nothing
+          case mWorked of
+            Just (Right ()) -> pure ()
+            _ -> do
+              s <- get
+              error $ "Failed to store entity " <> show (eId, sId, vId) <> " - " <> LT.unpack (pShowNoColor s)
         Just fork -> do
-          mE <- storeForkedEntity adminActor eId sId vId fork
+          mE <- storeEntity adminActor eId sId vId (Just fork)
           case mE of
             Just (Right ()) -> pure ()
             _ -> do

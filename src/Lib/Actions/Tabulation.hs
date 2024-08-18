@@ -27,6 +27,9 @@ import Lib.Types.Store
   , toReferencesFromSpaces
   , toSubscriptionsFrom
   , toSubscriptionsFromSpaces
+  , toForksFrom
+  , toForksFromEntities
+  , toForksFromSpaces
   , toSpacesHiddenTo
   )
 import Lib.Types.Store.Tabulation.Group
@@ -48,15 +51,17 @@ import Lib.Types.Store.Version
   , entity
   , references
   , subscriptions
-  , prevVersion
   )
-import Lib.Types.Store.Entity (space)
+import Lib.Types.Store.Entity (space, fork, versions)
 
 import qualified Data.HashSet as HS
 import qualified Data.HashMap.Strict as HM
 import Data.Maybe (fromMaybe)
 import Data.Foldable (traverse_, for_, foldlM)
+import Data.List.NonEmpty (NonEmpty ((:|)))
+import qualified Data.List.NonEmpty as NE
 import Control.Lens ((^.), (.~), (&), at, non, ix)
+import Control.Monad (void)
 import Control.Monad.State (MonadState (get, put), modify, State, execState)
 
 
@@ -116,8 +121,6 @@ updateTabulationStartingAt gId = do
                 CollectionPermissionWithExemption _ False ->
                   let notVisible = HM.keysSet (HM.filter (== Blind) (newTab ^. forSpaces))
                   in  (notVisible, allSpaces `HS.difference` notVisible)
-          -- let spacesHidden = HM.keysSet (s ^. store . toSpaces) `HS.difference` spacesVisible
-          --     spacesVisible = HM.keysSet (HM.filter (> Blind) (newTab ^. forSpaces))
           for_ spacesHidden $ \sId ->
             modify $ temp . toSpacesHiddenTo . at sId . non mempty . at gId .~ Just ()
           for_ spacesVisible $ \sId -> do
@@ -126,25 +129,6 @@ updateTabulationStartingAt gId = do
             then modify $ temp . toSpacesHiddenTo . at sId .~ Nothing
             else modify $ temp . toSpacesHiddenTo . ix sId . at gId .~ Nothing
 
-      -- do  let (groupsHidden, groupsVisible) = case newTab ^. forOrganization of
-      --           CollectionPermissionWithExemption Blind _ ->
-      --             let visible = HM.keysSet (HM.filter (> Blind) (newTab ^. forGroups))
-      --             in  (allWithoutSelf `HS.difference` visible, visible)
-      --           CollectionPermissionWithExemption _ True ->
-      --             (mempty, allWithoutSelf)
-      --           CollectionPermissionWithExemption _ False ->
-      --             let notVisible = HM.keysSet (HM.filter (== Blind) (newTab ^. forGroups))
-      --             in  (notVisible, allWithoutSelf `HS.difference` notVisible)
-      --           where
-      --             allWithoutSelf = HS.delete gId $ HM.keysSet (s ^. store . toGroups . nodes)
-      --     for_ groupsHidden $ \gId' ->
-      --       modify $ temp . toGroupsHiddenTo . at gId' . non mempty . at gId .~ Just ()
-      --     for_ groupsVisible $ \gId' ->
-      --       if (s ^. temp . toGroupsHiddenTo . at gId') == Just (HS.singleton gId)
-      --       then modify $ temp . toGroupsHiddenTo . at gId' .~ Nothing
-      --       else modify $ temp . toGroupsHiddenTo . ix gId' . at gId .~ Nothing
-
-      -- doing fromJust because initTabulatedPermissionsForGroup already checks
       modify $ temp . toTabulatedGroups . at gId .~ Just newTab
       traverse_ updateTabulationStartingAt (group ^. next)
 
@@ -155,23 +139,24 @@ resetTabulation = do
   traverse_ updateTabulationStartingAt . HS.toList $ s ^. store . toGroups . roots
 
 
-data LoadRefsAndSubsError
-  = ReferenceVersionNotFound VersionId
-  | ReferenceEntityNotFound EntityId
-  | SubscriptionEntityNotFound EntityId
-  deriving (Eq, Show, Read)
-
-loadRefsAndSubs :: VersionId -> Version -> Store -> Temp -> Either LoadRefsAndSubsError Temp
-loadRefsAndSubs vId v s t = do
-  let refs = v ^. references
-  t' <- foldlM storeRefs t . HS.toList $
-    maybe refs (flip HS.insert refs) (v ^. prevVersion)
-  foldlM storeSubs t' (HS.toList $ v ^. subscriptions)
+-- | Only applies explicit references & subscriptions - not implicit references
+-- due to forking or continuity of versions
+loadRefsAndSubs
+  :: VersionId
+  -> Store
+  -> Temp
+  -> Either (Either VersionId EntityId) Temp
+loadRefsAndSubs vId s t =
+  case s ^. toVersions . at vId of
+    Nothing -> Left (Left vId)
+    Just v -> do
+      t' <- foldlM storeRefs t (v ^. references)
+      foldlM storeSubs t' (v ^. subscriptions)
   where
     storeRefs t refId = case s ^. toVersions . at refId of
-      Nothing -> Left (ReferenceVersionNotFound refId)
+      Nothing -> Left (Left refId)
       Just refV -> case s ^. toEntities . at (refV ^. entity) of
-        Nothing -> Left . ReferenceEntityNotFound $ refV ^. entity
+        Nothing -> Left . Right $ refV ^. entity
         Just refE ->
           pure $ t
                & toReferencesFromSpaces . at (refE ^. space) . non mempty . at vId .~ Just ()
@@ -179,11 +164,33 @@ loadRefsAndSubs vId v s t = do
                & toReferencesFrom . at refId . non mempty . at vId .~ Just ()
 
     storeSubs t subId = case s ^. toEntities . at subId of
-      Nothing -> Left (SubscriptionEntityNotFound subId)
+      Nothing -> Left (Right subId)
       Just subE ->
         pure $ t
              & toSubscriptionsFromSpaces . at (subE ^. space) . non mempty . at vId .~ Just ()
              & toSubscriptionsFrom . at subId . non mempty . at vId .~ Just ()
+
+
+loadForks
+  :: EntityId
+  -> Store
+  -> Temp
+  -> Either (Either VersionId EntityId) Temp
+loadForks eId s t =
+  let go t (eId, e) = case e ^. fork of
+        Nothing -> pure t
+        Just refId -> case s ^. toVersions . at refId of
+          Nothing -> Left (Left refId)
+          Just refV -> case s ^. toEntities . at (refV ^. entity) of
+            Nothing -> Left . Right $ refV ^. entity
+            Just refE ->
+              pure $
+                 t & toForksFromSpaces . at (refE ^. space) . non mempty . at eId
+                      .~ Just ()
+                   & toForksFromEntities . at (refV ^. entity) . non mempty . at eId
+                      .~ Just ()
+                   & toForksFrom . at refId . non mempty . at eId .~ Just ()
+  in  foldlM go t . HM.toList $ s ^. toEntities
 
 
 tempFromStore :: Store -> Temp
@@ -192,18 +199,22 @@ tempFromStore s = execState go emptyTemp
     go :: State Temp ()
     go = do
       loadVersions
-      loadTabulationGroups
-
-    loadTabulationGroups :: State Temp ()
-    loadTabulationGroups = do
+      loadForks'
       t <- get
-      let shared = execState resetTabulation (Shared s t)
-      put $ shared ^. temp
+      put $ execState resetTabulation (Shared s t) ^. temp
 
     loadVersions :: State Temp ()
     loadVersions =
       for_ (HM.toList (s ^. toVersions)) $ \(vId, v) -> do
         t <- get
-        case loadRefsAndSubs vId v s t of
+        case loadRefsAndSubs vId s t of
+          Left e -> error (show e)
+          Right t' -> put t'
+
+    loadForks' :: State Temp ()
+    loadForks' =
+      for_ (HM.toList $ s ^. toEntities) $ \(eId, e) -> do
+        t <- get
+        case loadForks eId s t of
           Left e -> error (show e)
           Right t' -> put t'

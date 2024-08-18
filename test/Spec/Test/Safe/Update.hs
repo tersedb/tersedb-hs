@@ -25,7 +25,7 @@ import Lib.Types.Store
 import Lib.Types.Store.Space (entities)
 import Lib.Types.Store.Entity (space, versions)
 import Lib.Types.Store.Groups (next, prev, nodes)
-import Lib.Types.Store.Version (references, entity, prevVersion, subscriptions)
+import Lib.Types.Store.Version (references, entity, subscriptions)
 import Lib.Types.Store.Tabulation.Group (hasLessOrEqualPermissionsTo)
 import Lib.Actions.Safe (emptyShared)
 import Lib.Actions.Safe.Store (storeActor, storeSpace, storeGroup, addMember, storeEntity)
@@ -35,6 +35,7 @@ import Lib.Actions.Safe.Update
   , removeReference
   , addSubscription
   , removeSubscription
+  , removeVersion
   )
 import Lib.Actions.Safe.Update.Group
   ( setUniversePermission
@@ -45,7 +46,7 @@ import Lib.Actions.Safe.Update.Group
   , linkGroups
   )
 
-import Data.Maybe (isJust, isNothing, fromJust)
+import Data.Maybe (isJust, isNothing, fromJust, fromMaybe)
 import qualified Data.HashMap.Strict as HM
 import qualified Data.HashSet as HS
 import qualified Data.List.NonEmpty as NE
@@ -80,8 +81,10 @@ updateTests = describe "Update" $ do
                 unless worked $ error $ "Couldn't store space " <> show sId'
                 worked <- setEntityPermission adminActor Create adminGroup sId
                 unless worked $ error $ "Couldn't set entity permission " <> show sId
-                worked <- storeEntity adminActor eId sId vId
-                unless worked $ error $ "Couldn't store entity " <> show (eId, vId)
+                mWorked <- storeEntity adminActor eId sId vId Nothing
+                case mWorked of
+                  Just (Right ()) -> pure ()
+                  _ -> error $ "Couldn't store entity " <> show (eId, vId)
                 worked <- setEntityPermission adminActor Create gId sId'
                 unless worked $ error $ "Couldn't set entity permission " <> show sId'
                 worked <- setEntityPermission adminActor Delete gId sId
@@ -107,8 +110,10 @@ updateTests = describe "Update" $ do
                 unless worked $ error $ "Couldn't store space " <> show sId'
                 worked <- setEntityPermission adminActor Create adminGroup sId
                 unless worked $ error $ "Couldn't set entity permission " <> show sId
-                worked <- storeEntity adminActor eId sId vId
-                unless worked $ error $ "Couldn't store entity " <> show (eId, vId)
+                mWorked <- storeEntity adminActor eId sId vId Nothing
+                case mWorked of
+                  Just (Right ()) -> pure ()
+                  _ -> error $ "Couldn't store entity " <> show (eId, vId)
                 worked <- setEntityPermission adminActor Create gId sId'
                 unless worked $ error $ "Couldn't set entity permission " <> show sId'
                 updateEntitySpace aId eId sId'
@@ -131,8 +136,10 @@ updateTests = describe "Update" $ do
                 unless worked $ error $ "Couldn't store space " <> show sId'
                 worked <- setEntityPermission adminActor Create adminGroup sId
                 unless worked $ error $ "Couldn't set entity permission " <> show sId
-                worked <- storeEntity adminActor eId sId vId
-                unless worked $ error $ "Couldn't store entity " <> show (eId, vId)
+                mWorked <- storeEntity adminActor eId sId vId Nothing
+                case mWorked of
+                  Just (Right ()) -> pure ()
+                  _ -> error $ "Couldn't store entity " <> show (eId, vId)
                 worked <- setEntityPermission adminActor Delete gId sId
                 unless worked $ error $ "Couldn't set entity permission " <> show sId
                 updateEntitySpace aId eId sId'
@@ -170,19 +177,10 @@ updateTests = describe "Update" $ do
       it "Remove Reference" $
         property $ \(xs :: SampleStore, adminActor :: ActorId, adminGroup :: GroupId) ->
           let s = storeSample xs adminActor adminGroup
-              refs = HM.mapMaybeWithKey overVIds (s ^. temp . toReferencesFrom)
-                where
-                  overVIds refId vIds =
-                    let elligibleVIds = HS.filter (not . isVIdForkedFromRefId) vIds
-                          where
-                            isVIdForkedFromRefId vId =
-                              (s ^? store . toVersions . ix vId . prevVersion . _Just)
-                                == Just refId
-                    in  if null elligibleVIds then Nothing else Just elligibleVIds
+              refs = s ^. temp . toReferencesFrom
           in  if HM.size refs < 2 then property True else
                 forAll (elements $ HM.keys refs) $ \refId ->
                   forAll (elements . HS.toList . fromJust $ HM.lookup refId refs) $ \vId ->
-                    -- FIXME select a vId that doesn't fork from refId
                     let s' = flip execState s $ do
                           mE <- removeReference adminActor vId refId
                           case mE of
@@ -216,10 +214,9 @@ updateTests = describe "Update" $ do
         property $ \(xs :: SampleStore, adminActor :: ActorId, adminGroup :: GroupId) ->
           let s = storeSample xs adminActor adminGroup
               subs = s ^. temp . toSubscriptionsFrom
-          in  if HM.size subs < 1 then property True else
+          in  if null subs then property True else
                 forAll (elements $ HM.keys subs) $ \subId ->
                   forAll (elements . HS.toList . fromJust $ HM.lookup subId subs) $ \vId ->
-                    -- FIXME select a vId that doesn't fork from refId
                     let s' = flip execState s $ do
                           mE <- removeSubscription adminActor vId subId
                           case mE of
@@ -228,6 +225,25 @@ updateTests = describe "Update" $ do
                     in  shouldSatisfy (s', vId, subId) $ \_ ->
                           isNothing (s' ^? store . toVersions . ix vId . subscriptions . ix subId)
                           && isNothing (s' ^? temp . toSubscriptionsFrom . ix subId . ix vId)
+      it "Remove a Version" $
+        property $ \(xs :: SampleStore, adminActor :: ActorId, adminGroup :: GroupId) ->
+          let s = storeSample xs adminActor adminGroup
+              entsWith2OrMoreVersions = HM.filter (\e -> length (e ^. versions) > 1)
+                                      $ s ^. store . toEntities
+          in  if null entsWith2OrMoreVersions then property True else
+                forAll (elements $ HM.toList entsWith2OrMoreVersions) $ \(eId, e) ->
+                  forAll (elements . NE.toList $ e ^. versions) $ \vId ->
+                    let s' = flip execState s $ do
+                          mE <- removeVersion adminActor vId
+                          case mE of
+                            Just (Right ()) -> pure ()
+                            _ -> error $ "Couldn't remove version " <> show (vId, mE)
+                    in  shouldSatisfy (s', eId, vId) $ \_ ->
+                          isNothing (s' ^? store . toVersions . ix vId)
+                          && null (filter (== vId) . fromMaybe mempty . fmap NE.toList
+                                   $ s' ^? store . toEntities . ix eId . versions)
+                          && isNothing (s' ^? temp . toReferencesFrom . ix vId)
+                          -- TODO check that no other versions in e reference vId
     -- updating a version occurs when you modify an existing one; still subject to modifying the
     -- entity by extension. Modifying a version - changing its references / subscriptions,
     -- changing what it forks from

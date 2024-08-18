@@ -1,8 +1,8 @@
 module Lib.Actions.Unsafe.Store where
 
 import Lib.Actions.Tabulation
-  ( LoadRefsAndSubsError
-  , loadRefsAndSubs
+  ( loadRefsAndSubs
+  , loadForks
   , updateTabulationStartingAt
   )
 import Lib.Types.Id (GroupId, SpaceId, EntityId, VersionId, ActorId)
@@ -21,8 +21,8 @@ import Lib.Types.Store
   )
 import Lib.Types.Store.Tabulation.Group (forUniverse)
 import Lib.Types.Store.Space (entities)
-import Lib.Types.Store.Entity (initEntity, addVersion)
-import Lib.Types.Store.Version (Version)
+import Lib.Types.Store.Entity (initEntity, versions)
+import Lib.Types.Store.Version (initVersion)
 import Lib.Types.Store.Groups
   ( emptyGroup
   , nodes
@@ -33,6 +33,7 @@ import Lib.Types.Store.Groups
 
 import Data.Maybe (fromMaybe)
 import qualified Data.HashMap.Strict as HM
+import Data.List.NonEmpty ((<|))
 import Control.Lens ((&), (^.), (.~), (%~), at, non, ix)
 import Control.Monad.State (MonadState (get, put), modify)
 import Control.Monad.Extra (when)
@@ -73,15 +74,15 @@ unsafeStoreEntity
   => EntityId
   -> SpaceId
   -> VersionId
-  -> (EntityId -> Version)
-  -> m (Either LoadRefsAndSubsError ())
-unsafeStoreEntity eId sId vId buildVersion = do
+  -> Maybe VersionId
+  -> m (Either (Either VersionId EntityId) ())
+unsafeStoreEntity eId sId vId mForkId = do
   s <- get
-  let v = buildVersion eId
-      s' = s & store . toEntities . at eId .~ Just (initEntity sId vId)
+  let s' = s & store . toEntities . at eId .~ Just (initEntity sId vId mForkId)
              & store . toSpaces . ix sId . entities . at eId .~ Just ()
-             & store . toVersions . at vId .~ Just (buildVersion eId)
-  case loadRefsAndSubs vId v (s' ^. store) (s' ^. temp) of
+             & store . toVersions . at vId .~ Just (initVersion eId)
+  case do t' <- loadRefsAndSubs vId (s' ^. store) (s' ^. temp)
+          loadForks eId (s' ^. store) t' of
     Left e -> pure (Left e)
     Right t -> Right () <$ put (s' & temp .~ t)
 
@@ -89,13 +90,11 @@ unsafeStoreVersion
   :: MonadState Shared m
   => EntityId
   -> VersionId
-  -> (EntityId -> Version)
-  -> m (Either LoadRefsAndSubsError ())
-unsafeStoreVersion eId vId buildVersion = do
+  -> m (Either (Either VersionId EntityId) ())
+unsafeStoreVersion eId vId = do
   s <- get
-  let v = buildVersion eId
-      s' = s & store . toEntities . ix eId %~ flip addVersion vId
-             & store . toVersions . at vId .~ Just v
-  case loadRefsAndSubs vId v (s' ^. store) (s' ^. temp) of
+  let s' = s & store . toEntities . ix eId . versions %~ (vId <|)
+             & store . toVersions . at vId .~ Just (initVersion eId)
+  case loadRefsAndSubs vId (s' ^. store) (s' ^. temp) of -- don't need to check forks
     Left e -> pure (Left e)
     Right t -> Right () <$ put (s' & temp .~ t)

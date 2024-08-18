@@ -104,8 +104,10 @@ readTests = describe "Read" $ do
               unless worked $ error $ "Couldn't make space " <> show sId
               worked <- setEntityPermission adminActor Create adminGroup sId
               unless worked $ error $ "Couldn't grant entity permissions " <> show sId
-              worked <- storeEntity adminActor eId sId vId
-              unless worked $ error $ "Couldn't store entity " <> show (eId, vId)
+              mWorked <- storeEntity adminActor eId sId vId Nothing
+              case mWorked of
+                Just (Right ()) -> pure ()
+                _ -> error $ "Couldn't store entity " <> show (eId, vId)
               worked <- setUniversePermission adminActor
                 (CollectionPermissionWithExemption Read False) gId
               unless worked $ error $ "Couldn't set universe permission " <> show gId
@@ -124,8 +126,10 @@ readTests = describe "Read" $ do
               unless worked $ error $ "Couldn't make space " <> show sId
               worked <- setEntityPermission adminActor Create adminGroup sId
               unless worked $ error $ "Couldn't grant entity permissions " <> show sId
-              worked <- storeEntity adminActor eId sId vId
-              unless worked $ error $ "Couldn't store entity " <> show (eId, vId)
+              mWorked <- storeEntity adminActor eId sId vId Nothing
+              case mWorked of
+                Just (Right ()) -> pure ()
+                _ -> error $ "Couldn't store entity " <> show (eId, vId)
               worked <- setUniversePermission adminActor
                 (CollectionPermissionWithExemption Read False) gId
               unless worked $ error $ "Couldn't set universe permission " <> show gId
@@ -243,8 +247,10 @@ readTests = describe "Read" $ do
               unless worked $ error $ "Couldn't make space " <> show sId
               worked <- setEntityPermission adminActor Create adminGroup sId
               unless worked $ error $ "Couldn't grant entity permissions " <> show sId
-              worked <- storeEntity adminActor eId sId vId
-              unless worked $ error $ "Couldn't make entity " <> show (eId, vId)
+              mWorked <- storeEntity adminActor eId sId vId Nothing
+              case mWorked of
+                Just (Right ()) -> pure ()
+                _ -> error $ "Couldn't make entity " <> show (eId, vId)
               worked <- setUniversePermission adminActor
                 (CollectionPermissionWithExemption Read False) gId
               unless worked $ error $ "Couldn't set universe permission " <> show gId
@@ -277,8 +283,10 @@ readTests = describe "Read" $ do
               unless worked $ error $ "Couldn't make space " <> show sId
               worked <- setEntityPermission adminActor Create adminGroup sId
               unless worked $ error $ "Couldn't grant entity permissions " <> show sId
-              worked <- storeEntity adminActor eId sId vId
-              unless worked $ error $ "Couldn't make entity " <> show (eId, vId)
+              mWorked <- storeEntity adminActor eId sId vId Nothing
+              case mWorked of
+                Just (Right ()) -> pure ()
+                _ -> error $ "Couldn't make entity " <> show (eId, vId)
               worked <- setUniversePermission adminActor
                 (CollectionPermissionWithExemption Read False) gId
               unless worked $ error $ "Couldn't set universe permission " <> show gId

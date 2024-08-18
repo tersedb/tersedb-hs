@@ -156,15 +156,15 @@ canUpdateVersion updater vId = do
     Just v -> canUpdateEntity updater (v ^. entity)
 
 -- | FIXME doesn't check to see if this is the last version in its entity
-canDeteteVersion :: MonadState Shared m => ActorId -> VersionId -> m Bool
-canDeteteVersion updater vId = do
+canDeleteVersion :: MonadState Shared m => ActorId -> VersionId -> m Bool
+canDeleteVersion updater vId = do
   s <- get
   case s ^. store . toVersions . at vId of
     Nothing -> pure False
     Just v -> canUpdateEntity updater (v ^. entity)
 
-canDeteteVersionAndEntity :: MonadState Shared m => ActorId -> VersionId -> m Bool
-canDeteteVersionAndEntity updater vId = do
+canDeleteVersionAndEntity :: MonadState Shared m => ActorId -> VersionId -> m Bool
+canDeleteVersionAndEntity updater vId = do
   s <- get
   case s ^. store . toVersions . at vId of
     Nothing -> pure False

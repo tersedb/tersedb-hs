@@ -207,6 +207,14 @@ but it suits the purposes it was designed for well enough.
 - `Read` for memberships doesn't require `Read` for recruiter, because they're considered
   completely different concepts, even though adding an actor to a group modifies it (which would
   normally imply `Update` for recruiter).
+- Someone could make a private space, an entity within that space, and a version within that
+  entity that has a reference to a currently visible version. This would prevent someone who
+  has update access to that referenced version from moving that version, as nobody execpt the
+  referrer has update access to the private referral version. This could be seen as a flaw
+  or a feature - one way to get around this (like with github) is that, when someone wants to
+  make their previously public version private via a move, they do so in conjunction with a
+  special actor that has exempt update privilages, solely for the purpose of amending
+  references.
 
 ## Practical Issues
 

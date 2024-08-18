@@ -8,9 +8,9 @@ import Lib.Actions.Safe.Verify
   , canCreateEntity
   , canUpdateEntity
   , canReadEntity
+  , canReadVersion
   , conditionally
   )
-import Lib.Actions.Tabulation (LoadRefsAndSubsError)
 import Lib.Actions.Unsafe.Store
   ( unsafeStoreGroup
   , unsafeStoreActor
@@ -27,7 +27,7 @@ import Lib.Types.Store
   , toVersions
   )
 import Lib.Types.Store.Entity (versions)
-import Lib.Types.Store.Version (genesisVersion, forkVersion, entity)
+import Lib.Types.Store.Version (entity)
 
 import qualified Data.List.NonEmpty as NE
 import Control.Lens ((^.), at, _Left, (%~), (&))
@@ -79,56 +79,23 @@ storeEntity
   -> EntityId -- ^ entity being stored
   -> SpaceId -- ^ space in which entity is being stored
   -> VersionId -- ^ initial version
-  -> m Bool
-storeEntity creator eId sId vId = do
-  canAdjust <- canCreateEntity creator sId
-  if not canAdjust then pure False else do
-    eVErr <- unsafeStoreEntity eId sId vId genesisVersion
-    case eVErr of
-      Left e -> error $ "Impossible error - genesis version has undefined reference " <> show (e, eId, sId, vId)
-      Right () -> pure True
-
-data StoreForkedEntityError
-  = PreviousVersionDoesntExist
-  | PreviousEntityDoesntExist
-  | ForkingSelf
-  deriving (Eq, Show, Read)
-
-storeForkedEntity
-  :: MonadState Shared m
-  => ActorId -- ^ actor forking the entity
-  -> EntityId -- ^ entity being forked
-  -> SpaceId -- ^ space in which entity is being forked to
-  -> VersionId -- ^ initial version of forked entitiy
-  -> VersionId -- ^ previous version of entity (possibly in a different space, definitely in a different entity)
-  -> m (Maybe (Either (Either StoreForkedEntityError LoadRefsAndSubsError) ()))
-storeForkedEntity creator eId sId vId prevVId
-  | vId == prevVId = pure . Just . Left $ Left ForkingSelf
-  | otherwise = do
-  s <- get
-  case s ^. store . toVersions . at prevVId of
-    Nothing -> pure . Just . Left $ Left PreviousVersionDoesntExist
-    Just prevV -> do
-      canAdjust <- andM
-        [ canCreateEntity creator sId
-        , canReadEntity creator (prevV ^. entity)
-        ]
-      if not canAdjust then pure Nothing else do
-        -- FIXME will this forked reference be present in references tabulation?
-        eVErr <- unsafeStoreEntity eId sId vId (flip forkVersion prevVId)
-        pure . Just $ eVErr & _Left %~ Right
+  -> Maybe VersionId -- ^ forked version
+  -> m (Maybe (Either (Either VersionId EntityId) ()))
+storeEntity creator eId sId vId mFork = do
+  canAdjust <- andM
+    [ canCreateEntity creator sId
+    , maybe (pure True) (canReadVersion creator) mFork
+    ]
+  if not canAdjust then pure Nothing else
+    Just <$> unsafeStoreEntity eId sId vId mFork
 
 storeNextVersion
   :: MonadState Shared m
   => ActorId -- ^ actor attempting to store a version
   -> EntityId -- ^ entity receiving a new version
   -> VersionId -- ^ version being stored
-  -> m (Maybe (Either LoadRefsAndSubsError ()))
+  -> m (Maybe (Either (Either VersionId EntityId) ()))
 storeNextVersion creator eId vId = do
-  s <- get
-  case s ^. store . toEntities . at eId of
-    Nothing -> pure Nothing
-    Just e -> do
-      canAdjust <- canUpdateEntity creator eId
-      if not canAdjust then  pure Nothing else do
-        fmap Just . unsafeStoreVersion eId vId . flip forkVersion . NE.head $ e ^. versions
+  canAdjust <- canUpdateEntity creator eId
+  if not canAdjust then  pure Nothing else
+    Just <$> unsafeStoreVersion eId vId

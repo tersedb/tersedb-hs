@@ -17,14 +17,17 @@ import Lib.Types.Store
   , toSubscriptionsFromSpaces
   )
 import Lib.Types.Store.Groups (prev, nodes, next)
-import Lib.Types.Store.Version (entity, references, subscriptions, prevVersion)
-import Lib.Types.Store.Entity (space)
+import Lib.Types.Store.Version (entity, references, subscriptions)
+import Lib.Types.Store.Entity (space, versions)
 
 import Data.HashSet (HashSet)
 import qualified Data.HashSet as HS
 import Data.Foldable (foldlM)
+import Data.List (findIndex)
+import qualified Data.List.NonEmpty as NE
+import Data.Maybe (fromJust)
 import Control.Lens ((^.), (.~), (&), (^?), (%~), at, ix, non, _Left)
-import Control.Monad.State (MonadState (get, put), modify)
+import Control.Monad.State (MonadState (get, put), modify, runState, execState)
 
 
 unsafeUpdateVersionReferences
@@ -39,7 +42,7 @@ unsafeUpdateVersionReferences vId refIds = do
     Just v -> do
       let oldRefs = v ^. references
           refsToAdd = refIds `HS.difference` oldRefs
-          refsToRemove = (maybe id HS.delete (v ^. prevVersion)) (oldRefs `HS.difference` refIds)
+          refsToRemove = oldRefs `HS.difference` refIds
 
           addNewRefs :: Temp -> VersionId -> Either (Either VersionId EntityId) Temp
           addNewRefs t refId = case s ^. store . toVersions . at refId of
@@ -93,8 +96,8 @@ unsafeAddReference vId refId = do
 
 unsafeRemoveReference
   :: MonadState Shared m
-  => VersionId
-  -> VersionId
+  => VersionId -- ^ Referrer
+  -> VersionId -- ^ Referred
   -> m (Either (Either VersionId EntityId) ())
 unsafeRemoveReference vId refId = do
   s <- get
@@ -172,30 +175,76 @@ unsafeRemoveSubscription vId subId = do
     Just subs -> unsafeUpdateVersionSubscriptions vId (HS.delete subId subs)
 
 
--- | Only works if this is the newest version in its owner entity
-unsafeMoveVersionToNewFork
-  :: MonadState Shared m
-  => VersionId -- ^ Last version in a different entity
-  -> EntityId -- ^ New, empty parent entity
-  -> m Bool
+-- -- | Only works if this is the newest version in its owner entity
+-- unsafeMoveVersionToNewFork
+--   :: MonadState Shared m
+--   => VersionId -- ^ Last version in a different entity
+--   -> EntityId -- ^ New, empty parent entity
+--   -> m Bool
 
 
 -- | Deletes a version from an entity iff. there's another replacement version in it
-unsafePruneVersion
+unsafeRemoveVersion
   :: MonadState Shared m
   => VersionId
-  -> m Bool
+  -> m (Either (Either VersionId EntityId) ())
+unsafeRemoveVersion vId = do
+  s <- get
+  case s ^. store . toVersions . at vId of
+    Nothing -> pure . Left $ Left vId
+    Just v ->
+      let eId :: EntityId = v ^. entity
+      in  case s ^? store . toEntities . ix eId of
+            Just e
+              | length (e ^. versions) > 1 -> do
+                let removeRef :: Shared -> VersionId -> Either (Either VersionId EntityId) Shared
+                    removeRef s refId =
+                      let (mE, s' :: Shared) = runState (unsafeRemoveReference vId refId) s
+                      in  case mE of
+                        Left e -> Left e
+                        Right () -> Right s'
+                    removeSub :: Shared -> EntityId -> Either (Either VersionId EntityId) Shared
+                    removeSub s subId =
+                      let (mE, s') = runState (unsafeRemoveSubscription vId subId) s
+                      in  case mE of
+                        Left e -> Left e
+                        Right () -> Right s'
+                    removeReferred :: Shared -> VersionId -> Either (Either VersionId EntityId) Shared
+                    removeReferred s referrerId =
+                      let (mE, s' :: Shared) = runState (unsafeRemoveReference referrerId vId) s
+                      in  case mE of
+                        Left e -> Left e
+                        Right () -> Right s'
+                case foldlM removeRef s (v ^. references) >>=
+                       flip (foldlM removeReferred)
+                         (s ^. temp . toReferencesFrom . at vId . non mempty) >>=
+                       flip (foldlM removeSub) (v ^. subscriptions) of
+                  Left e -> pure (Left e)
+                  Right s' -> do
+                    put s'
+                    modify $ store . toVersions . at vId .~ Nothing
+                    modify $ store . toEntities . ix eId . versions
+                      %~ NE.fromList . NE.filter (/= vId)
+                    pure $ Right ()
+                    -- TODO filter all references so nothing can point to vId
+            _ -> pure . Left $ Left vId -- TODO better error?
 
--- TODO could delete versions
-unsafeReSortVersions
-  :: MonadState Shared m
-  => EntityId
-  -> (Int -> [Int]) -- ^ Return a list of indicies to retain, and their new order (no duplicates)
-  -> m Bool
+-- unsafeOffsetVersion
+--   :: MonadState Shared m
+--   => VersionId
+--   -> Int -- ^ 0 - don't move it, negative - move it earlier, positive - move it later
+--   -> m ()
 
--- TODO could delete versions
-unsafeUpdateVersions
-  :: MonadSTate Shared m
-  => EntityId
-  -> (NonEmpty VersionId -> NonEmpty VersionId)
-  -> m Bool
+-- -- TODO could delete versions
+-- unsafeReSortVersions
+--   :: MonadState Shared m
+--   => EntityId
+--   -> (Int -> [Int]) -- ^ Return a list of indicies to retain, and their new order (no duplicates)
+--   -> m Bool
+
+-- -- TODO could delete versions
+-- unsafeUpdateVersions
+--   :: MonadState Shared m
+--   => EntityId
+--   -> (NonEmpty VersionId -> NonEmpty VersionId)
+--   -> m Bool

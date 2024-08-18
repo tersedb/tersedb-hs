@@ -70,8 +70,10 @@ createTests = describe "Create" $ do
               unless worked $ error $ "Couldn't store space " <> show (aId, gId, sId)
               worked <- setEntityPermission adminActor Create gId sId
               unless worked $ error $ "Couldn't set entity permission " <> show (gId, sId)
-              worked <- storeEntity aId eId sId vId
-              unless worked $ error $ "Couldn't store entity " <> show (eId, vId)
+              mWorked <- storeEntity aId eId sId vId Nothing
+              case mWorked of
+                Just (Right ()) -> pure ()
+                _ -> error $ "Couldn't store entity " <> show (eId, vId)
         in  shouldSatisfy s' $ \_ ->
               isJust (s' ^. store . toEntities . at eId)
                 && isJust (s' ^. store . toVersions . at vId)
@@ -86,15 +88,16 @@ createTests = describe "Create" $ do
               unless worked $ error $ "Couldn't store space " <> show (aId, gId, sId)
               worked <- setEntityPermission adminActor Update gId sId
               unless worked $ error $ "Couldn't set entity permission " <> show (gId, sId)
-              worked <- storeEntity aId eId sId vId
-              unless worked $ error $ "Couldn't store entity " <> show (eId, vId)
+              mWorked <- storeEntity aId eId sId vId Nothing
+              case mWorked of
+                Just (Right ()) -> pure ()
+                _ -> error $ "Couldn't store entity " <> show (eId, vId)
               mWorked <- storeNextVersion aId eId vId'
               case mWorked of
                 Just (Right ()) -> pure ()
                 _ -> error $ "Couldn't store version " <> show mWorked
         in  shouldSatisfy s' $ \_ ->
               isJust (s' ^. store . toVersions . at vId')
-                && (s' ^. temp . toReferencesFrom . at vId . non mempty . at vId') == Just ()
     it "Group via organization" $
       property $ \(adminActor :: ActorId, adminGroup :: GroupId, aId :: ActorId, gId :: GroupId, gId' :: GroupId) ->
         let s = emptyShared adminActor adminGroup
@@ -153,11 +156,14 @@ createTests = describe "Create" $ do
               unless worked $ error $ "Couldn't grant universe create permissions " <> show gId
               worked <- storeSpace aId sId
               unless worked $ error $ "Couldn't store space " <> show (aId, gId, sId)
-              worked <- storeEntity aId eId sId vId
-              when worked $ error $ "Could store entity " <> show (eId, vId)
+              mWorked <- storeEntity aId eId sId vId Nothing
+              case mWorked of
+                Just (Right ()) -> error $ "Couldn't store entity " <> show (eId, vId)
+                _ -> pure ()
         in  shouldSatisfy s' $ \_ ->
               isNothing (s' ^. store . toEntities . at eId)
                 && isNothing (s' ^. store . toVersions . at vId)
+    -- FIXME test for forking
     it "Next Version" $
       property $ \(adminActor :: ActorId, adminGroup :: GroupId, aId :: ActorId, gId :: GroupId, sId :: SpaceId, eId :: EntityId, vId :: VersionId, vId' :: VersionId) ->
         let s = emptyShared adminActor adminGroup
@@ -169,8 +175,10 @@ createTests = describe "Create" $ do
               unless worked $ error $ "Couldn't store space " <> show (aId, gId, sId)
               worked <- setEntityPermission adminActor Update gId sId
               unless worked $ error $ "Couldn't set entity permission " <> show (gId, sId)
-              worked <- storeEntity aId eId sId vId
-              unless worked $ error $ "Couldn't store entity " <> show (eId, vId)
+              mWorked <- storeEntity aId eId sId vId Nothing
+              case mWorked of
+                Just (Right ()) -> pure ()
+                _ -> error $ "Couldn't store entity " <> show (eId, vId)
               worked <- setEntityPermission adminActor Read gId sId
               unless worked $ error $ "Couldn't set entity permission " <> show (gId, sId)
               mWorked <- storeNextVersion aId eId vId'

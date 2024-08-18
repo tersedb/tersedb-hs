@@ -22,6 +22,9 @@ data Temp = Temp
   , tempReferencesFromSpaces :: HashMap SpaceId (HashSet VersionId)
   , tempSubscriptionsFrom :: HashMap EntityId (HashSet VersionId)
   , tempSubscriptionsFromSpaces :: HashMap SpaceId (HashSet VersionId)
+  , tempForksFrom :: HashMap VersionId (HashSet EntityId)
+  , tempForksFromEntities :: HashMap EntityId (HashSet EntityId)
+  , tempForksFromSpaces :: HashMap SpaceId (HashSet EntityId)
   , tempTabulatedGroups :: HashMap GroupId TabulatedPermissionsForGroup
   , tempSpacesHiddenTo :: HashMap SpaceId (HashSet GroupId)
   -- FIXME track universe blind groups
@@ -32,13 +35,26 @@ makeLensesFor
   , ("tempReferencesFromSpaces", "toReferencesFromSpaces")
   , ("tempSubscriptionsFrom", "toSubscriptionsFrom")
   , ("tempSubscriptionsFromSpaces", "toSubscriptionsFromSpaces")
+  , ("tempForksFrom", "toForksFrom")
+  , ("tempForksFromEntities", "toForksFromEntities")
+  , ("tempForksFromSpaces", "toForksFromSpaces")
   , ("tempTabulatedGroups", "toTabulatedGroups")
   , ("tempSpacesHiddenTo", "toSpacesHiddenTo")
   ] ''Temp
 
 
 emptyTemp :: Temp
-emptyTemp = Temp mempty mempty mempty mempty mempty mempty mempty
+emptyTemp = Temp
+  mempty
+  mempty
+  mempty
+  mempty
+  mempty
+  mempty
+  mempty
+  mempty
+  mempty
+  mempty
 
 
 data Store = Store
