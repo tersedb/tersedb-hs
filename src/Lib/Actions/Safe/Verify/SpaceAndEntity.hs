@@ -5,13 +5,13 @@ import Lib.Types.Store
   ( Shared
   , store
   , temp
-  , toReferencesFromEntities
-  , toReferencesFromSpaces
+  , toReferencesFrom
   , toSubscriptionsFrom
-  , toSubscriptionsFromSpaces
+  , toForksFrom
   , toVersions
   , toEntities
   , toActors
+  , toSpaces
   , toSpacesHiddenTo
   )
 import Lib.Types.Store.Tabulation.Group
@@ -19,8 +19,9 @@ import Lib.Types.Store.Tabulation.Group
   , forSpaces
   , forEntities
   )
-import Lib.Types.Store.Entity (space)
+import Lib.Types.Store.Entity (space, versions, fork)
 import Lib.Types.Store.Version (entity)
+import Lib.Types.Store.Space (entities)
 import Lib.Types.Id (ActorId, SpaceId, EntityId, VersionId)
 import Lib.Types.Permission
   ( CollectionPermission (..)
@@ -31,10 +32,13 @@ import Lib.Types.Permission
   )
 
 import Data.Maybe (isJust)
+import Data.HashSet (HashSet)
 import qualified Data.HashSet as HS
-import Control.Lens ((^.), at, non, ix)
+import qualified Data.HashMap.Strict as HM
+import qualified Data.List.NonEmpty as NE
+import Control.Lens ((^.), (^?), at, non, ix)
 import Control.Monad.State (MonadState, get)
-import Control.Monad.Extra (andM, orM, anyM)
+import Control.Monad.Extra (andM, orM, anyM, allM)
 
 -- * Spaces
 
@@ -65,16 +69,27 @@ canUpdateSpace updater sId =
 
 canDeleteSpace :: MonadState Shared m => ActorId -> SpaceId -> m Bool
 canDeleteSpace deleter sId = do
-  refsAndSubs <- do
-    s <- get
-    let refs = s ^. temp . toReferencesFromSpaces . at sId . non mempty
-        subs = s ^. temp . toSubscriptionsFromSpaces . at sId . non mempty
-    pure (HS.union refs subs)
-  andM $
-    (canDo
-      (withCollectionPermission sId forUniverse forSpaces)
-      deleter
-      Delete) : (map (canUpdateVersion deleter) $ HS.toList refsAndSubs)
+  s <- get
+  case s ^. store . toSpaces . at sId of
+    Nothing -> pure False
+    Just sp -> do
+      let es = sp ^. entities
+          vs :: HashSet VersionId = foldMap
+            (\eId -> maybe mempty (HS.fromList . NE.toList) $
+              s ^? store . toEntities . ix eId . versions)
+            es
+          refs = HM.filterWithKey (\vId _ -> vId `HS.member` vs) (s ^. temp . toReferencesFrom)
+          subs = HM.filterWithKey (\eId _ -> eId `HS.member` es) (s ^. temp . toSubscriptionsFrom)
+          forks = HM.filterWithKey (\vId _ -> vId `HS.member` vs) (s ^. temp . toForksFrom)
+      andM
+        [ canDo
+            (withCollectionPermission sId forUniverse forSpaces)
+            deleter
+            Delete
+        , allM (canUpdateVersion deleter) . HS.toList . HS.unions $ HM.elems refs
+        , allM (canUpdateVersion deleter) . HS.toList . HS.unions $ HM.elems subs
+        , allM (canUpdateEntity deleter) . HS.toList . HS.unions $ HM.elems forks
+        ]
 
 hasSpacePermission :: MonadState Shared m => ActorId -> SpaceId -> SinglePermission -> m Bool
 hasSpacePermission aId sId p =
@@ -119,15 +134,21 @@ canUpdateEntity reader eId = do
 
 canDeleteEntity :: MonadState Shared m => ActorId -> SpaceId -> EntityId -> m Bool
 canDeleteEntity deleter sId eId = do
-  refsAndSubs <- do
-    s <- get
-    let refs = s ^. temp . toReferencesFromEntities . at eId . non mempty
-        subs = s ^. temp . toSubscriptionsFrom . at eId . non mempty
-    pure (HS.union refs subs)
-  andM $
-    (canDo (\t -> t ^. forEntities . at sId . non Blind) deleter Delete) :
-    (canReadSpace deleter sId) :
-    (map (canUpdateVersion deleter) $ HS.toList refsAndSubs)
+  s <- get
+  case s ^. store . toEntities . at eId of
+    Nothing -> pure False
+    Just e -> do
+      let vs = HS.fromList . NE.toList $ e ^. versions
+          refs = HM.filterWithKey (\vId _ -> vId `HS.member` vs) (s ^. temp . toReferencesFrom)
+          subs = s ^. temp . toSubscriptionsFrom . at eId . non mempty
+          forks = HM.filterWithKey (\vId _ -> vId `HS.member` vs) (s ^. temp . toForksFrom)
+      andM
+        [ canDo (\t -> t ^. forEntities . at sId . non Blind) deleter Delete
+        , canReadSpace deleter sId
+        , allM (canUpdateVersion deleter) . HS.toList . HS.unions $ HM.elems refs
+        , allM (canUpdateVersion deleter) $ HS.toList subs
+        , allM (canUpdateEntity deleter) . HS.toList . HS.unions $ HM.elems forks
+        ]
 
 hasEntityPermission :: MonadState Shared m => ActorId -> SpaceId -> CollectionPermission -> m Bool
 hasEntityPermission aId sId p = andM

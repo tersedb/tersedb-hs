@@ -18,6 +18,7 @@ import Lib.Actions.Unsafe.Update
   , unsafeAddSubscription
   , unsafeRemoveSubscription
   , unsafeRemoveVersion
+  , unsafeUpdateFork
   )
 import Lib.Types.Id (SpaceId, EntityId, ActorId, VersionId)
 import Lib.Types.Store
@@ -62,7 +63,7 @@ updateVersionReferences
   => ActorId
   -> VersionId
   -> HashSet VersionId
-  -> m (Maybe (Either (Either VersionId EntityId) ()))
+  -> m (Maybe (Either VersionId ()))
 updateVersionReferences updater vId refIds = do
   canAdjust <- andM
     [ allM (canReadVersion updater) (HS.toList refIds)
@@ -76,7 +77,7 @@ addReference
   => ActorId
   -> VersionId
   -> VersionId
-  -> m (Maybe (Either (Either VersionId EntityId) ()))
+  -> m (Maybe (Either VersionId ()))
 addReference updater vId refId = do
   canAdjust <- andM
     [ canReadVersion updater refId
@@ -90,7 +91,7 @@ removeReference
   => ActorId
   -> VersionId
   -> VersionId
-  -> m (Maybe (Either (Either VersionId EntityId) ()))
+  -> m (Maybe (Either VersionId ()))
 removeReference updater vId refId = do
   canAdjust <- andM
     [ canReadVersion updater refId
@@ -105,7 +106,7 @@ updateVersionSubscriptions
   => ActorId
   -> VersionId
   -> HashSet EntityId
-  -> m (Maybe (Either (Either VersionId EntityId) ()))
+  -> m (Maybe (Either VersionId ()))
 updateVersionSubscriptions updater vId subIds = do
   canAdjust <- andM
     [ allM (canReadEntity updater) (HS.toList subIds)
@@ -119,7 +120,7 @@ addSubscription
   => ActorId
   -> VersionId
   -> EntityId
-  -> m (Maybe (Either (Either VersionId EntityId) ()))
+  -> m (Maybe (Either VersionId ()))
 addSubscription updater vId subId = do
   canAdjust <- andM
     [ canReadEntity updater subId
@@ -133,7 +134,7 @@ removeSubscription
   => ActorId
   -> VersionId
   -> EntityId
-  -> m (Maybe (Either (Either VersionId EntityId) ()))
+  -> m (Maybe (Either VersionId ()))
 removeSubscription updater vId subId = do
   canAdjust <- andM
     [ canReadEntity updater subId
@@ -147,7 +148,7 @@ removeVersion
   :: MonadState Shared m
   => ActorId
   -> VersionId
-  -> m (Maybe (Either (Either VersionId EntityId) ()))
+  -> m (Maybe (Either VersionId ()))
 removeVersion remover vId = do
   s <- get
   canAdjust <- andM
@@ -163,6 +164,22 @@ removeVersion remover vId = do
     ]
   if not canAdjust then pure Nothing else
     Just <$> unsafeRemoveVersion vId
+
+
+updateFork
+  :: MonadState Shared m
+  => ActorId
+  -> EntityId
+  -> Maybe VersionId
+  -> m (Maybe (Either EntityId ()))
+updateFork updater eId mFork = do
+  s <- get
+  canAdjust <- andM
+    [ canUpdateEntity updater eId
+    , maybe (pure True) (canReadVersion updater) mFork
+    ]
+  if not canAdjust then pure Nothing else
+    Just <$> unsafeUpdateFork eId mFork
 
 -- moveVersionToNewFork
 --   :: 

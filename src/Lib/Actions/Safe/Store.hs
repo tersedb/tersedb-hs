@@ -80,7 +80,7 @@ storeEntity
   -> SpaceId -- ^ space in which entity is being stored
   -> VersionId -- ^ initial version
   -> Maybe VersionId -- ^ forked version
-  -> m (Maybe (Either (Either VersionId EntityId) ()))
+  -> m (Maybe (Either VersionId ()))
 storeEntity creator eId sId vId mFork = do
   canAdjust <- andM
     [ canCreateEntity creator sId
@@ -94,7 +94,7 @@ storeNextVersion
   => ActorId -- ^ actor attempting to store a version
   -> EntityId -- ^ entity receiving a new version
   -> VersionId -- ^ version being stored
-  -> m (Maybe (Either (Either VersionId EntityId) ()))
+  -> m (Maybe (Either VersionId ()))
 storeNextVersion creator eId vId = do
   canAdjust <- canUpdateEntity creator eId
   if not canAdjust then  pure Nothing else

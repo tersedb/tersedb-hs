@@ -75,14 +75,14 @@ unsafeStoreEntity
   -> SpaceId
   -> VersionId
   -> Maybe VersionId
-  -> m (Either (Either VersionId EntityId) ())
+  -> m (Either VersionId ())
 unsafeStoreEntity eId sId vId mForkId = do
   s <- get
   let s' = s & store . toEntities . at eId .~ Just (initEntity sId vId mForkId)
              & store . toSpaces . ix sId . entities . at eId .~ Just ()
              & store . toVersions . at vId .~ Just (initVersion eId)
   case do t' <- loadRefsAndSubs vId (s' ^. store) (s' ^. temp)
-          loadForks eId (s' ^. store) t' of
+          pure $ loadForks eId (s' ^. store) t' of
     Left e -> pure (Left e)
     Right t -> Right () <$ put (s' & temp .~ t)
 
@@ -90,7 +90,7 @@ unsafeStoreVersion
   :: MonadState Shared m
   => EntityId
   -> VersionId
-  -> m (Either (Either VersionId EntityId) ())
+  -> m (Either VersionId ())
 unsafeStoreVersion eId vId = do
   s <- get
   let s' = s & store . toEntities . ix eId . versions %~ (vId <|)

@@ -1,7 +1,7 @@
 module Lib.Actions.Unsafe.Update where
 
 import Lib.Actions.Tabulation (updateTabulationStartingAt)
-import Lib.Types.Id (VersionId, EntityId, GroupId)
+import Lib.Types.Id (VersionId, EntityId, GroupId, SpaceId)
 import Lib.Types.Store
   ( Shared
   , Temp
@@ -10,99 +10,76 @@ import Lib.Types.Store
   , toVersions
   , toEntities
   , toGroups
+  , toSpaces
   , toReferencesFrom
-  , toReferencesFromEntities
-  , toReferencesFromSpaces
   , toSubscriptionsFrom
-  , toSubscriptionsFromSpaces
+  , toForksFrom
   )
 import Lib.Types.Store.Groups (prev, nodes, next)
 import Lib.Types.Store.Version (entity, references, subscriptions)
-import Lib.Types.Store.Entity (space, versions)
+import Lib.Types.Store.Entity (space, versions, fork)
+import Lib.Types.Store.Space (entities)
 
 import Data.HashSet (HashSet)
 import qualified Data.HashSet as HS
 import Data.Foldable (foldlM)
 import Data.List (findIndex)
 import qualified Data.List.NonEmpty as NE
-import Data.Maybe (fromJust)
+import Data.Maybe (fromJust, isJust)
 import Control.Lens ((^.), (.~), (&), (^?), (%~), at, ix, non, _Left)
 import Control.Monad.State (MonadState (get, put), modify, runState, execState)
+import Control.Monad.Extra (unless, when, anyM)
 
 
 unsafeUpdateVersionReferences
   :: MonadState Shared m
   => VersionId
   -> HashSet VersionId
-  -> m (Either (Either VersionId EntityId) ())
+  -> m (Either VersionId ())
 unsafeUpdateVersionReferences vId refIds = do
   s <- get
   case s ^. store . toVersions . at vId of
-    Nothing -> pure . Left $ Left vId
+    Nothing -> pure $ Left vId
     Just v -> do
       let oldRefs = v ^. references
           refsToAdd = refIds `HS.difference` oldRefs
           refsToRemove = oldRefs `HS.difference` refIds
 
-          addNewRefs :: Temp -> VersionId -> Either (Either VersionId EntityId) Temp
-          addNewRefs t refId = case s ^. store . toVersions . at refId of
-            Nothing -> Left $ Left refId
-            Just v -> case s ^. store . toEntities . at (v ^. entity) of
-              Nothing -> Left . Right $ v ^. entity
-              Just e -> pure
-                $ t
-                & toReferencesFrom . at refId . non mempty . at vId .~ Just ()
-                & toReferencesFromEntities . at (v ^. entity) . non mempty . at vId .~ Just ()
-                & toReferencesFromSpaces . at (e ^. space) . non mempty . at vId .~ Just ()
+          addNewRefs :: VersionId -> Temp -> Temp
+          addNewRefs refId t = t
+            & toReferencesFrom . at refId . non mempty . at vId .~ Just ()
 
-          removeRefs :: Temp -> VersionId -> Either (Either VersionId EntityId) Temp
-          removeRefs t refId = case s ^. store . toVersions . at refId of
-            Nothing -> Left $ Left refId
-            Just v -> case s ^. store . toEntities . at (v ^. entity) of
-              Nothing -> Left . Right $ v ^. entity
-              Just e ->
-                let t' = t
-                      & toReferencesFrom . ix refId . at vId .~ Nothing
-                      & toReferencesFromEntities . ix (v ^. entity) . at vId .~ Nothing
-                      & toReferencesFromSpaces . ix (e ^. space) . at vId .~ Nothing
-                    t'' = t'
-                      & toReferencesFrom . at refId
-                      %~ maybe Nothing (\x -> if null x then Nothing else Just x)
-                      & toReferencesFromEntities . at (v ^. entity)
-                      %~ maybe Nothing (\x -> if null x then Nothing else Just x)
-                      & toReferencesFromSpaces . at (e ^. space)
-                      %~ maybe Nothing (\x -> if null x then Nothing else Just x)
-                in  pure t''
-      case do t <- foldlM addNewRefs (s ^. temp) (HS.toList refsToAdd)
-              foldlM removeRefs t (HS.toList refsToRemove) of
-        Left e -> pure (Left e)
-        Right t -> do
-          put $ s
-              & temp .~ t
-              & store . toVersions . ix vId . references .~ refIds
-          pure (Right ())
+          removeRefs :: VersionId -> Temp -> Temp
+          removeRefs refId t = t
+            & toReferencesFrom . at refId
+            %~ maybe Nothing
+                (\x -> let y = HS.delete vId x in if null y then Nothing else Just y)
+      put $ s
+          & temp .~ foldr removeRefs (foldr addNewRefs (s ^. temp) refsToAdd) refsToRemove
+          & store . toVersions . ix vId . references .~ refIds
+      pure (Right ())
 
 
 unsafeAddReference
   :: MonadState Shared m
   => VersionId
   -> VersionId
-  -> m (Either (Either VersionId EntityId) ())
+  -> m (Either VersionId ())
 unsafeAddReference vId refId = do
   s <- get
   case s ^? store . toVersions . ix vId . references of
-    Nothing -> pure (Left (Left vId))
+    Nothing -> pure (Left vId)
     Just refs -> unsafeUpdateVersionReferences vId (HS.insert refId refs)
 
 unsafeRemoveReference
   :: MonadState Shared m
   => VersionId -- ^ Referrer
   -> VersionId -- ^ Referred
-  -> m (Either (Either VersionId EntityId) ())
+  -> m (Either VersionId ())
 unsafeRemoveReference vId refId = do
   s <- get
   case s ^? store . toVersions . ix vId . references of
-    Nothing -> pure (Left (Left vId))
+    Nothing -> pure (Left vId)
     Just refs -> unsafeUpdateVersionReferences vId (HS.delete refId refs)
 
 
@@ -110,68 +87,51 @@ unsafeUpdateVersionSubscriptions
   :: MonadState Shared m
   => VersionId
   -> HashSet EntityId
-  -> m (Either (Either VersionId EntityId) ())
+  -> m (Either VersionId ())
 unsafeUpdateVersionSubscriptions vId subIds = do
   s <- get
   case s ^. store . toVersions . at vId of
-    Nothing -> pure . Left $ Left vId
+    Nothing -> pure $ Left vId
     Just v -> do
       let oldSubs = v ^. subscriptions
           subsToAdd = subIds `HS.difference` oldSubs
           subsToRemove = oldSubs `HS.difference` subIds
 
-          addNewSubs :: Temp -> EntityId -> Either (Either VersionId EntityId) Temp
-          addNewSubs t subId = case s ^. store . toEntities . at subId of
-            Nothing -> Left $ Right subId
-            Just e -> pure
-              $ t
-              & toSubscriptionsFrom . at subId . non mempty . at vId .~ Just ()
-              & toSubscriptionsFromSpaces . at (e ^. space) . non mempty . at vId .~ Just ()
+          addNewSubs :: EntityId -> Temp -> Temp
+          addNewSubs subId t = t
+            & toSubscriptionsFrom . at subId . non mempty . at vId .~ Just ()
 
-          removeSubs :: Temp -> EntityId -> Either (Either VersionId EntityId) Temp
-          removeSubs t subId = case s ^. store . toEntities . at subId of
-            Nothing -> Left . Right $ subId
-            Just e ->
-              let t' = t
-                    & toSubscriptionsFrom . ix subId . at vId .~ Nothing
-                    & toSubscriptionsFromSpaces . ix (e ^. space) . at vId .~ Nothing
-                  t'' = t'
-                    & toSubscriptionsFrom . at subId
-                    %~ maybe Nothing (\x -> if null x then Nothing else Just x)
-                    & toSubscriptionsFromSpaces . at (e ^. space)
-                    %~ maybe Nothing (\x -> if null x then Nothing else Just x)
-              in  pure t''
+          removeSubs :: EntityId -> Temp -> Temp
+          removeSubs subId t = t
+            & toSubscriptionsFrom . at subId
+            %~ maybe Nothing (\x -> let y = HS.delete vId x in if null y then Nothing else Just y)
 
-      case do t <- foldlM addNewSubs (s ^. temp) (HS.toList subsToAdd)
-              foldlM removeSubs t (HS.toList subsToRemove) of
-        Left e -> pure (Left e)
-        Right t -> do
-          put $ s
-              & temp .~ t
-              & store . toVersions . ix vId . subscriptions .~ subIds
-          pure (Right ())
+      put $ s
+          & temp .~ foldr removeSubs (foldr addNewSubs (s ^. temp) subsToAdd) subsToRemove
+          & store . toVersions . ix vId . subscriptions .~ subIds
+      pure (Right ())
 
 
 unsafeAddSubscription
   :: MonadState Shared m
   => VersionId
   -> EntityId
-  -> m (Either (Either VersionId EntityId) ())
+  -> m (Either VersionId ())
 unsafeAddSubscription vId subId = do
   s <- get
   case s ^? store . toVersions . ix vId . subscriptions of
-    Nothing -> pure (Left (Left vId))
+    Nothing -> pure (Left vId)
     Just subs -> unsafeUpdateVersionSubscriptions vId (HS.insert subId subs)
 
 unsafeRemoveSubscription
   :: MonadState Shared m
   => VersionId
   -> EntityId
-  -> m (Either (Either VersionId EntityId) ())
+  -> m (Either VersionId ())
 unsafeRemoveSubscription vId subId = do
   s <- get
   case s ^? store . toVersions . ix vId . subscriptions of
-    Nothing -> pure (Left (Left vId))
+    Nothing -> pure (Left vId)
     Just subs -> unsafeUpdateVersionSubscriptions vId (HS.delete subId subs)
 
 
@@ -187,29 +147,29 @@ unsafeRemoveSubscription vId subId = do
 unsafeRemoveVersion
   :: MonadState Shared m
   => VersionId
-  -> m (Either (Either VersionId EntityId) ())
+  -> m (Either VersionId ())
 unsafeRemoveVersion vId = do
   s <- get
   case s ^. store . toVersions . at vId of
-    Nothing -> pure . Left $ Left vId
+    Nothing -> pure $ Left vId
     Just v ->
       let eId :: EntityId = v ^. entity
       in  case s ^? store . toEntities . ix eId of
             Just e
               | length (e ^. versions) > 1 -> do
-                let removeRef :: Shared -> VersionId -> Either (Either VersionId EntityId) Shared
+                let removeRef :: Shared -> VersionId -> Either VersionId Shared
                     removeRef s refId =
                       let (mE, s' :: Shared) = runState (unsafeRemoveReference vId refId) s
                       in  case mE of
                         Left e -> Left e
                         Right () -> Right s'
-                    removeSub :: Shared -> EntityId -> Either (Either VersionId EntityId) Shared
+                    removeSub :: Shared -> EntityId -> Either VersionId Shared
                     removeSub s subId =
                       let (mE, s') = runState (unsafeRemoveSubscription vId subId) s
                       in  case mE of
                         Left e -> Left e
                         Right () -> Right s'
-                    removeReferred :: Shared -> VersionId -> Either (Either VersionId EntityId) Shared
+                    removeReferred :: Shared -> VersionId -> Either VersionId Shared
                     removeReferred s referrerId =
                       let (mE, s' :: Shared) = runState (unsafeRemoveReference referrerId vId) s
                       in  case mE of
@@ -227,9 +187,53 @@ unsafeRemoveVersion vId = do
                       %~ NE.fromList . NE.filter (/= vId)
                     pure $ Right ()
                     -- TODO filter all references so nothing can point to vId
-            _ -> pure . Left $ Left vId -- TODO better error?
+            _ -> pure $ Left vId -- TODO better error?
 
--- unsafeOffsetVersion
+
+unsafeUpdateFork
+  :: MonadState Shared m
+  => EntityId
+  -> Maybe VersionId
+  -> m (Either EntityId ())
+unsafeUpdateFork eId mFork = do
+  s <- get
+  case s ^. store . toEntities . at eId of
+    Nothing -> pure $ Left eId
+    Just e
+      | e ^. fork == mFork -> pure (Right ())
+      | otherwise -> do
+        case e ^. fork of
+          Nothing -> pure ()
+          Just oldForkId ->
+            modify $ temp . toForksFrom . at oldForkId
+              %~ maybe Nothing (\x -> let y = HS.delete eId x in if null y then Nothing else Just y)
+        case mFork of
+          Nothing -> pure ()
+          Just newForkId ->
+            modify $ temp . toForksFrom . at newForkId . non mempty . at eId .~ Just ()
+        modify $ store . toEntities . ix eId . fork .~ mFork
+        pure (Right ())
+
+unsafeMoveEntity
+  :: MonadState Shared m
+  => EntityId
+  -> SpaceId
+  -> m (Either EntityId ())
+unsafeMoveEntity eId newSId = do
+  s <- get
+  case s ^. store . toEntities . at eId of
+    Nothing -> pure $ Left eId
+    Just e
+      | e ^. space == newSId -> pure (Right ())
+      | otherwise -> do
+          let oldSpaceId = e ^. space
+          modify $ store . toSpaces . ix oldSpaceId . entities . at eId .~ Nothing
+          modify $ store . toSpaces . ix newSId . entities . at eId .~ Just ()
+          modify $ store . toEntities . ix eId . space .~ newSId
+          pure (Right ())
+
+
+-- unsafeOffsetVersion fs
 --   :: MonadState Shared m
 --   => VersionId
 --   -> Int -- ^ 0 - don't move it, negative - move it earlier, positive - move it later

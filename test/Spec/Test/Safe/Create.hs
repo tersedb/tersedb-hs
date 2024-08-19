@@ -1,5 +1,6 @@
 module Spec.Test.Safe.Create where
 
+import Spec.Sample.Store (arbitraryShared, arbitraryEmptyShared)
 import Lib.Types.Id (GroupId, ActorId, SpaceId, EntityId, VersionId)
 import Lib.Types.Permission
   ( CollectionPermission (..)
@@ -42,62 +43,74 @@ import Control.Lens ((^.), at, non)
 import Test.Syd (Spec, describe, it, shouldSatisfy)
 import Test.QuickCheck
   ( property
+  , suchThat
+  , arbitrary
+  , forAll
   )
 
 createTests :: Spec
 createTests = describe "Create" $ do
   describe "Should Succeed" $ do
     it "Space via universe" $
-      property $ \(adminActor :: ActorId, adminGroup :: GroupId, aId :: ActorId, gId :: GroupId, sId :: SpaceId) ->
-        let s = emptyShared adminActor adminGroup
-            s' = flip execState s $ do
-              setStage adminActor adminGroup aId gId
-              worked <- setUniversePermission adminActor
-                (CollectionPermissionWithExemption Create False) gId
-              unless worked $ error $ "Couldn't grant universe create permissions " <> show gId
-              worked <- storeSpace aId sId
-              unless worked $ error $ "Couldn't store space " <> show (aId, gId, sId)
-        in  shouldSatisfy s' $ \_ -> isJust $ s' ^. store . toSpaces . at sId
+      forAll arbitraryEmptyShared $ \(s, adminActor, adminGroup) ->
+        property $ \(aId :: ActorId, gId :: GroupId, sId :: SpaceId) ->
+          let s' = flip execState s $ do
+                setStage adminActor adminGroup aId gId
+                worked <- setUniversePermission adminActor
+                  (CollectionPermissionWithExemption Create False) gId
+                unless worked $ error $ "Couldn't grant universe create permissions " <> show gId
+                worked <- storeSpace aId sId
+                unless worked $ error $ "Couldn't store space " <> show (aId, gId, sId)
+          in  shouldSatisfy (s' ^. store . toSpaces . at sId) isJust
     it "Entity" $
-      property $ \(adminActor :: ActorId, adminGroup :: GroupId, aId :: ActorId, gId :: GroupId, sId :: SpaceId, eId :: EntityId, vId :: VersionId) ->
-        let s = emptyShared adminActor adminGroup
-            s' = flip execState s $ do
-              setStage adminActor adminGroup aId gId
-              worked <- setUniversePermission adminActor
-                (CollectionPermissionWithExemption Create False) gId
-              unless worked $ error $ "Couldn't grant universe create permissions " <> show gId
-              worked <- storeSpace aId sId
-              unless worked $ error $ "Couldn't store space " <> show (aId, gId, sId)
-              worked <- setEntityPermission adminActor Create gId sId
-              unless worked $ error $ "Couldn't set entity permission " <> show (gId, sId)
-              mWorked <- storeEntity aId eId sId vId Nothing
-              case mWorked of
-                Just (Right ()) -> pure ()
-                _ -> error $ "Couldn't store entity " <> show (eId, vId)
-        in  shouldSatisfy s' $ \_ ->
-              isJust (s' ^. store . toEntities . at eId)
-                && isJust (s' ^. store . toVersions . at vId)
+      forAll arbitraryEmptyShared $ \(s, adminActor, adminGroup) ->
+        property $
+          \( aId :: ActorId
+          , gId :: GroupId
+          , sId :: SpaceId
+          , eId :: EntityId
+          , vId :: VersionId) -> do
+            let s' = flip execState s $ do
+                  setStage adminActor adminGroup aId gId
+                  worked <- setUniversePermission adminActor
+                    (CollectionPermissionWithExemption Create False) gId
+                  unless worked $ error $ "Couldn't grant universe create permissions " <> show gId
+                  worked <- storeSpace aId sId
+                  unless worked $ error $ "Couldn't store space " <> show (aId, gId, sId)
+                  worked <- setEntityPermission adminActor Create gId sId
+                  unless worked $ error $ "Couldn't set entity permission " <> show (gId, sId)
+                  mWorked <- storeEntity aId eId sId vId Nothing
+                  case mWorked of
+                    Just (Right ()) -> pure ()
+                    _ -> error $ "Couldn't store entity " <> show (eId, vId)
+            shouldSatisfy (s' ^. store . toEntities . at eId) isJust
+            shouldSatisfy (s' ^. store . toVersions . at vId) isJust
     it "Next Version" $
-      property $ \(adminActor :: ActorId, adminGroup :: GroupId, aId :: ActorId, gId :: GroupId, sId :: SpaceId, eId :: EntityId, vId :: VersionId, vId' :: VersionId) ->
-        let s = emptyShared adminActor adminGroup
-            s' = flip execState s $ do
-              setStage adminActor adminGroup aId gId
-              worked <- setUniversePermission adminActor (CollectionPermissionWithExemption Create False) gId
-              unless worked $ error $ "Couldn't grant universe create permissions " <> show gId
-              worked <- storeSpace aId sId
-              unless worked $ error $ "Couldn't store space " <> show (aId, gId, sId)
-              worked <- setEntityPermission adminActor Update gId sId
-              unless worked $ error $ "Couldn't set entity permission " <> show (gId, sId)
-              mWorked <- storeEntity aId eId sId vId Nothing
-              case mWorked of
-                Just (Right ()) -> pure ()
-                _ -> error $ "Couldn't store entity " <> show (eId, vId)
-              mWorked <- storeNextVersion aId eId vId'
-              case mWorked of
-                Just (Right ()) -> pure ()
-                _ -> error $ "Couldn't store version " <> show mWorked
-        in  shouldSatisfy s' $ \_ ->
-              isJust (s' ^. store . toVersions . at vId')
+      forAll arbitraryEmptyShared $ \(s, adminActor, adminGroup) ->
+        property $
+          \( aId :: ActorId
+          , gId :: GroupId
+          , sId :: SpaceId
+          , eId :: EntityId
+          , vId :: VersionId
+          , vId' :: VersionId) ->
+          let s' = flip execState s $ do
+                setStage adminActor adminGroup aId gId
+                worked <- setUniversePermission adminActor (CollectionPermissionWithExemption Create False) gId
+                unless worked $ error $ "Couldn't grant universe create permissions " <> show gId
+                worked <- storeSpace aId sId
+                unless worked $ error $ "Couldn't store space " <> show (aId, gId, sId)
+                worked <- setEntityPermission adminActor Update gId sId
+                unless worked $ error $ "Couldn't set entity permission " <> show (gId, sId)
+                mWorked <- storeEntity aId eId sId vId Nothing
+                case mWorked of
+                  Just (Right ()) -> pure ()
+                  _ -> error $ "Couldn't store entity " <> show (eId, vId)
+                mWorked <- storeNextVersion aId eId vId'
+                case mWorked of
+                  Just (Right ()) -> pure ()
+                  _ -> error $ "Couldn't store version " <> show mWorked
+          in  shouldSatisfy (s' ^. store . toVersions . at vId') isJust 
     it "Group via organization" $
       property $ \(adminActor :: ActorId, adminGroup :: GroupId, aId :: ActorId, gId :: GroupId, gId' :: GroupId) ->
         let s = emptyShared adminActor adminGroup

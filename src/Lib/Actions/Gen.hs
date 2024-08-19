@@ -38,7 +38,7 @@ newEntity
   :: ActorId
   -> SpaceId
   -> Maybe VersionId
-  -> SheepdogM (Maybe (Either (Either VersionId EntityId) (EntityId, VersionId)))
+  -> SheepdogM (Maybe (Either VersionId (EntityId, VersionId)))
 newEntity creator sId mFork = do
   (eId, vId) <- uniformM globalStdGen
   mE <- storeEntity creator eId sId vId mFork
@@ -48,7 +48,7 @@ newEntity creator sId mFork = do
 newVersion
   :: ActorId
   -> EntityId
-  -> SheepdogM (Maybe (Either (Either VersionId EntityId) VersionId))
+  -> SheepdogM (Maybe (Either VersionId VersionId))
 newVersion creator eId = do
   vId <- uniformM globalStdGen
   mE <- storeNextVersion creator eId vId

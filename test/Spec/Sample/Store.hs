@@ -36,6 +36,7 @@ import Lib.Actions.Unsafe.Update.Group
   ( unsafeAdjustSpacePermission
   , unsafeAdjustEntityPermission
   )
+import Lib.Actions.Safe (emptyShared)
 import Lib.Actions.Safe.Store
   ( storeActor
   , storeSpace
@@ -304,3 +305,20 @@ storeSample SampleStore{..} adminActor adminGroup =
         unless succeeded $ do
           s <- get
           error $ "Failed to add member " <> show (aId, gId) <> " - " <> LT.unpack (pShowNoColor s)
+
+
+
+arbitraryShared :: Gen (Shared, ActorId, GroupId)
+arbitraryShared = do
+  xs <- arbitrary
+  adminActor <- arbitrary
+  adminGroup <- arbitrary
+  let s = storeSample xs adminActor adminGroup
+  pure (s, adminActor, adminGroup)
+
+arbitraryEmptyShared :: Gen (Shared, ActorId, GroupId)
+arbitraryEmptyShared = do
+  adminActor <- arbitrary
+  adminGroup <- arbitrary
+  let s = emptyShared adminActor adminGroup
+  pure (s, adminActor, adminGroup)

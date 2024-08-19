@@ -23,13 +23,8 @@ import Lib.Types.Store
   , toGroupPermissions
   , toMemberPermissions
   , toReferencesFrom
-  , toReferencesFromEntities
-  , toReferencesFromSpaces
   , toSubscriptionsFrom
-  , toSubscriptionsFromSpaces
   , toForksFrom
-  , toForksFromEntities
-  , toForksFromSpaces
   , toSpacesHiddenTo
   )
 import Lib.Types.Store.Tabulation.Group
@@ -145,52 +140,30 @@ loadRefsAndSubs
   :: VersionId
   -> Store
   -> Temp
-  -> Either (Either VersionId EntityId) Temp
+  -> Either VersionId Temp
 loadRefsAndSubs vId s t =
   case s ^. toVersions . at vId of
-    Nothing -> Left (Left vId)
-    Just v -> do
-      t' <- foldlM storeRefs t (v ^. references)
-      foldlM storeSubs t' (v ^. subscriptions)
+    Nothing -> Left vId
+    Just v ->
+      pure (foldr storeSubs (foldr storeRefs t (v ^. references)) (v ^. subscriptions))
   where
-    storeRefs t refId = case s ^. toVersions . at refId of
-      Nothing -> Left (Left refId)
-      Just refV -> case s ^. toEntities . at (refV ^. entity) of
-        Nothing -> Left . Right $ refV ^. entity
-        Just refE ->
-          pure $ t
-               & toReferencesFromSpaces . at (refE ^. space) . non mempty . at vId .~ Just ()
-               & toReferencesFromEntities . at (refV ^. entity) . non mempty . at vId .~ Just ()
-               & toReferencesFrom . at refId . non mempty . at vId .~ Just ()
+    storeRefs refId t = t
+      & toReferencesFrom . at refId . non mempty . at vId .~ Just ()
 
-    storeSubs t subId = case s ^. toEntities . at subId of
-      Nothing -> Left (Right subId)
-      Just subE ->
-        pure $ t
-             & toSubscriptionsFromSpaces . at (subE ^. space) . non mempty . at vId .~ Just ()
-             & toSubscriptionsFrom . at subId . non mempty . at vId .~ Just ()
+    storeSubs subId t = t
+      & toSubscriptionsFrom . at subId . non mempty . at vId .~ Just ()
 
 
 loadForks
   :: EntityId
   -> Store
   -> Temp
-  -> Either (Either VersionId EntityId) Temp
+  -> Temp
 loadForks eId s t =
-  let go t (eId, e) = case e ^. fork of
-        Nothing -> pure t
-        Just refId -> case s ^. toVersions . at refId of
-          Nothing -> Left (Left refId)
-          Just refV -> case s ^. toEntities . at (refV ^. entity) of
-            Nothing -> Left . Right $ refV ^. entity
-            Just refE ->
-              pure $
-                 t & toForksFromSpaces . at (refE ^. space) . non mempty . at eId
-                      .~ Just ()
-                   & toForksFromEntities . at (refV ^. entity) . non mempty . at eId
-                      .~ Just ()
-                   & toForksFrom . at refId . non mempty . at eId .~ Just ()
-  in  foldlM go t . HM.toList $ s ^. toEntities
+  let go (eId, e) t = case e ^. fork of
+        Nothing -> t
+        Just refId -> t & toForksFrom . at refId . non mempty . at eId .~ Just ()
+  in  foldr go t (HM.toList (s ^. toEntities))
 
 
 tempFromStore :: Store -> Temp
@@ -213,8 +186,5 @@ tempFromStore s = execState go emptyTemp
 
     loadForks' :: State Temp ()
     loadForks' =
-      for_ (HM.toList $ s ^. toEntities) $ \(eId, e) -> do
-        t <- get
-        case loadForks eId s t of
-          Left e -> error (show e)
-          Right t' -> put t'
+      for_ (HM.keysSet $ s ^. toEntities) $ \eId ->
+        modify (loadForks eId s)

@@ -3,6 +3,8 @@ module Spec.Test.Safe.Read where
 import Spec.Sample.Store
   ( SampleStore (..)
   , loadSample
+  , arbitraryShared
+  , arbitraryEmptyShared
   )
 
 import Lib.Types.Id (GroupId, ActorId, SpaceId, EntityId, VersionId)
@@ -43,41 +45,44 @@ import qualified Data.HashMap.Strict as HM
 import Control.Monad.Extra (unless)
 import Control.Monad.State (execState, evalState, State)
 import Control.Lens ((^.))
-import Test.Syd (Spec, describe, it, shouldSatisfy)
+import Test.Syd (Spec, describe, it, shouldSatisfy, shouldBe)
 import Test.QuickCheck
   ( property
   , forAll
   , elements
+  , arbitrary
+  , suchThat
   )
 
 readTests :: Spec
 readTests = describe "Read" $ do
   describe "New vs. Old" $ do
     it "Spaces" $
-      property $ \(xs :: SampleStore) ->
-        let s = loadSample xs
-        in  if null (s ^. store . toActors) || null (s ^. store . toSpaces) then property True else
+      let gen = suchThat arbitraryShared $ \(s,_,_) ->
+            not (null (s ^. store . toActors)) && not (null (s ^. store . toSpaces))
+      in  forAll gen $ \(s, _, _) ->
             let genAId = elements . HM.keys $ s ^. store . toActors
                 genSId = elements . HM.keys $ s ^. store . toSpaces
             in  forAll ((,) <$> genAId <*> genSId) $ \(aId, sId) ->
                   let resNew = evalState (canReadSpace aId sId) s
                       resOld = evalState (canReadSpaceOld aId sId) s
-                  in  shouldSatisfy (s, aId, sId, resNew, resOld) $ \_ -> resNew == resOld
+                  in  resNew `shouldBe` resOld
   describe "Should Succeed" $ do
     it "Spaces" $
-      property $ \(adminActor :: ActorId, adminGroup :: GroupId, sId :: SpaceId, aId :: ActorId, gId:: GroupId) ->
-        let s = emptyShared adminActor adminGroup
-            go :: State Shared Bool
-            go = do
-              setup adminActor adminGroup aId gId
-              worked <- storeSpace adminActor sId
-              unless worked $ error $ "Couldn't make space " <> show sId
-              worked <- setUniversePermission adminActor
-                (CollectionPermissionWithExemption Read False) gId
-              unless worked $ error $ "Couldn't set universe permission " <> show gId
-              canReadSpace aId sId
-            s' = execState go s
-        in  shouldSatisfy (s', aId, gId, sId) $ \_ -> evalState go s == True
+      forAll arbitraryEmptyShared $ \(s, adminActor, adminGroup) ->
+        property $ \(sId :: SpaceId, aId :: ActorId, gId:: GroupId) ->
+          let s = emptyShared adminActor adminGroup
+              go :: State Shared Bool
+              go = do
+                setup adminActor adminGroup aId gId
+                worked <- storeSpace adminActor sId
+                unless worked $ error $ "Couldn't make space " <> show sId
+                worked <- setUniversePermission adminActor
+                  (CollectionPermissionWithExemption Read False) gId
+                unless worked $ error $ "Couldn't set universe permission " <> show gId
+                canReadSpace aId sId
+              s' = execState go s
+          in  evalState go s `shouldBe` True
     it "Entities" $
       property $ \(adminActor :: ActorId, adminGroup :: GroupId, sId :: SpaceId, aId :: ActorId, gId:: GroupId) ->
         let s = emptyShared adminActor adminGroup

@@ -18,26 +18,26 @@ import Control.Lens.TH (makeLensesFor)
 
 data Temp = Temp
   { tempReferencesFrom :: HashMap VersionId (HashSet VersionId)
-  , tempReferencesFromEntities :: HashMap EntityId (HashSet VersionId)
-  , tempReferencesFromSpaces :: HashMap SpaceId (HashSet VersionId)
+  -- , tempReferencesFromEntities :: HashMap EntityId (HashSet VersionId)
+  -- , tempReferencesFromSpaces :: HashMap SpaceId (HashSet VersionId)
   , tempSubscriptionsFrom :: HashMap EntityId (HashSet VersionId)
-  , tempSubscriptionsFromSpaces :: HashMap SpaceId (HashSet VersionId)
+  -- , tempSubscriptionsFromSpaces :: HashMap SpaceId (HashSet VersionId)
   , tempForksFrom :: HashMap VersionId (HashSet EntityId)
-  , tempForksFromEntities :: HashMap EntityId (HashSet EntityId)
-  , tempForksFromSpaces :: HashMap SpaceId (HashSet EntityId)
+  -- , tempForksFromEntities :: HashMap EntityId (HashSet EntityId)
+  -- , tempForksFromSpaces :: HashMap SpaceId (HashSet EntityId)
   , tempTabulatedGroups :: HashMap GroupId TabulatedPermissionsForGroup
   , tempSpacesHiddenTo :: HashMap SpaceId (HashSet GroupId)
   -- FIXME track universe blind groups
   } deriving (Eq, Show, Read)
 makeLensesFor
   [ ("tempReferencesFrom", "toReferencesFrom")
-  , ("tempReferencesFromEntities", "toReferencesFromEntities")
-  , ("tempReferencesFromSpaces", "toReferencesFromSpaces")
+  -- , ("tempReferencesFromEntities", "toReferencesFromEntities")
+  -- , ("tempReferencesFromSpaces", "toReferencesFromSpaces")
   , ("tempSubscriptionsFrom", "toSubscriptionsFrom")
-  , ("tempSubscriptionsFromSpaces", "toSubscriptionsFromSpaces")
+  -- , ("tempSubscriptionsFromSpaces", "toSubscriptionsFromSpaces")
   , ("tempForksFrom", "toForksFrom")
-  , ("tempForksFromEntities", "toForksFromEntities")
-  , ("tempForksFromSpaces", "toForksFromSpaces")
+  -- , ("tempForksFromEntities", "toForksFromEntities")
+  -- , ("tempForksFromSpaces", "toForksFromSpaces")
   , ("tempTabulatedGroups", "toTabulatedGroups")
   , ("tempSpacesHiddenTo", "toSpacesHiddenTo")
   ] ''Temp
@@ -45,11 +45,6 @@ makeLensesFor
 
 emptyTemp :: Temp
 emptyTemp = Temp
-  mempty
-  mempty
-  mempty
-  mempty
-  mempty
   mempty
   mempty
   mempty
