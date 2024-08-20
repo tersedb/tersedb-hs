@@ -35,6 +35,8 @@ import Lib.Actions.Safe.Update
   , removeSubscription
   , removeVersion
   , updateFork
+  , moveEntity
+  , offsetVersionIndex
   )
 import Lib.Actions.Safe.Update.Group
   ( setUniversePermission
@@ -45,6 +47,7 @@ import Lib.Actions.Safe.Update.Group
   , linkGroups
   )
 
+import Data.List (elemIndex)
 import Data.Maybe (isJust, isNothing, fromJust, fromMaybe)
 import qualified Data.HashMap.Strict as HM
 import qualified Data.HashSet as HS
@@ -60,6 +63,7 @@ import Test.QuickCheck
   , suchThat
   , suchThatMap
   , arbitrary
+  , chooseInt
   )
 
 
@@ -254,6 +258,50 @@ updateTests = describe "Update" $ do
                       _ -> error $ "Couldn't remove version " <> show (newFork, mE)
               (s' ^? store . toEntities . ix eId . fork . _Just) `shouldBe` Just newFork
               (s' ^? temp . toForksFrom . ix newFork . ix eId) `shouldBe` Just ()
+      it "Move an Entity" $
+        let gen = suchThat arbitraryShared $ \(s,_,_) ->
+              not (null $ s ^. store . toEntities) && length (s ^. store . toSpaces) >= 2
+        in  forAll gen $ \(s, adminActor, adminGroup) ->
+              forAll (elements . HM.toList $ s ^. store . toEntities) $ \(eId, e) ->
+                forAll (elements . HM.keys . HM.filter
+                  (\s -> not $ eId `HS.member` (s ^. entities)) $ s ^. store . toSpaces) $ \newSId -> do
+                    let s' = flip execState s $ do
+                          mE <- moveEntity adminActor eId newSId
+                          case mE of
+                            Just (Right ()) -> pure ()
+                            _ -> error $ "Couldn't move entity " <> show (eId, newSId, mE)
+                    (s' ^? store . toEntities . ix eId . space) `shouldBe` Just newSId
+                    (s' ^? store . toSpaces . ix newSId . entities . ix eId) `shouldBe` Just ()
+                    (s' ^? store . toSpaces . ix (e ^. space) . entities . ix eId) `shouldBe` Nothing
+      it "Offset a Version" $
+        let gen = suchThat arbitraryShared $ \(s,_,_) ->
+              not . null
+                  . HM.filter (\e -> length (e ^. versions) > 1)
+                  $ s ^. store . toEntities
+        in  forAll gen $ \(s, adminActor, adminGroup) ->
+              let genE = elements . HM.toList . HM.filter (\e -> length (e ^. versions) > 1)
+                       $ s ^. store . toEntities
+              in  forAll genE $ \(eId, e) ->
+                    let genV = do
+                          v <- elements . NE.toList $ e ^. versions
+                          offsetDirection <- arbitrary
+                          offsetMagnitude <- do
+                            let idx = fromJust . elemIndex v . NE.toList $ e ^. versions
+                            if offsetDirection
+                            then chooseInt (0, length (e ^. versions) - idx)
+                            else negate <$> chooseInt (0, idx)
+                          pure (v, offsetMagnitude)
+                    in  forAll genV $ \(vId, offset) -> do
+                          let s' = flip execState s $ do
+                                mE <- offsetVersionIndex adminActor vId offset
+                                case mE of
+                                  Just (Right ()) -> pure ()
+                                  _ -> error $ "Couldn't offset version " <> show (eId, vId, mE)
+                          shouldSatisfy (s' ^? store . toEntities . ix eId . versions) $ \mVs ->
+                            let vs = NE.toList $ fromJust mVs
+                                oldIdx = fromJust . elemIndex vId . NE.toList $ e ^. versions
+                                newIdx = fromJust $ elemIndex vId vs
+                            in  (newIdx - oldIdx) <= offset
     -- updating a version occurs when you modify an existing one; still subject to modifying the
     -- entity by extension. Modifying a version - changing its references / subscriptions,
     -- changing what it forks from

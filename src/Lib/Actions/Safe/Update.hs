@@ -19,6 +19,8 @@ import Lib.Actions.Unsafe.Update
   , unsafeRemoveSubscription
   , unsafeRemoveVersion
   , unsafeUpdateFork
+  , unsafeMoveEntity
+  , unsafeOffsetVersionIndex
   )
 import Lib.Types.Id (SpaceId, EntityId, ActorId, VersionId)
 import Lib.Types.Store
@@ -32,7 +34,7 @@ import Lib.Types.Store
   )
 import Lib.Types.Store.Space (entities)
 import Lib.Types.Store.Entity (space)
-import Lib.Types.Store.Version (subscriptions, references)
+import Lib.Types.Store.Version (subscriptions, references, entity)
 
 import Data.HashSet (HashSet)
 import qualified Data.HashSet as HS
@@ -181,5 +183,34 @@ updateFork updater eId mFork = do
   if not canAdjust then pure Nothing else
     Just <$> unsafeUpdateFork eId mFork
 
--- moveVersionToNewFork
---   :: 
+
+moveEntity
+  :: MonadState Shared m
+  => ActorId
+  -> EntityId
+  -> SpaceId
+  -> m (Maybe (Either EntityId ()))
+moveEntity updater eId newSId = do
+  s <- get
+  canAdjust <- andM
+    [ canUpdateEntity updater eId
+    , canCreateEntity updater newSId
+    ]
+  if not canAdjust then pure Nothing else
+    Just <$> unsafeMoveEntity eId newSId
+
+
+offsetVersionIndex
+  :: MonadState Shared m
+  => ActorId
+  -> VersionId
+  -> Int
+  -> m (Maybe (Either VersionId ()))
+offsetVersionIndex updater vId offset = do
+  s <- get
+  case s ^. store . toVersions . at vId of
+    Nothing -> pure . Just $ Left vId
+    Just v -> do
+      canAdjust <- canUpdateEntity updater (v ^. entity)
+      if not canAdjust then pure Nothing else
+        Just <$> unsafeOffsetVersionIndex vId offset

@@ -23,7 +23,7 @@ import Lib.Types.Store.Space (entities)
 import Data.HashSet (HashSet)
 import qualified Data.HashSet as HS
 import Data.Foldable (foldlM)
-import Data.List (findIndex)
+import Data.List (elemIndex)
 import qualified Data.List.NonEmpty as NE
 import Data.Maybe (fromJust, isJust)
 import Control.Lens ((^.), (.~), (&), (^?), (%~), at, ix, non, _Left)
@@ -233,11 +233,27 @@ unsafeMoveEntity eId newSId = do
           pure (Right ())
 
 
--- unsafeOffsetVersion fs
---   :: MonadState Shared m
---   => VersionId
---   -> Int -- ^ 0 - don't move it, negative - move it earlier, positive - move it later
---   -> m ()
+unsafeOffsetVersionIndex
+  :: MonadState Shared m
+  => VersionId
+  -> Int -- ^ 0 - don't move it, negative - move it earlier, positive - move it later
+  -> m (Either VersionId ())
+unsafeOffsetVersionIndex _ 0 = pure (Right ())
+unsafeOffsetVersionIndex vId offset = do
+  s <- get
+  case s ^. store . toVersions . at vId of
+    Nothing -> pure $ Left vId
+    Just v -> do
+      modify $ store . toEntities . ix (v ^. entity) . versions %~ go
+      pure $ Right ()
+  where
+    go vs = -- FIXME it'd be nice to use mutable vectors here
+      let vs' = NE.toList vs
+          oldIdx = fromJust $ elemIndex vId vs'
+          newIdx = oldIdx + offset
+          vs'' = filter (/= vId) vs'
+          vs''' = take newIdx vs'' <> (vId : drop newIdx vs'')
+      in  NE.fromList vs'''
 
 -- -- TODO could delete versions
 -- unsafeReSortVersions
