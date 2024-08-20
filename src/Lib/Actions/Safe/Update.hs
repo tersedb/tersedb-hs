@@ -21,6 +21,7 @@ import Lib.Actions.Unsafe.Update
   , unsafeUpdateFork
   , unsafeMoveEntity
   , unsafeOffsetVersionIndex
+  , unsafeSetVersionIndex
   )
 import Lib.Types.Id (SpaceId, EntityId, ActorId, VersionId)
 import Lib.Types.Store
@@ -214,3 +215,19 @@ offsetVersionIndex updater vId offset = do
       canAdjust <- canUpdateEntity updater (v ^. entity)
       if not canAdjust then pure Nothing else
         Just <$> unsafeOffsetVersionIndex vId offset
+
+
+setVersionIndex
+  :: MonadState Shared m
+  => ActorId
+  -> VersionId
+  -> Int
+  -> m (Maybe (Either VersionId ()))
+setVersionIndex updater vId idx = do
+  s <- get
+  case s ^. store . toVersions . at vId of
+    Nothing -> pure . Just $ Left vId
+    Just v -> do
+      canAdjust <- canUpdateEntity updater (v ^. entity)
+      if not canAdjust then pure Nothing else
+        Just <$> unsafeSetVersionIndex vId idx

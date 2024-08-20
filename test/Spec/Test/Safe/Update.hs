@@ -37,6 +37,7 @@ import Lib.Actions.Safe.Update
   , updateFork
   , moveEntity
   , offsetVersionIndex
+  , setVersionIndex
   )
 import Lib.Actions.Safe.Update.Group
   ( setUniversePermission
@@ -302,6 +303,26 @@ updateTests = describe "Update" $ do
                                 oldIdx = fromJust . elemIndex vId . NE.toList $ e ^. versions
                                 newIdx = fromJust $ elemIndex vId vs
                             in  (newIdx - oldIdx) <= offset
+      it "Set a Version Index" $
+        let gen = suchThat arbitraryShared $ \(s,_,_) ->
+              not . null
+                  . HM.filter (\e -> length (e ^. versions) > 1)
+                  $ s ^. store . toEntities
+        in  forAll gen $ \(s, adminActor, adminGroup) ->
+              let genE = elements . HM.toList . HM.filter (\e -> length (e ^. versions) > 1)
+                       $ s ^. store . toEntities
+              in  forAll genE $ \(eId, e) ->
+                    let genV = do
+                          v <- elements . NE.toList $ e ^. versions
+                          idx <- chooseInt (0, length (e ^. versions) - 1)
+                          pure (v, idx)
+                    in  forAll genV $ \(vId, idx) -> do
+                          let s' = flip execState s $ do
+                                mE <- setVersionIndex adminActor vId idx
+                                case mE of
+                                  Just (Right ()) -> pure ()
+                                  _ -> error $ "Couldn't set version index " <> show (eId, vId, mE)
+                          (s' ^? store . toEntities . ix eId . versions . ix idx) `shouldBe` Just vId
     -- updating a version occurs when you modify an existing one; still subject to modifying the
     -- entity by extension. Modifying a version - changing its references / subscriptions,
     -- changing what it forks from

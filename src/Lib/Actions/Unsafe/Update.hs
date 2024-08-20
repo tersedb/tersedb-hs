@@ -255,6 +255,28 @@ unsafeOffsetVersionIndex vId offset = do
           vs''' = take newIdx vs'' <> (vId : drop newIdx vs'')
       in  NE.fromList vs'''
 
+
+unsafeSetVersionIndex
+  :: MonadState Shared m
+  => VersionId
+  -> Int
+  -> m (Either VersionId ())
+unsafeSetVersionIndex vId newIdx = do
+  s <- get
+  case s ^. store . toVersions . at vId of
+    Nothing -> pure $ Left vId
+    Just v -> do
+      modify $ store . toEntities . ix (v ^. entity) . versions %~ go
+      pure $ Right ()
+  where
+    go vs =
+      let vs' = NE.toList vs
+          vs'' = filter (/= vId) vs'
+          vs''' = take newIdx vs'' <> (vId : drop newIdx vs'')
+      in  NE.fromList vs'''
+
+
+
 -- -- TODO could delete versions
 -- unsafeReSortVersions
 --   :: MonadState Shared m
