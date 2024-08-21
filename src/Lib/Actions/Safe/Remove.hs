@@ -1,32 +1,77 @@
 module Lib.Actions.Safe.Remove where
 
-import Lib.Types.Id (ActorId, VersionId)
-import Lib.Types.Store (Shared)
+import Control.Lens (at, ix, (.~), (^.), (^?))
+import Control.Monad.Extra (allM, andM)
+import Control.Monad.State (MonadState (get), modify)
+import Data.HashSet (HashSet)
+import qualified Data.HashSet as HS
+import Lib.Actions.Safe.Verify
+  ( canCreateEntity,
+    canDeleteEntity,
+    canDeleteVersion,
+    canReadEntity,
+    canReadVersion,
+    canUpdateEntity,
+    canUpdateVersion,
+    conditionally,
+  )
+import Lib.Actions.Unsafe.Remove
+  ( unsafeRemoveEntity,
+    unsafeRemoveVersion,
+  )
+import Lib.Types.Id (ActorId, EntityId, SpaceId, VersionId)
+import Lib.Types.Store
+  ( Shared,
+    store,
+    temp,
+    toEntities,
+    toReferencesFrom,
+    toSpaces,
+    toSubscriptionsFrom,
+    toVersions,
+  )
+import Lib.Types.Store.Entity (space)
+import Lib.Types.Store.Space (entities)
+import Lib.Types.Store.Version (entity, references, subscriptions)
 
-import Control.Monad.State (MonadState)
+removeVersion ::
+  (MonadState Shared m) =>
+  ActorId ->
+  VersionId ->
+  m (Maybe (Either (Either VersionId EntityId) ()))
+removeVersion remover vId = do
+  s <- get
+  canAdjust <-
+    andM
+      [ canDeleteVersion remover vId,
+        case s ^? temp . toReferencesFrom . ix vId of
+          Nothing -> pure True
+          Just refs -> allM (canUpdateVersion remover) (HS.toList refs)
+          -- NOTE we don't need to check for `canReadVersion` or `canReadEntity` for
+          -- this version's references and subscriptions, because we're essentially
+          -- making this version blind to them by deleting it
+      ]
+  if not canAdjust
+    then pure Nothing
+    else
+      Just <$> unsafeRemoveVersion vId
 
-
-removeVersion :: MonadState Shared m => ActorId -> VersionId -> m Bool
-removeVersion remover vId = undefined
-  -- TODO verify that you can a) update the entity vId belongs to, b) delete vId,
-  -- c) update nextVId and prevVId if they exist, and d) adjust any references or subscriptions
-  -- that vId had.
-  -- TODO find entity belonging to version
-  -- if there's a next one and a previous one, merge the two:
-  --     A ==> B ==> C
-  --
-  --     A ========> C
-  --      \---> B
-  -- then destroy B
-  --
-  -- if there's only a next one, drop it's prev
-  --     A ==> B
-  --
-  --     B
-  --     ^--- A
-  --
-  -- if there's only a previous one, drop its next
-  --     A ==> B
-  --
-  --     A
-  --      \---> B
+removeEntity ::
+  (MonadState Shared m) =>
+  ActorId ->
+  EntityId ->
+  m (Maybe (Either (Either VersionId EntityId) ()))
+removeEntity remover eId = do
+  s <- get
+  canAdjust <-
+    andM
+      [ case s ^? store . toEntities . ix eId of
+          Nothing -> pure False
+          Just e -> canDeleteEntity remover (e ^. space) eId,
+        case s ^? temp . toSubscriptionsFrom . ix eId of
+          Nothing -> pure True
+          Just subs -> allM (canUpdateVersion remover) (HS.toList subs)
+      ]
+  if not canAdjust
+    then pure Nothing
+    else Just <$> unsafeRemoveEntity eId

@@ -41,6 +41,7 @@ library
       Lib.Actions.Safe.Verify.Utils
       Lib.Actions.Tabulation
       Lib.Actions.Unsafe
+      Lib.Actions.Unsafe.Remove
       Lib.Actions.Unsafe.Store
       Lib.Actions.Unsafe.Update
       Lib.Actions.Unsafe.Update.Group
