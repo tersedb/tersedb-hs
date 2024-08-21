@@ -22,41 +22,42 @@ import Control.Monad.State (MonadState)
 
 canReadMember :: (MonadState Shared m) => ActorId -> GroupId -> m Bool
 canReadMember reader gId =
-    andM
-        [ canDo (\t -> t ^. forMembers . at gId . non Blind) reader Read
-        , canReadGroup reader gId
-        ]
+  andM
+    [ canDo (\t -> t ^. forMembers . at gId . non Blind) reader Read
+    , canReadGroup reader gId
+    ]
 
 canCreateMember :: (MonadState Shared m) => ActorId -> GroupId -> m Bool
 canCreateMember creater gId =
-    andM
-        [ canDo (\t -> t ^. forMembers . at gId . non Blind) creater Create
-        , canReadGroup creater gId
-        ]
+  andM
+    [ canDo (\t -> t ^. forMembers . at gId . non Blind) creater Create
+    , canReadGroup creater gId
+    ]
 
 {- | Semantically holds no purpose; there is no occasion in which a membership would be updated
 as its not an element of any collection -- there is no @MemberId@.
 -}
 canUpdateMember :: (MonadState Shared m) => ActorId -> GroupId -> m Bool
 canUpdateMember updater gId =
-    andM
-        [ canDo (\t -> t ^. forMembers . at gId . non Blind) updater Update
-        , canReadGroup updater gId
-        ]
+  andM
+    [ canDo (\t -> t ^. forMembers . at gId . non Blind) updater Update
+    , canReadGroup updater gId
+    ]
 
 canDeleteMember :: (MonadState Shared m) => ActorId -> GroupId -> m Bool
 canDeleteMember deleter gId =
-    andM
-        [ canDo (\t -> t ^. forMembers . at gId . non Blind) deleter Delete
-        , canReadGroup deleter gId
-        ]
+  andM
+    [ canDo (\t -> t ^. forMembers . at gId . non Blind) deleter Delete
+    , canReadGroup deleter gId
+    ]
 
-hasMemberPermission :: (MonadState Shared m) => ActorId -> GroupId -> CollectionPermission -> m Bool
+hasMemberPermission
+  :: (MonadState Shared m) => ActorId -> GroupId -> CollectionPermission -> m Bool
 hasMemberPermission aId gId p =
-    andM
-        [ canReadGroup aId gId
-        , orM
-            [ canDo (\t -> t ^. forMembers . at gId . non Blind) aId p
-            , canDo (\t -> t ^. forOrganization . collectionPermission) aId Update
-            ]
+  andM
+    [ canReadGroup aId gId
+    , orM
+        [ canDo (\t -> t ^. forMembers . at gId . non Blind) aId p
+        , canDo (\t -> t ^. forOrganization . collectionPermission) aId Update
         ]
+    ]

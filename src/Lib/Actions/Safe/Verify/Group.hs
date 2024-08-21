@@ -1,13 +1,17 @@
 module Lib.Actions.Safe.Verify.Group where
 
-import Lib.Actions.Safe.Verify.Utils (canDo, canDoWithTab, withCollectionPermission)
+import Lib.Actions.Safe.Verify.Utils (
+  canDo,
+  canDoWithTab,
+  withCollectionPermission,
+ )
 import Lib.Types.Id (ActorId, GroupId)
 import Lib.Types.Permission (
-    CollectionPermission (..),
-    CollectionPermissionWithExemption (..),
-    SinglePermission,
-    collectionPermission,
-    escalate,
+  CollectionPermission (..),
+  CollectionPermissionWithExemption (..),
+  SinglePermission,
+  collectionPermission,
+  escalate,
  )
 import Lib.Types.Store (Shared, store, temp, toActors)
 import Lib.Types.Store.Tabulation.Group (forGroups, forOrganization)
@@ -33,10 +37,10 @@ import Data.Maybe (fromMaybe, isJust, isNothing)
 
 canReadGroup :: (MonadState Shared m) => ActorId -> GroupId -> m Bool
 canReadGroup reader gId = do
-    canDo
-        (withCollectionPermission gId forOrganization forGroups)
-        reader
-        Read
+  canDo
+    (withCollectionPermission gId forOrganization forGroups)
+    reader
+    Read
 
 -- visibleGroups :: MonadState Shared m => ActorId -> m (HashSet GroupId)
 --
@@ -44,28 +48,29 @@ canReadGroup reader gId = do
 
 canCreateGroup :: (MonadState Shared m) => ActorId -> m Bool
 canCreateGroup creater =
-    canDo
-        (\t -> t ^. forOrganization . collectionPermission)
-        creater
-        Create
+  canDo
+    (\t -> t ^. forOrganization . collectionPermission)
+    creater
+    Create
 
 canUpdateGroup :: (MonadState Shared m) => ActorId -> GroupId -> m Bool
 canUpdateGroup updater gId =
-    canDo
-        (withCollectionPermission gId forOrganization forGroups)
-        updater
-        Update
+  canDo
+    (withCollectionPermission gId forOrganization forGroups)
+    updater
+    Update
 
 canDeleteGroup :: (MonadState Shared m) => ActorId -> GroupId -> m Bool
 canDeleteGroup deleter gId =
-    canDo
-        (withCollectionPermission gId forOrganization forGroups)
-        deleter
-        Delete
+  canDo
+    (withCollectionPermission gId forOrganization forGroups)
+    deleter
+    Delete
 
-hasGroupPermission :: (MonadState Shared m) => ActorId -> GroupId -> SinglePermission -> m Bool
+hasGroupPermission
+  :: (MonadState Shared m) => ActorId -> GroupId -> SinglePermission -> m Bool
 hasGroupPermission aId gId p =
-    canDoWithTab
-        (withCollectionPermission gId forOrganization forGroups)
-        aId
-        (\t -> escalate (t ^. forOrganization) p)
+  canDoWithTab
+    (withCollectionPermission gId forOrganization forGroups)
+    aId
+    (\t -> escalate (t ^. forOrganization) p)

@@ -18,18 +18,18 @@ import qualified Data.HashSet as HS
 import Deriving.Aeson.Stock (CustomJSON (..), Generic, PrefixedSnake)
 
 data Space = Space
-    { spaceEntities :: HashSet EntityId
-    }
-    deriving (Eq, Generic, Show, Read)
-    deriving
-        (ToJSON, FromJSON)
-        via PrefixedSnake "space" Space
+  { spaceEntities :: HashSet EntityId
+  }
+  deriving (Eq, Generic, Show, Read)
+  deriving
+    (ToJSON, FromJSON)
+    via PrefixedSnake "space" Space
 makeLensesFor
-    [ ("spaceEntities", "entities")
-    ]
-    ''Space
+  [ ("spaceEntities", "entities")
+  ]
+  ''Space
 
 instance Semigroup Space where
-    (Space xs) <> (Space ys) = Space (xs `HS.union` ys)
+  (Space xs) <> (Space ys) = Space (xs `HS.union` ys)
 instance Monoid Space where
-    mempty = Space mempty
+  mempty = Space mempty

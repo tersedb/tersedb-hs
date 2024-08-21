@@ -8,11 +8,11 @@
 {-# LANGUAGE TemplateHaskell #-}
 
 module Lib.Types.Store.Version (
-    Version,
-    initVersion,
-    entity,
-    references,
-    subscriptions,
+  Version,
+  initVersion,
+  entity,
+  references,
+  subscriptions,
 ) where
 
 import Lib.Types.Id (EntityId, VersionId)
@@ -24,25 +24,25 @@ import qualified Data.HashSet as HS
 import Deriving.Aeson.Stock (CustomJSON (..), Generic, PrefixedSnake)
 
 data Version = Version
-    { versionEntity :: EntityId
-    , versionReferences :: HashSet VersionId
-    , versionSubscriptions :: HashSet EntityId
-    }
-    deriving (Eq, Generic, Show, Read)
-    deriving
-        (ToJSON, FromJSON)
-        via PrefixedSnake "version" Version
+  { versionEntity :: EntityId
+  , versionReferences :: HashSet VersionId
+  , versionSubscriptions :: HashSet EntityId
+  }
+  deriving (Eq, Generic, Show, Read)
+  deriving
+    (ToJSON, FromJSON)
+    via PrefixedSnake "version" Version
 makeLensesFor
-    [ ("versionEntity", "entity")
-    , ("versionReferences", "references")
-    , ("versionSubscriptions", "subscriptions")
-    ]
-    ''Version
+  [ ("versionEntity", "entity")
+  , ("versionReferences", "references")
+  , ("versionSubscriptions", "subscriptions")
+  ]
+  ''Version
 
 initVersion :: EntityId -> Version
 initVersion eId =
-    Version
-        { versionEntity = eId
-        , versionReferences = mempty
-        , versionSubscriptions = mempty
-        }
+  Version
+    { versionEntity = eId
+    , versionReferences = mempty
+    , versionSubscriptions = mempty
+    }
