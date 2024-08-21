@@ -83,117 +83,120 @@ updateTests = describe "Update" $ do
     describe "Should Succeed" $ do
       it "Move An Entity to different Space" $
         forAll arbitraryEmptyShared $ \(s, adminActor, adminGroup) ->
-          property $ \( aId :: ActorId
-                        , gId :: GroupId
-                        , sId :: SpaceId
-                        , sId' :: SpaceId
-                        , eId :: EntityId
-                        , vId :: VersionId
-                        ) -> do
-            let s' = flip execState s $ do
-                  setStage adminActor adminGroup aId gId
-                  worked <-
-                    setUniversePermission
-                      adminActor
-                      (CollectionPermissionWithExemption Read False)
-                      gId
-                  unless worked $ error $ "Couldn't grant read universe permission " <> show aId
-                  worked <- storeSpace adminActor sId
-                  unless worked $ error $ "Couldn't store space " <> show sId
-                  worked <- storeSpace adminActor sId'
-                  unless worked $ error $ "Couldn't store space " <> show sId'
-                  worked <- setEntityPermission adminActor Create adminGroup sId
-                  unless worked $ error $ "Couldn't set entity permission " <> show sId
-                  mWorked <- storeEntity adminActor eId sId vId Nothing
-                  case mWorked of
-                    Just (Right ()) -> pure ()
-                    _ -> error $ "Couldn't store entity " <> show (eId, vId)
-                  worked <- setEntityPermission adminActor Create gId sId'
-                  unless worked $ error $ "Couldn't set entity permission " <> show sId'
-                  worked <- setEntityPermission adminActor Delete gId sId
-                  unless worked $ error $ "Couldn't set entity permission " <> show sId
-                  worked <- updateEntitySpace aId eId sId'
-                  unless worked $ error $ "Couldn't move entity " <> show eId
-            (s' ^. store . toSpaces . at sId . non mempty . entities . at eId)
-              `shouldBe` Nothing
-            (s' ^. store . toSpaces . at sId' . non mempty . entities . at eId)
-              `shouldBe` Just ()
-            (s' ^? store . toEntities . ix eId . space) `shouldBe` Just sId'
+          property $
+            \( aId :: ActorId
+              , gId :: GroupId
+              , sId :: SpaceId
+              , sId' :: SpaceId
+              , eId :: EntityId
+              , vId :: VersionId
+              ) -> do
+                let s' = flip execState s $ do
+                      setStage adminActor adminGroup aId gId
+                      worked <-
+                        setUniversePermission
+                          adminActor
+                          (CollectionPermissionWithExemption Read False)
+                          gId
+                      unless worked $ error $ "Couldn't grant read universe permission " <> show aId
+                      worked <- storeSpace adminActor sId
+                      unless worked $ error $ "Couldn't store space " <> show sId
+                      worked <- storeSpace adminActor sId'
+                      unless worked $ error $ "Couldn't store space " <> show sId'
+                      worked <- setEntityPermission adminActor Create adminGroup sId
+                      unless worked $ error $ "Couldn't set entity permission " <> show sId
+                      mWorked <- storeEntity adminActor eId sId vId Nothing
+                      case mWorked of
+                        Just (Right ()) -> pure ()
+                        _ -> error $ "Couldn't store entity " <> show (eId, vId)
+                      worked <- setEntityPermission adminActor Create gId sId'
+                      unless worked $ error $ "Couldn't set entity permission " <> show sId'
+                      worked <- setEntityPermission adminActor Delete gId sId
+                      unless worked $ error $ "Couldn't set entity permission " <> show sId
+                      worked <- updateEntitySpace aId eId sId'
+                      unless worked $ error $ "Couldn't move entity " <> show eId
+                (s' ^. store . toSpaces . at sId . non mempty . entities . at eId)
+                  `shouldBe` Nothing
+                (s' ^. store . toSpaces . at sId' . non mempty . entities . at eId)
+                  `shouldBe` Just ()
+                (s' ^? store . toEntities . ix eId . space) `shouldBe` Just sId'
     describe "Should Fail" $ do
       it "Move An Entity to different Space without delete access" $
         forAll arbitraryEmptyShared $ \(s, adminActor, adminGroup) ->
-          property $ \( aId :: ActorId
-                        , gId :: GroupId
-                        , sId :: SpaceId
-                        , sId' :: SpaceId
-                        , eId :: EntityId
-                        , vId :: VersionId
-                        ) -> do
-            let go = do
-                  setStage adminActor adminGroup aId gId
-                  worked <-
-                    setUniversePermission
-                      adminActor
-                      (CollectionPermissionWithExemption Read False)
-                      gId
-                  unless worked $ error $ "Couldn't grant read universe permission " <> show aId
-                  worked <- storeSpace adminActor sId
-                  unless worked $ error $ "Couldn't store space " <> show sId
-                  worked <- storeSpace adminActor sId'
-                  unless worked $ error $ "Couldn't store space " <> show sId'
-                  worked <- setEntityPermission adminActor Create adminGroup sId
-                  unless worked $ error $ "Couldn't set entity permission " <> show sId
-                  mWorked <- storeEntity adminActor eId sId vId Nothing
-                  case mWorked of
-                    Just (Right ()) -> pure ()
-                    _ -> error $ "Couldn't store entity " <> show (eId, vId)
-                  worked <- setEntityPermission adminActor Create gId sId'
-                  unless worked $ error $ "Couldn't set entity permission " <> show sId'
-                  updateEntitySpace aId eId sId'
-                s' = execState go s
-            evalState go s `shouldBe` False
-            (s' ^. store . toSpaces . at sId . non mempty . entities . at eId)
-              `shouldBe` Just ()
-            (s' ^. store . toSpaces . at sId' . non mempty . entities . at eId)
-              `shouldBe` Nothing
-            (s' ^? store . toEntities . ix eId . space) `shouldBe` Just sId
+          property $
+            \( aId :: ActorId
+              , gId :: GroupId
+              , sId :: SpaceId
+              , sId' :: SpaceId
+              , eId :: EntityId
+              , vId :: VersionId
+              ) -> do
+                let go = do
+                      setStage adminActor adminGroup aId gId
+                      worked <-
+                        setUniversePermission
+                          adminActor
+                          (CollectionPermissionWithExemption Read False)
+                          gId
+                      unless worked $ error $ "Couldn't grant read universe permission " <> show aId
+                      worked <- storeSpace adminActor sId
+                      unless worked $ error $ "Couldn't store space " <> show sId
+                      worked <- storeSpace adminActor sId'
+                      unless worked $ error $ "Couldn't store space " <> show sId'
+                      worked <- setEntityPermission adminActor Create adminGroup sId
+                      unless worked $ error $ "Couldn't set entity permission " <> show sId
+                      mWorked <- storeEntity adminActor eId sId vId Nothing
+                      case mWorked of
+                        Just (Right ()) -> pure ()
+                        _ -> error $ "Couldn't store entity " <> show (eId, vId)
+                      worked <- setEntityPermission adminActor Create gId sId'
+                      unless worked $ error $ "Couldn't set entity permission " <> show sId'
+                      updateEntitySpace aId eId sId'
+                    s' = execState go s
+                evalState go s `shouldBe` False
+                (s' ^. store . toSpaces . at sId . non mempty . entities . at eId)
+                  `shouldBe` Just ()
+                (s' ^. store . toSpaces . at sId' . non mempty . entities . at eId)
+                  `shouldBe` Nothing
+                (s' ^? store . toEntities . ix eId . space) `shouldBe` Just sId
       it "Move An Entity to different Space without create access" $
         forAll arbitraryEmptyShared $ \(s, adminActor, adminGroup) ->
-          property $ \( aId :: ActorId
-                        , gId :: GroupId
-                        , sId :: SpaceId
-                        , sId' :: SpaceId
-                        , eId :: EntityId
-                        , vId :: VersionId
-                        ) -> do
-            let go = do
-                  setStage adminActor adminGroup aId gId
-                  worked <-
-                    setUniversePermission
-                      adminActor
-                      (CollectionPermissionWithExemption Read False)
-                      gId
-                  unless worked $ error $ "Couldn't grant read universe permission " <> show aId
-                  worked <- storeSpace adminActor sId
-                  unless worked $ error $ "Couldn't store space " <> show sId
-                  worked <- storeSpace adminActor sId'
-                  unless worked $ error $ "Couldn't store space " <> show sId'
-                  worked <- setEntityPermission adminActor Create adminGroup sId
-                  unless worked $ error $ "Couldn't set entity permission " <> show sId
-                  mWorked <- storeEntity adminActor eId sId vId Nothing
-                  case mWorked of
-                    Just (Right ()) -> pure ()
-                    _ -> error $ "Couldn't store entity " <> show (eId, vId)
-                  worked <- setEntityPermission adminActor Delete gId sId
-                  unless worked $ error $ "Couldn't set entity permission " <> show sId
-                  updateEntitySpace aId eId sId'
-                s' = execState go s
-            evalState go s `shouldBe` False
-            (s' ^. store . toSpaces . at sId . non mempty . entities . at eId)
-              `shouldBe` Just ()
-            (s' ^. store . toSpaces . at sId' . non mempty . entities . at eId)
-              `shouldBe` Nothing
-            (s' ^? store . toEntities . ix eId . space) `shouldBe` Just sId
+          property $
+            \( aId :: ActorId
+              , gId :: GroupId
+              , sId :: SpaceId
+              , sId' :: SpaceId
+              , eId :: EntityId
+              , vId :: VersionId
+              ) -> do
+                let go = do
+                      setStage adminActor adminGroup aId gId
+                      worked <-
+                        setUniversePermission
+                          adminActor
+                          (CollectionPermissionWithExemption Read False)
+                          gId
+                      unless worked $ error $ "Couldn't grant read universe permission " <> show aId
+                      worked <- storeSpace adminActor sId
+                      unless worked $ error $ "Couldn't store space " <> show sId
+                      worked <- storeSpace adminActor sId'
+                      unless worked $ error $ "Couldn't store space " <> show sId'
+                      worked <- setEntityPermission adminActor Create adminGroup sId
+                      unless worked $ error $ "Couldn't set entity permission " <> show sId
+                      mWorked <- storeEntity adminActor eId sId vId Nothing
+                      case mWorked of
+                        Just (Right ()) -> pure ()
+                        _ -> error $ "Couldn't store entity " <> show (eId, vId)
+                      worked <- setEntityPermission adminActor Delete gId sId
+                      unless worked $ error $ "Couldn't set entity permission " <> show sId
+                      updateEntitySpace aId eId sId'
+                    s' = execState go s
+                evalState go s `shouldBe` False
+                (s' ^. store . toSpaces . at sId . non mempty . entities . at eId)
+                  `shouldBe` Just ()
+                (s' ^. store . toSpaces . at sId' . non mempty . entities . at eId)
+                  `shouldBe` Nothing
+                (s' ^? store . toEntities . ix eId . space) `shouldBe` Just sId
   -- updating an entity occurs when you store a version or modify the set of an entity's versions
   -- or changing what space it belongs to (requires create/entity rights on target space)
   describe "Version" $ do

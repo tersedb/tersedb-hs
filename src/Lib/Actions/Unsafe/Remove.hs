@@ -4,33 +4,28 @@ import Control.Lens (at, ix, non, (%~), (&), (.~), (^.), (^?), _Left)
 import Control.Monad.Extra (anyM, unless, when)
 import Control.Monad.State (MonadState (get, put), execState, modify, runState)
 import Data.Foldable (foldlM)
-import Data.HashSet (HashSet)
-import qualified Data.HashSet as HS
-import Data.List (elemIndex)
 import qualified Data.List.NonEmpty as NE
-import Data.Maybe (fromJust, isJust)
-import Lib.Actions.Tabulation (updateTabulationStartingAt)
 import Lib.Actions.Unsafe.Update (
   unsafeRemoveReference,
   unsafeRemoveSubscription,
   unsafeUpdateFork,
  )
-import Lib.Types.Id (EntityId, GroupId, SpaceId, VersionId)
+import Lib.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
 import Lib.Types.Store (
   Shared,
-  Temp,
   store,
   temp,
   toEntities,
   toForksFrom,
   toGroups,
+  toActors,
   toReferencesFrom,
   toSpaces,
   toSubscriptionsFrom,
   toVersions,
  )
-import Lib.Types.Store.Entity (Entity, fork, space, versions)
-import Lib.Types.Store.Groups (next, nodes, prev)
+import Lib.Types.Store.Entity (versions)
+import Lib.Types.Store.Groups (nodes, members, emptyGroup)
 import Lib.Types.Store.Space (entities)
 import Lib.Types.Store.Version (entity, references, subscriptions)
 
@@ -136,3 +131,12 @@ unsafeRemoveSpace sId = do
   rmEntity s eId =
     let (mE, s') = runState (unsafeRemoveEntity eId) s
      in _Left %~ Left $ const s' <$> mE
+
+unsafeRemoveMember
+  :: (MonadState Shared m)
+  => GroupId
+  -> ActorId
+  -> m ()
+unsafeRemoveMember gId aId = do
+  modify $ store . toActors . at aId . non mempty . at gId .~ Nothing
+  modify $ store . toGroups . nodes . at gId . non emptyGroup . members . at aId .~ Nothing

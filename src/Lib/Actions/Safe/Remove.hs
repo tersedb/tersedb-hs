@@ -1,16 +1,14 @@
 module Lib.Actions.Safe.Remove where
 
-import Control.Lens (at, ix, (.~), (^.), (^?))
+import Control.Lens (ix, (^.), (^?))
 import Control.Monad.Extra (allM, andM)
-import Control.Monad.State (MonadState (get), modify)
-import Data.HashSet (HashSet)
+import Control.Monad.State (MonadState (get))
 import qualified Data.HashSet as HS
 import Lib.Actions.Safe.Verify (
-  canCreateEntity,
   canDeleteEntity,
   canDeleteSpace,
   canDeleteVersion,
-  canReadEntity,
+  canDeleteMember,
   canReadVersion,
   canUpdateEntity,
   canUpdateVersion,
@@ -20,8 +18,9 @@ import Lib.Actions.Unsafe.Remove (
   unsafeRemoveEntity,
   unsafeRemoveSpace,
   unsafeRemoveVersion,
+  unsafeRemoveMember,
  )
-import Lib.Types.Id (ActorId, EntityId, SpaceId, VersionId)
+import Lib.Types.Id (ActorId, EntityId, SpaceId, VersionId, GroupId)
 import Lib.Types.Store (
   Shared,
   store,
@@ -30,11 +29,9 @@ import Lib.Types.Store (
   toReferencesFrom,
   toSpaces,
   toSubscriptionsFrom,
-  toVersions,
  )
 import Lib.Types.Store.Entity (space)
 import Lib.Types.Store.Space (entities)
-import Lib.Types.Store.Version (entity, references, subscriptions)
 
 removeVersion
   :: (MonadState Shared m)
@@ -94,3 +91,13 @@ removeSpace remover sId = do
   if not canAdjust
     then pure Nothing
     else Just <$> unsafeRemoveSpace sId
+
+
+removeMember
+  :: MonadState Shared m
+  => ActorId
+  -> GroupId
+  -> ActorId
+  -> m Bool
+removeMember remover gId aId =
+  canDeleteMember remover gId >>= conditionally (unsafeRemoveMember gId aId)
