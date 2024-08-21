@@ -3,20 +3,20 @@ module Spec.Test.Safe.Delete where
 import Control.Lens (at, ix, (^.), (^?))
 import Control.Monad.Extra (unless)
 import Control.Monad.State (execState)
-import Data.Foldable (for_, fold)
+import Data.Foldable (fold, for_)
 import qualified Data.HashMap.Strict as HM
 import qualified Data.HashSet as HS
 import qualified Data.List.NonEmpty as NE
 import Data.Maybe (fromJust, fromMaybe)
 import Lib.Actions.Safe.Remove (
   removeEntity,
+  removeMember,
   removeSpace,
   removeVersion,
-  removeMember,
  )
 import Lib.Actions.Safe.Update.Group (
   setEntityPermission,
-  setMemberPermission
+  setMemberPermission,
  )
 import Lib.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
 import Lib.Types.Permission (
@@ -25,17 +25,17 @@ import Lib.Types.Permission (
 import Lib.Types.Store (
   store,
   temp,
+  toActors,
   toEntities,
   toForksFrom,
+  toGroups,
   toReferencesFrom,
   toSpaces,
-  toGroups,
-  toActors,
   toSubscriptionsFrom,
   toVersions,
  )
 import Lib.Types.Store.Entity (fork, space, versions)
-import Lib.Types.Store.Groups (nodes, members)
+import Lib.Types.Store.Groups (members, nodes)
 import Lib.Types.Store.Space (entities)
 import Lib.Types.Store.Tabulation.Group (hasLessOrEqualPermissionsTo)
 import Lib.Types.Store.Version (entity, references, subscriptions)
@@ -51,7 +51,7 @@ import Test.QuickCheck (
   suchThat,
   suchThatMap,
  )
-import Test.Syd (Spec, describe, it, shouldBe, context)
+import Test.Syd (Spec, context, describe, it, shouldBe)
 
 removeTests :: Spec
 removeTests = describe "Remove" $ do
@@ -127,20 +127,22 @@ removeTests = describe "Remove" $ do
                       (s' ^? temp . toReferencesFrom . ix vId) `shouldBe` Nothing
   describe "Member" $
     it "should remove member from group" $
-      let gen = suchThat arbitraryShared $ \(s,_,_) ->
+      let gen = suchThat arbitraryShared $ \(s, _, _) ->
             not . null . fold $ s ^. store . toActors
-      in forAll gen $ \(s, adminActor, adminGroup) ->
-          let genG = elements . HM.toList . HM.filter (not . null) $ s ^. store . toActors
-          in  forAll genG $ \(aId :: ActorId, gs) ->
-                forAll (elements $ HS.toList gs) $ \gId -> do
-                  let s' = flip execState s $ do
-                        worked <- setMemberPermission adminActor Delete adminGroup gId
-                        unless worked $
-                          error $ "Couldn't set group permission " <> show gId
-                        worked <- removeMember adminActor gId aId
-                        unless worked $
-                          error $ "Couldn't remove member " <> show (gId, aId)
-                  context "Actor in Group" $
-                    (s' ^? store . toGroups . nodes . ix gId . members . ix aId) `shouldBe` Nothing
-                  context "Group in Actor" $
-                    (s' ^? store . toActors . ix aId . ix gId) `shouldBe` Nothing
+       in forAll gen $ \(s, adminActor, adminGroup) ->
+            let genG = elements . HM.toList . HM.filter (not . null) $ s ^. store . toActors
+             in forAll genG $ \(aId :: ActorId, gs) ->
+                  forAll (elements $ HS.toList gs) $ \gId -> do
+                    let s' = flip execState s $ do
+                          worked <- setMemberPermission adminActor Delete adminGroup gId
+                          unless worked $
+                            error $
+                              "Couldn't set group permission " <> show gId
+                          worked <- removeMember adminActor gId aId
+                          unless worked $
+                            error $
+                              "Couldn't remove member " <> show (gId, aId)
+                    context "Actor in Group" $
+                      (s' ^? store . toGroups . nodes . ix gId . members . ix aId) `shouldBe` Nothing
+                    context "Group in Actor" $
+                      (s' ^? store . toActors . ix aId . ix gId) `shouldBe` Nothing

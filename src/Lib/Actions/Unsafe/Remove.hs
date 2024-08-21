@@ -15,17 +15,17 @@ import Lib.Types.Store (
   Shared,
   store,
   temp,
+  toActors,
   toEntities,
   toForksFrom,
   toGroups,
-  toActors,
   toReferencesFrom,
   toSpaces,
   toSubscriptionsFrom,
   toVersions,
  )
 import Lib.Types.Store.Entity (versions)
-import Lib.Types.Store.Groups (nodes, members, emptyGroup)
+import Lib.Types.Store.Groups (emptyGroup, members, nodes)
 import Lib.Types.Store.Space (entities)
 import Lib.Types.Store.Version (entity, references, subscriptions)
 
@@ -139,4 +139,5 @@ unsafeRemoveMember
   -> m ()
 unsafeRemoveMember gId aId = do
   modify $ store . toActors . at aId . non mempty . at gId .~ Nothing
-  modify $ store . toGroups . nodes . at gId . non emptyGroup . members . at aId .~ Nothing
+  modify $
+    store . toGroups . nodes . at gId . non emptyGroup . members . at aId .~ Nothing

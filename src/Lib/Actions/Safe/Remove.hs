@@ -6,9 +6,9 @@ import Control.Monad.State (MonadState (get))
 import qualified Data.HashSet as HS
 import Lib.Actions.Safe.Verify (
   canDeleteEntity,
+  canDeleteMember,
   canDeleteSpace,
   canDeleteVersion,
-  canDeleteMember,
   canReadVersion,
   canUpdateEntity,
   canUpdateVersion,
@@ -16,11 +16,11 @@ import Lib.Actions.Safe.Verify (
  )
 import Lib.Actions.Unsafe.Remove (
   unsafeRemoveEntity,
+  unsafeRemoveMember,
   unsafeRemoveSpace,
   unsafeRemoveVersion,
-  unsafeRemoveMember,
  )
-import Lib.Types.Id (ActorId, EntityId, SpaceId, VersionId, GroupId)
+import Lib.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
 import Lib.Types.Store (
   Shared,
   store,
@@ -92,9 +92,8 @@ removeSpace remover sId = do
     then pure Nothing
     else Just <$> unsafeRemoveSpace sId
 
-
 removeMember
-  :: MonadState Shared m
+  :: (MonadState Shared m)
   => ActorId
   -> GroupId
   -> ActorId
