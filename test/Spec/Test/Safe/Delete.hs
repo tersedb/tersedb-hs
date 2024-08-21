@@ -80,6 +80,10 @@ removeTests = describe "Remove" $ do
                       s' ^? store . toEntities . ix eId . versions
                     )
                     `shouldBe` mempty
+                  for_ (fromJust (s ^? store . toVersions . ix vId . references)) $ \refId ->
+                    (s' ^? temp . toReferencesFrom . ix refId . ix vId) `shouldBe` Nothing
+                  for_ (fromJust (s ^? store . toVersions . ix vId . subscriptions)) $ \subId ->
+                    (s' ^? temp . toSubscriptionsFrom . ix subId . ix vId) `shouldBe` Nothing
                   (s' ^? temp . toReferencesFrom . ix vId) `shouldBe` Nothing
   describe "Entity" $
     it "should delete all versions" $
@@ -100,7 +104,9 @@ removeTests = describe "Remove" $ do
                   (s' ^. store . toEntities . at eId) `shouldBe` Nothing
                   for_ (e ^. versions) $ \vId ->
                     (s' ^. store . toVersions . at vId) `shouldBe` Nothing
-
+                  for_ (e ^. fork) $ \forkId ->
+                    (s' ^? temp . toForksFrom . ix forkId . ix eId) `shouldBe` Nothing
+                  (s' ^? temp . toSubscriptionsFrom . ix eId) `shouldBe` Nothing
   -- TODO verify that subscriptions are also removed
   describe "Space" $
     it "should delete all entities" $
@@ -119,5 +125,8 @@ removeTests = describe "Remove" $ do
                           Just (Right ()) -> pure ()
                           _ -> error $ "Couldn't remove space " <> show (sId, eWorked)
                   (s' ^. store . toSpaces . at sId) `shouldBe` Nothing
-                  for_ (sp ^. entities) $ \eId ->
+                  for_ (sp ^. entities) $ \eId -> do
                     (s' ^. store . toEntities . at eId) `shouldBe` Nothing
+                    (s' ^? temp . toSubscriptionsFrom . ix eId) `shouldBe` Nothing
+                    for_ (fromJust (s ^? store . toEntities . ix eId . versions)) $ \vId ->
+                      (s' ^? temp . toReferencesFrom . ix vId) `shouldBe` Nothing
