@@ -3,12 +3,11 @@ module Lib.Types.Monad where
 import Lib.Types.Store (Shared, Store, store, temp)
 import qualified Lib.Types.Store as Shared
 
-import Data.Kind (Type)
-import Data.Functor.Identity (Identity (..))
-import Control.Lens (Lens', view, set, over)
+import Control.Lens (Lens', over, set, view)
 import Control.Monad.IO.Class (MonadIO)
-import Control.Monad.State (StateT, get, put, modify)
-
+import Control.Monad.State (StateT, get, modify, put)
+import Data.Functor.Identity (Identity (..))
+import Data.Kind (Type)
 
 -- class MonadTerseTemp (m :: Type -> Type) where
 --   type TempResultM m :: Type -> Type
@@ -28,12 +27,10 @@ import Control.Monad.State (StateT, get, put, modify)
 --   putTemp :: Lens' (Temp m) a -> a -> m (TempResultM m ())
 --   modifyTemp :: Lens' (Temp m) a -> (a -> a) -> m (TempResultM m ())
 
-
 -- -- | Uses StateT for all mutations
 -- newtype SimpleTerseM a = SimpleTerseM
 --   { getSimpleTerseM :: StateT Shared IO a
 --   } deriving (Functor, Applicative, Monad, MonadIO)
-
 
 -- instance MonadTerseTemp SimpleTerseM where
 --   type TempResultM SimpleTerseM = Identity
@@ -65,12 +62,10 @@ import Control.Monad.State (StateT, get, put, modify)
 --   modifyTemp proj f =
 --     SimpleTerseM (Identity <$> modify (over (temp . proj) f))
 
-
 -- -- | Uses AcidState
 -- newtype ModerateTerseM a = ModerateTerseM
 --   { getModerateTerseM :: ReaderT (AcidState Store) (StateT Temp IO) a
 --   } deriving (Functor, Applicative, Monad, MonadIO)
-
 
 -- instance MonadTerseStore ModerateTerseM where
 --   type StoreResultM ModerateTerseM = Identity

@@ -1,101 +1,119 @@
 module Lib.Actions.Safe.Store where
 
-import Lib.Actions.Safe.Verify
-  ( canCreateGroup
-  , canCreateActor
-  , canCreateMember
-  , canCreateSpace
-  , canCreateEntity
-  , canUpdateEntity
-  , canReadEntity
-  , canReadVersion
-  , conditionally
-  )
-import Lib.Actions.Unsafe.Store
-  ( unsafeStoreGroup
-  , unsafeStoreActor
-  , unsafeStoreSpace
-  , unsafeStoreEntity
-  , unsafeStoreVersion
-  , unsafeAddMember
-  )
-import Lib.Types.Id (GroupId, SpaceId, EntityId, VersionId, ActorId)
-import Lib.Types.Store
-  ( Shared
-  , store
-  , toEntities
-  , toVersions
-  )
+import Lib.Actions.Safe.Verify (
+    canCreateActor,
+    canCreateEntity,
+    canCreateGroup,
+    canCreateMember,
+    canCreateSpace,
+    canReadEntity,
+    canReadVersion,
+    canUpdateEntity,
+    conditionally,
+ )
+import Lib.Actions.Unsafe.Store (
+    unsafeAddMember,
+    unsafeStoreActor,
+    unsafeStoreEntity,
+    unsafeStoreGroup,
+    unsafeStoreSpace,
+    unsafeStoreVersion,
+ )
+import Lib.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
+import Lib.Types.Store (
+    Shared,
+    store,
+    toEntities,
+    toVersions,
+ )
 import Lib.Types.Store.Entity (versions)
 import Lib.Types.Store.Version (entity)
 
-import qualified Data.List.NonEmpty as NE
-import Control.Lens ((^.), at, _Left, (%~), (&))
-import Control.Monad.State (MonadState (get))
+import Control.Lens (at, (%~), (&), (^.), _Left)
 import Control.Monad.Extra (andM)
+import Control.Monad.State (MonadState (get))
+import qualified Data.List.NonEmpty as NE
 
-
-
-storeGroup
-  :: MonadState Shared m
-  => ActorId -- ^ actor storing the group
-  -> GroupId -- ^ group being stored
-  -> m Bool
+storeGroup ::
+    (MonadState Shared m) =>
+    -- | actor storing the group
+    ActorId ->
+    -- | group being stored
+    GroupId ->
+    m Bool
 storeGroup creator gId =
-  canCreateGroup creator >>=
-    conditionally (unsafeStoreGroup gId)
+    canCreateGroup creator
+        >>= conditionally (unsafeStoreGroup gId)
 
-storeActor
-  :: MonadState Shared m
-  => ActorId -- ^ actor storing the created actor
-  -> ActorId -- ^ created actor being stored
-  -> m Bool
+storeActor ::
+    (MonadState Shared m) =>
+    -- | actor storing the created actor
+    ActorId ->
+    -- | created actor being stored
+    ActorId ->
+    m Bool
 storeActor creator aId =
-  canCreateActor creator >>=
-    conditionally (unsafeStoreActor aId)
+    canCreateActor creator
+        >>= conditionally (unsafeStoreActor aId)
 
-addMember
-  :: MonadState Shared m
-  => ActorId -- ^ actor creating membership
-  -> GroupId -- ^ group gaining a member
-  -> ActorId -- ^ new member
-  -> m Bool
+addMember ::
+    (MonadState Shared m) =>
+    -- | actor creating membership
+    ActorId ->
+    -- | group gaining a member
+    GroupId ->
+    -- | new member
+    ActorId ->
+    m Bool
 addMember creator gId aId = do
-  canCreateMember creator gId >>=
-    conditionally (unsafeAddMember gId aId)
+    canCreateMember creator gId
+        >>= conditionally (unsafeAddMember gId aId)
 
-storeSpace
-  :: MonadState Shared m
-  => ActorId -- ^ actor storing the space
-  -> SpaceId -- ^ space being created
-  -> m Bool
+storeSpace ::
+    (MonadState Shared m) =>
+    -- | actor storing the space
+    ActorId ->
+    -- | space being created
+    SpaceId ->
+    m Bool
 storeSpace creator sId =
-  canCreateSpace creator >>=
-    conditionally (unsafeStoreSpace sId)
+    canCreateSpace creator
+        >>= conditionally (unsafeStoreSpace sId)
 
-storeEntity
-  :: MonadState Shared m
-  => ActorId -- ^ actor storing the entity
-  -> EntityId -- ^ entity being stored
-  -> SpaceId -- ^ space in which entity is being stored
-  -> VersionId -- ^ initial version
-  -> Maybe VersionId -- ^ forked version
-  -> m (Maybe (Either VersionId ()))
+storeEntity ::
+    (MonadState Shared m) =>
+    -- | actor storing the entity
+    ActorId ->
+    -- | entity being stored
+    EntityId ->
+    -- | space in which entity is being stored
+    SpaceId ->
+    -- | initial version
+    VersionId ->
+    -- | forked version
+    Maybe VersionId ->
+    m (Maybe (Either VersionId ()))
 storeEntity creator eId sId vId mFork = do
-  canAdjust <- andM
-    [ canCreateEntity creator sId
-    , maybe (pure True) (canReadVersion creator) mFork
-    ]
-  if not canAdjust then pure Nothing else
-    Just <$> unsafeStoreEntity eId sId vId mFork
+    canAdjust <-
+        andM
+            [ canCreateEntity creator sId
+            , maybe (pure True) (canReadVersion creator) mFork
+            ]
+    if not canAdjust
+        then pure Nothing
+        else Just <$> unsafeStoreEntity eId sId vId mFork
 
-storeNextVersion
-  :: MonadState Shared m
-  => ActorId -- ^ actor attempting to store a version
-  -> EntityId -- ^ entity receiving a new version
-  -> VersionId -- ^ version being stored
-  -> m (Maybe (Either VersionId ()))
+storeNextVersion ::
+    (MonadState Shared m) =>
+    -- | actor attempting to store a version
+    ActorId ->
+    -- | entity receiving a new version
+    EntityId ->
+    -- | version being stored
+    VersionId ->
+    m (Maybe (Either VersionId ()))
 storeNextVersion creator eId vId = do
-  canAdjust <- canUpdateEntity creator eId
-  if not canAdjust then  pure Nothing else
-    Just <$> unsafeStoreVersion eId vId
+    canAdjust <- canUpdateEntity creator eId
+    if not canAdjust
+        then pure Nothing
+        else Just <$> unsafeStoreVersion eId vId
