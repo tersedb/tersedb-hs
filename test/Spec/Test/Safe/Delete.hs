@@ -12,6 +12,7 @@ import Data.Maybe (fromJust, fromMaybe, isJust, isNothing)
 import Lib.Actions.Safe (emptyShared)
 import Lib.Actions.Safe.Remove
   ( removeEntity,
+    removeSpace,
     removeVersion,
   )
 import Lib.Actions.Safe.Store (addMember, storeActor, storeEntity, storeGroup, storeSpace)
@@ -100,19 +101,23 @@ removeTests = describe "Remove" $ do
                   for_ (e ^. versions) $ \vId ->
                     (s' ^. store . toVersions . at vId) `shouldBe` Nothing
 
--- TODO verify that subscriptions are also removed
--- describe "Space" $
---   it "should delete all entities" $
---     let gen = suchThat arbitraryShared $ \(s, _, _) ->
---           not . null $ s ^. store . toSpaces
---      in forAll gen $ \(s, adminActor, adminGroup) ->
---           let genS = elements . HS.toList $ s ^. store . toSpaces
---            in forAll genS $ \(sId, sp) -> do
---                 let s' = flip execState s $ do
---                       eWorked <- removeSpace adminActor sId
---                       case eWorked of
---                         Just (Right ()) -> pure ()
---                         _ -> error $ "Couldn't remove space " <> (sId, eWorked)
---                 (s' ^. store . toSpaces . at sId) `shouldBe` Nothing
---                 for_ (sp ^. entities) $ \eId ->
---                   (s' ^. store . toEntities . at eId) `shouldBe` Nothing
+  -- TODO verify that subscriptions are also removed
+  describe "Space" $
+    it "should delete all entities" $
+      let gen = suchThat arbitraryShared $ \(s, _, _) ->
+            not . null $ s ^. store . toSpaces
+       in forAll gen $ \(s, adminActor, adminGroup) ->
+            let genS = elements . HM.toList $ s ^. store . toSpaces
+             in forAll genS $ \(sId, sp) -> do
+                  let s' = flip execState s $ do
+                        worked <- setEntityPermission adminActor Delete adminGroup sId
+                        unless worked $
+                          error $
+                            "Couldn't set delete permission for entities " <> show sId
+                        eWorked <- removeSpace adminActor sId
+                        case eWorked of
+                          Just (Right ()) -> pure ()
+                          _ -> error $ "Couldn't remove space " <> show (sId, eWorked)
+                  (s' ^. store . toSpaces . at sId) `shouldBe` Nothing
+                  for_ (sp ^. entities) $ \eId ->
+                    (s' ^. store . toEntities . at eId) `shouldBe` Nothing

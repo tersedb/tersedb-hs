@@ -110,22 +110,22 @@ unsafeRemoveEntity eId = do
       let (mE, s') = runState (unsafeUpdateFork eId Nothing) s
        in _Left %~ Right $ const s' <$> mE
 
--- unsafeRemoveSpace ::
---   (MonadState Shared m) =>
---   SpaceId ->
---   m (Either SpaceId ())
--- unsafeRemoveSpace sId = do
---   s <- get
---   case s ^. store . toSpaces . at sId of
---     Nothing -> pure (Left sId)
---     Just sp -> do
---       foldlM goEnt s (sp ^. entities) $ \eId ->
---   where
---     goEnt :: Shared -> EntityId -> Either EntityId Shared
---     goEnt s eId =
---       case s ^. shared . toEntities . at eId of
---         Nothing -> Left eId
---         Just e ->
---           foldr  (e ^. versions)
---           pure $ s & store .
---           modify $ store . toEntities . at eId .~ Nothing
+unsafeRemoveSpace ::
+  (MonadState Shared m) =>
+  SpaceId ->
+  m (Either (Either (Either VersionId EntityId) SpaceId) ())
+unsafeRemoveSpace sId = do
+  s <- get
+  case s ^. store . toSpaces . at sId of
+    Nothing -> pure . Left $ Right sId
+    Just sp -> case foldlM rmEntity s (sp ^. entities) of
+      Left e -> pure $ Left e
+      Right s' -> do
+        put s'
+        modify $ store . toSpaces . at sId .~ Nothing
+        pure (Right ())
+  where
+    rmEntity :: Shared -> EntityId -> Either (Either (Either VersionId EntityId) SpaceId) Shared
+    rmEntity s eId =
+      let (mE, s') = runState (unsafeRemoveEntity eId) s
+       in _Left %~ Left $ const s' <$> mE

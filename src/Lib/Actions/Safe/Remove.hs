@@ -8,6 +8,7 @@ import qualified Data.HashSet as HS
 import Lib.Actions.Safe.Verify
   ( canCreateEntity,
     canDeleteEntity,
+    canDeleteSpace,
     canDeleteVersion,
     canReadEntity,
     canReadVersion,
@@ -17,6 +18,7 @@ import Lib.Actions.Safe.Verify
   )
 import Lib.Actions.Unsafe.Remove
   ( unsafeRemoveEntity,
+    unsafeRemoveSpace,
     unsafeRemoveVersion,
   )
 import Lib.Types.Id (ActorId, EntityId, SpaceId, VersionId)
@@ -75,3 +77,21 @@ removeEntity remover eId = do
   if not canAdjust
     then pure Nothing
     else Just <$> unsafeRemoveEntity eId
+
+removeSpace ::
+  (MonadState Shared m) =>
+  ActorId ->
+  SpaceId ->
+  m (Maybe (Either (Either (Either VersionId EntityId) SpaceId) ()))
+removeSpace remover sId = do
+  s <- get
+  canAdjust <- case s ^? store . toSpaces . ix sId of
+    Nothing -> pure False
+    Just s ->
+      andM
+        [ canDeleteSpace remover sId,
+          allM (canDeleteEntity remover sId) (HS.toList (s ^. entities))
+        ]
+  if not canAdjust
+    then pure Nothing
+    else Just <$> unsafeRemoveSpace sId
