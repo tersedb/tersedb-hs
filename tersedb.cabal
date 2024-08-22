@@ -61,20 +61,21 @@ library
   hs-source-dirs:
       src
   default-extensions:
-      FlexibleContexts
-      ScopedTypeVariables
-      GeneralizedNewtypeDeriving
-      RecordWildCards
-      NamedFieldPuns
       DerivingVia
       DataKinds
       DeriveGeneric
+      FlexibleContexts
+      FlexibleInstances
+      GeneralizedNewtypeDeriving
+      InstanceSigs
+      KindSignatures
+      NamedFieldPuns
       RankNTypes
+      RecordWildCards
+      ScopedTypeVariables
+      StandaloneDeriving
       TemplateHaskell
       TypeFamilies
-      KindSignatures
-      StandaloneDeriving
-      InstanceSigs
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -Wno-name-shadowing
   build-depends:
       QuickCheck
@@ -103,20 +104,21 @@ executable sheepdogdb-exe
   hs-source-dirs:
       app
   default-extensions:
-      FlexibleContexts
-      ScopedTypeVariables
-      GeneralizedNewtypeDeriving
-      RecordWildCards
-      NamedFieldPuns
       DerivingVia
       DataKinds
       DeriveGeneric
+      FlexibleContexts
+      FlexibleInstances
+      GeneralizedNewtypeDeriving
+      InstanceSigs
+      KindSignatures
+      NamedFieldPuns
       RankNTypes
+      RecordWildCards
+      ScopedTypeVariables
+      StandaloneDeriving
       TemplateHaskell
       TypeFamilies
-      KindSignatures
-      StandaloneDeriving
-      InstanceSigs
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -Wno-name-shadowing -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       QuickCheck
@@ -155,20 +157,21 @@ test-suite sheepdogdb-test
   hs-source-dirs:
       test
   default-extensions:
-      FlexibleContexts
-      ScopedTypeVariables
-      GeneralizedNewtypeDeriving
-      RecordWildCards
-      NamedFieldPuns
       DerivingVia
       DataKinds
       DeriveGeneric
+      FlexibleContexts
+      FlexibleInstances
+      GeneralizedNewtypeDeriving
+      InstanceSigs
+      KindSignatures
+      NamedFieldPuns
       RankNTypes
+      RecordWildCards
+      ScopedTypeVariables
+      StandaloneDeriving
       TemplateHaskell
       TypeFamilies
-      KindSignatures
-      StandaloneDeriving
-      InstanceSigs
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -Wno-name-shadowing -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       QuickCheck

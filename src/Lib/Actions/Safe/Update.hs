@@ -1,11 +1,11 @@
 module Lib.Actions.Safe.Update where
 
-import Control.Lens (at, ix, (.~), (^.), (?~))
+import Control.Lens (at, ix, (.~), (?~), (^.))
 import Control.Monad.Extra (allM, andM)
 import Control.Monad.State (MonadState (get), modify)
-import Data.List.NonEmpty (NonEmpty)
 import Data.HashSet (HashSet)
 import qualified Data.HashSet as HS
+import Data.List.NonEmpty (NonEmpty)
 import Lib.Actions.Safe.Verify (
   anyCanCreateEntity,
   anyCanDeleteEntity,

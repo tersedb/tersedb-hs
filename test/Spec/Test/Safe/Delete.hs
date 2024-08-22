@@ -68,7 +68,7 @@ removeTests = describe "Remove" $ do
            in forAll (elements $ HM.toList entsWith2OrMoreVersions) $ \(eId, e) ->
                 forAll (elements . NE.toList $ e ^. versions) $ \vId -> do
                   let s' = flip execState s $ do
-                        mE <- removeVersion adminActor vId
+                        mE <- removeVersion (NE.singleton adminActor) vId
                         case mE of
                           Just (Right ()) -> pure ()
                           _ -> error $ "Couldn't remove version " <> show (vId, mE)
@@ -90,11 +90,12 @@ removeTests = describe "Remove" $ do
             let genE = elements . HM.toList $ s ^. store . toEntities
              in forAll genE $ \(eId, e) -> do
                   let s' = flip execState s $ do
-                        worked <- setEntityPermission adminActor Delete adminGroup (e ^. space)
+                        worked <-
+                          setEntityPermission (NE.singleton adminActor) Delete adminGroup (e ^. space)
                         unless worked $
                           error $
                             "Couldn't set delete permission for entities " <> show (e ^. space)
-                        eWorked <- removeEntity adminActor eId
+                        eWorked <- removeEntity (NE.singleton adminActor) eId
                         case eWorked of
                           Just (Right ()) -> pure ()
                           _ -> error $ "Couldn't remove entity " <> show (eId, eWorked)
@@ -113,11 +114,11 @@ removeTests = describe "Remove" $ do
             let genS = elements . HM.toList $ s ^. store . toSpaces
              in forAll genS $ \(sId, sp) -> do
                   let s' = flip execState s $ do
-                        worked <- setEntityPermission adminActor Delete adminGroup sId
+                        worked <- setEntityPermission (NE.singleton adminActor) Delete adminGroup sId
                         unless worked $
                           error $
                             "Couldn't set delete permission for entities " <> show sId
-                        eWorked <- removeSpace adminActor sId
+                        eWorked <- removeSpace (NE.singleton adminActor) sId
                         case eWorked of
                           Just (Right ()) -> pure ()
                           _ -> error $ "Couldn't remove space " <> show (sId, eWorked)
@@ -136,11 +137,11 @@ removeTests = describe "Remove" $ do
              in forAll genG $ \(aId :: ActorId, gs) ->
                   forAll (elements $ HS.toList gs) $ \gId -> do
                     let s' = flip execState s $ do
-                          worked <- setMemberPermission adminActor Delete adminGroup gId
+                          worked <- setMemberPermission (NE.singleton adminActor) Delete adminGroup gId
                           unless worked $
                             error $
                               "Couldn't set group permission " <> show gId
-                          worked <- removeMember adminActor gId aId
+                          worked <- removeMember (NE.singleton adminActor) gId aId
                           unless worked $
                             error $
                               "Couldn't remove member " <> show (gId, aId)
@@ -156,7 +157,7 @@ removeTests = describe "Remove" $ do
             let genG = elements . HM.keys $ s ^. store . toActors
              in forAll genG $ \(aId :: ActorId) -> do
                   let s' = flip execState s $ do
-                        worked <- removeActor adminActor aId
+                        worked <- removeActor (NE.singleton adminActor) aId
                         unless worked $
                           error $
                             "Couldn't remove actor " <> show aId
@@ -171,7 +172,7 @@ removeTests = describe "Remove" $ do
             let genG = elements . HM.keys $ s ^. store . toGroups . nodes
              in forAll genG $ \gId -> do
                   let s' = flip execState s $ do
-                        eWorked <- removeGroup adminActor gId
+                        eWorked <- removeGroup (NE.singleton adminActor) gId
                         case eWorked of
                           Just (Right ()) -> pure ()
                           _ -> error $ "Couldn't remove group " <> show gId

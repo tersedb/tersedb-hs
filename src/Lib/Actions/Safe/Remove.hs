@@ -3,8 +3,8 @@ module Lib.Actions.Safe.Remove where
 import Control.Lens (ix, (^.), (^?))
 import Control.Monad.Extra (allM, andM)
 import Control.Monad.State (MonadState (get))
-import Data.List.NonEmpty (NonEmpty)
 import qualified Data.HashSet as HS
+import Data.List.NonEmpty (NonEmpty)
 import Lib.Actions.Safe.Verify (
   anyCanDeleteActor,
   anyCanDeleteEntity,

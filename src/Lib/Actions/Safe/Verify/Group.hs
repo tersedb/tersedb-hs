@@ -1,8 +1,17 @@
-module Lib.Actions.Safe.Verify.Group
-  (anyCanReadGroup
-  , anyCanCreateGroup
-  , anyCanUpdateGroup, anyCanDeleteGroup, canReadGroup, hasGroupPermission) where
+module Lib.Actions.Safe.Verify.Group (
+  anyCanReadGroup,
+  anyCanCreateGroup,
+  anyCanUpdateGroup,
+  anyCanDeleteGroup,
+  canReadGroup,
+  hasGroupPermission,
+) where
 
+import Control.Lens ((^.))
+import Control.Monad.Extra (anyM)
+import Control.Monad.State (MonadState)
+import Data.List.NonEmpty (NonEmpty)
+import qualified Data.List.NonEmpty as NE
 import Lib.Actions.Safe.Verify.Utils (
   canDo,
   canDoWithTab,
@@ -17,11 +26,6 @@ import Lib.Types.Permission (
  )
 import Lib.Types.Store (Shared)
 import Lib.Types.Store.Tabulation.Group (forGroups, forOrganization)
-import Data.List.NonEmpty (NonEmpty)
-import qualified Data.List.NonEmpty as NE
-import Control.Lens ((^.))
-import Control.Monad.Extra (anyM)
-import Control.Monad.State (MonadState)
 
 canReadGroup :: (MonadState Shared m) => ActorId -> GroupId -> m Bool
 canReadGroup reader gId = do
@@ -30,7 +34,7 @@ canReadGroup reader gId = do
     reader
     Read
 
-anyCanReadGroup :: MonadState Shared m => NonEmpty ActorId -> GroupId -> m Bool
+anyCanReadGroup :: (MonadState Shared m) => NonEmpty ActorId -> GroupId -> m Bool
 anyCanReadGroup readers gId =
   anyM (`canReadGroup` gId) (NE.toList readers)
 
@@ -45,7 +49,7 @@ canCreateGroup creater =
     creater
     Create
 
-anyCanCreateGroup :: MonadState Shared m => NonEmpty ActorId -> m Bool
+anyCanCreateGroup :: (MonadState Shared m) => NonEmpty ActorId -> m Bool
 anyCanCreateGroup = anyM canCreateGroup . NE.toList
 
 canUpdateGroup :: (MonadState Shared m) => ActorId -> GroupId -> m Bool
@@ -55,7 +59,8 @@ canUpdateGroup updater gId =
     updater
     Update
 
-anyCanUpdateGroup :: MonadState Shared m => NonEmpty ActorId -> GroupId -> m Bool
+anyCanUpdateGroup
+  :: (MonadState Shared m) => NonEmpty ActorId -> GroupId -> m Bool
 anyCanUpdateGroup updaters gId =
   anyM (`canUpdateGroup` gId) (NE.toList updaters)
 
@@ -66,7 +71,8 @@ canDeleteGroup deleter gId =
     deleter
     Delete
 
-anyCanDeleteGroup :: MonadState Shared m => NonEmpty ActorId -> GroupId -> m Bool
+anyCanDeleteGroup
+  :: (MonadState Shared m) => NonEmpty ActorId -> GroupId -> m Bool
 anyCanDeleteGroup deleters gId =
   anyM (`canDeleteGroup` gId) (NE.toList deleters)
 

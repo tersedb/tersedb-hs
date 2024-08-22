@@ -1,5 +1,10 @@
 module Spec.Test.Safe.Create where
 
+import Control.Lens (at, non, (^.))
+import Control.Monad.Extra (unless, when)
+import Control.Monad.State (MonadState, execState)
+import qualified Data.List.NonEmpty as NE
+import Data.Maybe (isJust, isNothing)
 import Lib.Actions.Safe (emptyShared)
 import Lib.Actions.Safe.Store (
   addMember,
@@ -34,11 +39,6 @@ import Lib.Types.Store (
  )
 import Lib.Types.Store.Groups (emptyGroup, members, nodes)
 import Spec.Sample.Store (arbitraryEmptyShared, arbitraryShared)
-
-import Control.Lens (at, non, (^.))
-import Control.Monad.Extra (unless, when)
-import Control.Monad.State (MonadState, execState)
-import Data.Maybe (isJust, isNothing)
 import Test.QuickCheck (
   arbitrary,
   forAll,
@@ -57,13 +57,13 @@ createTests = describe "Create" $ do
                 setStage adminActor adminGroup aId gId
                 worked <-
                   setUniversePermission
-                    adminActor
+                    (NE.singleton adminActor)
                     (CollectionPermissionWithExemption Create False)
                     gId
                 unless worked $
                   error $
                     "Couldn't grant universe create permissions " <> show gId
-                worked <- storeSpace aId sId
+                worked <- storeSpace (NE.singleton aId) sId
                 unless worked $ error $ "Couldn't store space " <> show (aId, gId, sId)
            in shouldSatisfy (s' ^. store . toSpaces . at sId) isJust
     it "Entity" $
@@ -79,17 +79,17 @@ createTests = describe "Create" $ do
                     setStage adminActor adminGroup aId gId
                     worked <-
                       setUniversePermission
-                        adminActor
+                        (NE.singleton adminActor)
                         (CollectionPermissionWithExemption Create False)
                         gId
                     unless worked $
                       error $
                         "Couldn't grant universe create permissions " <> show gId
-                    worked <- storeSpace aId sId
+                    worked <- storeSpace (NE.singleton aId) sId
                     unless worked $ error $ "Couldn't store space " <> show (aId, gId, sId)
-                    worked <- setEntityPermission adminActor Create gId sId
+                    worked <- setEntityPermission (NE.singleton adminActor) Create gId sId
                     unless worked $ error $ "Couldn't set entity permission " <> show (gId, sId)
-                    mWorked <- storeEntity aId eId sId vId Nothing
+                    mWorked <- storeEntity (NE.singleton aId) eId sId vId Nothing
                     case mWorked of
                       Just (Right ()) -> pure ()
                       _ -> error $ "Couldn't store entity " <> show (eId, vId)
@@ -109,21 +109,21 @@ createTests = describe "Create" $ do
                     setStage adminActor adminGroup aId gId
                     worked <-
                       setUniversePermission
-                        adminActor
+                        (NE.singleton adminActor)
                         (CollectionPermissionWithExemption Create False)
                         gId
                     unless worked $
                       error $
                         "Couldn't grant universe create permissions " <> show gId
-                    worked <- storeSpace aId sId
+                    worked <- storeSpace (NE.singleton aId) sId
                     unless worked $ error $ "Couldn't store space " <> show (aId, gId, sId)
-                    worked <- setEntityPermission adminActor Update gId sId
+                    worked <- setEntityPermission (NE.singleton adminActor) Update gId sId
                     unless worked $ error $ "Couldn't set entity permission " <> show (gId, sId)
-                    mWorked <- storeEntity aId eId sId vId Nothing
+                    mWorked <- storeEntity (NE.singleton aId) eId sId vId Nothing
                     case mWorked of
                       Just (Right ()) -> pure ()
                       _ -> error $ "Couldn't store entity " <> show (eId, vId)
-                    mWorked <- storeNextVersion aId eId vId'
+                    mWorked <- storeNextVersion (NE.singleton aId) eId vId'
                     case mWorked of
                       Just (Right ()) -> pure ()
                       _ -> error $ "Couldn't store version " <> show mWorked
@@ -141,11 +141,11 @@ createTests = describe "Create" $ do
                   setStage adminActor adminGroup aId gId
                   worked <-
                     setOrganizationPermission
-                      adminActor
+                      (NE.singleton adminActor)
                       (CollectionPermissionWithExemption Create False)
                       gId
                   unless worked $ error $ "Couldn't set organization permission " <> show gId
-                  worked <- storeGroup aId gId'
+                  worked <- storeGroup (NE.singleton aId) gId'
                   unless worked $ error $ "Couldn't store group " <> show gId'
              in shouldSatisfy s' $ \_ ->
                   isJust (s' ^. store . toGroups . nodes . at gId')
@@ -160,9 +160,9 @@ createTests = describe "Create" $ do
             let s = emptyShared adminActor adminGroup
                 s' = flip execState s $ do
                   setStage adminActor adminGroup aId gId
-                  worked <- setRecruiterPermission adminActor Create gId
+                  worked <- setRecruiterPermission (NE.singleton adminActor) Create gId
                   unless worked $ error $ "Couldn't set recruiter permission " <> show gId
-                  worked <- storeActor aId aId'
+                  worked <- storeActor (NE.singleton aId) aId'
                   unless worked $ error $ "Couldn't store actor " <> show aId'
              in shouldSatisfy s' $ \_ ->
                   isJust (s' ^. store . toActors . at aId')
@@ -178,21 +178,21 @@ createTests = describe "Create" $ do
             let s = emptyShared adminActor adminGroup
                 s' = flip execState s $ do
                   setStage adminActor adminGroup aId gId
-                  worked <- storeActor adminActor aId'
+                  worked <- storeActor (NE.singleton adminActor) aId'
                   unless worked $ error $ "Couldn't store actor " <> show aId'
-                  worked <- storeGroup adminActor gId'
+                  worked <- storeGroup (NE.singleton adminActor) gId'
                   unless worked $ error $ "Couldn't store group " <> show gId'
-                  worked <- setMemberPermission adminActor Create gId gId'
+                  worked <- setMemberPermission (NE.singleton adminActor) Create gId gId'
                   unless worked $ error $ "Couldn't grant member permission " <> show (gId, gId')
                   worked <-
                     setOrganizationPermission
-                      adminActor
+                      (NE.singleton adminActor)
                       (CollectionPermissionWithExemption Read False)
                       gId
                   unless worked $
                     error $
                       "Couldn't grant read organization permission " <> show aId
-                  worked <- addMember aId gId' aId'
+                  worked <- addMember (NE.singleton aId) gId' aId'
                   unless worked $ error $ "Couldn't add member " <> show (gId', aId')
              in shouldSatisfy s' $ \_ ->
                   isJust
@@ -209,7 +209,7 @@ createTests = describe "Create" $ do
             let s = emptyShared adminActor adminGroup
                 s' = flip execState s $ do
                   setStage adminActor adminGroup aId gId
-                  worked <- storeSpace aId sId
+                  worked <- storeSpace (NE.singleton aId) sId
                   when worked $ error $ "Could store space " <> show (aId, gId, sId)
              in shouldSatisfy s' $ \_ -> isNothing $ s' ^. store . toSpaces . at sId
     it "Entity" $
@@ -227,15 +227,15 @@ createTests = describe "Create" $ do
                   setStage adminActor adminGroup aId gId
                   worked <-
                     setUniversePermission
-                      adminActor
+                      (NE.singleton adminActor)
                       (CollectionPermissionWithExemption Create False)
                       gId
                   unless worked $
                     error $
                       "Couldn't grant universe create permissions " <> show gId
-                  worked <- storeSpace aId sId
+                  worked <- storeSpace (NE.singleton aId) sId
                   unless worked $ error $ "Couldn't store space " <> show (aId, gId, sId)
-                  mWorked <- storeEntity aId eId sId vId Nothing
+                  mWorked <- storeEntity (NE.singleton aId) eId sId vId Nothing
                   case mWorked of
                     Just (Right ()) -> error $ "Couldn't store entity " <> show (eId, vId)
                     _ -> pure ()
@@ -259,23 +259,23 @@ createTests = describe "Create" $ do
                   setStage adminActor adminGroup aId gId
                   worked <-
                     setUniversePermission
-                      adminActor
+                      (NE.singleton adminActor)
                       (CollectionPermissionWithExemption Create False)
                       gId
                   unless worked $
                     error $
                       "Couldn't grant universe create permissions " <> show gId
-                  worked <- storeSpace aId sId
+                  worked <- storeSpace (NE.singleton aId) sId
                   unless worked $ error $ "Couldn't store space " <> show (aId, gId, sId)
-                  worked <- setEntityPermission adminActor Update gId sId
+                  worked <- setEntityPermission (NE.singleton adminActor) Update gId sId
                   unless worked $ error $ "Couldn't set entity permission " <> show (gId, sId)
-                  mWorked <- storeEntity aId eId sId vId Nothing
+                  mWorked <- storeEntity (NE.singleton aId) eId sId vId Nothing
                   case mWorked of
                     Just (Right ()) -> pure ()
                     _ -> error $ "Couldn't store entity " <> show (eId, vId)
-                  worked <- setEntityPermission adminActor Read gId sId
+                  worked <- setEntityPermission (NE.singleton adminActor) Read gId sId
                   unless worked $ error $ "Couldn't set entity permission " <> show (gId, sId)
-                  mWorked <- storeNextVersion aId eId vId'
+                  mWorked <- storeNextVersion (NE.singleton aId) eId vId'
                   case mWorked of
                     Just (Right ()) -> error $ "Could store version " <> show mWorked
                     _ -> pure ()
@@ -293,7 +293,7 @@ createTests = describe "Create" $ do
             let s = emptyShared adminActor adminGroup
                 s' = flip execState s $ do
                   setStage adminActor adminGroup aId gId
-                  worked <- storeGroup aId gId'
+                  worked <- storeGroup (NE.singleton aId) gId'
                   when worked $ error $ "Could store group " <> show gId'
              in shouldSatisfy s' $ \_ ->
                   isNothing (s' ^. store . toGroups . nodes . at gId')
@@ -308,7 +308,7 @@ createTests = describe "Create" $ do
             let s = emptyShared adminActor adminGroup
                 s' = flip execState s $ do
                   setStage adminActor adminGroup aId gId
-                  worked <- storeActor aId aId'
+                  worked <- storeActor (NE.singleton aId) aId'
                   when worked $ error $ "Could store actor " <> show aId'
              in shouldSatisfy s' $ \_ ->
                   isNothing (s' ^. store . toActors . at aId')
@@ -324,19 +324,19 @@ createTests = describe "Create" $ do
             let s = emptyShared adminActor adminGroup
                 s' = flip execState s $ do
                   setStage adminActor adminGroup aId gId
-                  worked <- storeActor adminActor aId'
+                  worked <- storeActor (NE.singleton adminActor) aId'
                   unless worked $ error $ "Couldn't store actor " <> show aId'
-                  worked <- storeGroup adminActor gId'
+                  worked <- storeGroup (NE.singleton adminActor) gId'
                   unless worked $ error $ "Couldn't store group " <> show gId'
                   worked <-
                     setOrganizationPermission
-                      adminActor
+                      (NE.singleton adminActor)
                       (CollectionPermissionWithExemption Read False)
                       gId
                   unless worked $
                     error $
                       "Couldn't grant read organization permission " <> show aId
-                  worked <- addMember aId gId' aId'
+                  worked <- addMember (NE.singleton aId) gId' aId'
                   when worked $ error $ "Could add member " <> show (gId', aId')
              in shouldSatisfy s' $ \_ ->
                   isNothing
@@ -345,13 +345,13 @@ createTests = describe "Create" $ do
 setStage
   :: (MonadState Shared m) => ActorId -> GroupId -> ActorId -> GroupId -> m ()
 setStage adminActor adminGroup aId gId = do
-  worked <- storeActor adminActor aId
+  worked <- storeActor (NE.singleton adminActor) aId
   unless worked $ error $ "Couldn't create actor " <> show aId
-  worked <- storeGroup adminActor gId
+  worked <- storeGroup (NE.singleton adminActor) gId
   unless worked $ error $ "Couldn't create group " <> show gId
-  worked <- setMemberPermission adminActor Create adminGroup gId
+  worked <- setMemberPermission (NE.singleton adminActor) Create adminGroup gId
   unless worked $
     error $
       "Couldn't grant membership creation to admin group " <> show gId
-  worked <- addMember adminActor gId aId
+  worked <- addMember (NE.singleton adminActor) gId aId
   unless worked $ error $ "Couldn't add member " <> show (gId, aId)

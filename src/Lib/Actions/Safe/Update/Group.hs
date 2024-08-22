@@ -1,5 +1,13 @@
 module Lib.Actions.Safe.Update.Group where
 
+import Control.Lens (ix, (^.), (^?), _Just)
+import Control.Monad.Extra (andM, anyM)
+import Control.Monad.State (MonadState, get)
+import Data.HashSet (HashSet)
+import qualified Data.HashSet as HS
+import Data.List.NonEmpty (NonEmpty)
+import qualified Data.List.NonEmpty as NE
+import Data.Maybe (fromMaybe)
 import Lib.Actions.Safe.Verify (anyCanUpdateGroup, conditionally)
 import Lib.Actions.Safe.Verify.Group (hasGroupPermission)
 import Lib.Actions.Safe.Verify.Member (hasMemberPermission)
@@ -35,14 +43,6 @@ import Lib.Types.Store.Tabulation.Group (
   forRecruiter,
   forUniverse,
  )
-import Control.Lens (ix, (^.), (^?), _Just)
-import Control.Monad.Extra (andM, anyM)
-import Control.Monad.State (MonadState, get)
-import Data.HashSet (HashSet)
-import qualified Data.HashSet as HS
-import Data.Maybe (fromMaybe)
-import Data.List.NonEmpty (NonEmpty)
-import qualified Data.List.NonEmpty as NE
 
 linkGroups
   :: (MonadState Shared m)
@@ -231,7 +231,9 @@ setGroupPermission creator p gId towardGId = do
   canAdjust <-
     andM
       [ anyCanUpdateGroup creator gId
-      , anyM (\c -> hasGroupPermission c towardGId (fromMaybe Exists p)) (NE.toList creator)
+      , anyM
+          (\c -> hasGroupPermission c towardGId (fromMaybe Exists p))
+          (NE.toList creator)
       ]
   conditionally
     (unsafeAdjustGroupPermission (const p) gId towardGId)

@@ -237,12 +237,12 @@ storeSample :: SampleStore -> ActorId -> GroupId -> Shared
 storeSample SampleStore{..} adminActor adminGroup =
   flip execState (storeSampleTree sampleGroups adminActor adminGroup) $ do
     for_ (HS.toList sampleSpaces) $ \sId -> do
-      succeeded <- storeSpace adminActor sId
+      succeeded <- storeSpace (NE.singleton adminActor) sId
       unless succeeded $ do
         s <- get
         error $
           "Failed to store space " <> show sId <> " - " <> LT.unpack (pShowNoColor s)
-      succeeded <- setEntityPermission adminActor Update adminGroup sId
+      succeeded <- setEntityPermission (NE.singleton adminActor) Update adminGroup sId
       unless succeeded $ do
         s <- get
         error $
@@ -255,7 +255,7 @@ storeSample SampleStore{..} adminActor adminGroup =
       let ((vId, refIds, subIds), vIdsTail) = uncons vIds
       case mFork of
         Nothing -> do
-          mWorked <- storeEntity adminActor eId sId vId Nothing
+          mWorked <- storeEntity (NE.singleton adminActor) eId sId vId Nothing
           case mWorked of
             Just (Right ()) -> pure ()
             _ -> do
@@ -266,7 +266,7 @@ storeSample SampleStore{..} adminActor adminGroup =
                   <> " - "
                   <> LT.unpack (pShowNoColor s)
         Just fork -> do
-          mE <- storeEntity adminActor eId sId vId (Just fork)
+          mE <- storeEntity (NE.singleton adminActor) eId sId vId (Just fork)
           case mE of
             Just (Right ()) -> pure ()
             _ -> do
@@ -276,7 +276,7 @@ storeSample SampleStore{..} adminActor adminGroup =
                   <> show (mE, eId, sId, vId, fork)
                   <> " - "
                   <> LT.unpack (pShowNoColor s)
-      mE <- updateVersionReferences adminActor vId refIds
+      mE <- updateVersionReferences (NE.singleton adminActor) vId refIds
       case mE of
         Just (Right ()) -> pure ()
         _ -> do
@@ -286,7 +286,7 @@ storeSample SampleStore{..} adminActor adminGroup =
               <> show (mE, eId, vId)
               <> " - "
               <> LT.unpack (pShowNoColor s)
-      mE <- updateVersionSubscriptions adminActor vId subIds
+      mE <- updateVersionSubscriptions (NE.singleton adminActor) vId subIds
       case mE of
         Just (Right ()) -> pure ()
         _ -> do
@@ -299,7 +299,7 @@ storeSample SampleStore{..} adminActor adminGroup =
       case vIdsTail of
         Nothing -> pure ()
         Just vIdsTail -> for_ vIdsTail $ \(vId, refIds, subIds) -> do
-          mE <- storeNextVersion adminActor eId vId
+          mE <- storeNextVersion (NE.singleton adminActor) eId vId
           case mE of
             Just (Right ()) -> pure ()
             _ -> do
@@ -309,7 +309,7 @@ storeSample SampleStore{..} adminActor adminGroup =
                   <> show (mE, eId, vId)
                   <> " - "
                   <> LT.unpack (pShowNoColor s)
-          mE <- updateVersionReferences adminActor vId refIds
+          mE <- updateVersionReferences (NE.singleton adminActor) vId refIds
           case mE of
             Just (Right ()) -> pure ()
             _ -> do
@@ -319,7 +319,7 @@ storeSample SampleStore{..} adminActor adminGroup =
                   <> show (mE, eId, vId)
                   <> " - "
                   <> LT.unpack (pShowNoColor s)
-          mE <- updateVersionSubscriptions adminActor vId subIds
+          mE <- updateVersionSubscriptions (NE.singleton adminActor) vId subIds
           case mE of
             Just (Right ()) -> pure ()
             _ -> do
@@ -335,7 +335,8 @@ storeSample SampleStore{..} adminActor adminGroup =
           -> State Shared ()
         loadPermissions SampleGroupTree{current, auxPerGroup = (spacesPerms, entityPerms), children} = do
           for_ (HM.toList spacesPerms) $ \(space, permission) -> do
-            succeeded <- setSpacePermission adminActor (Just permission) current space
+            succeeded <-
+              setSpacePermission (NE.singleton adminActor) (Just permission) current space
             unless succeeded $ do
               s <- get
               error $
@@ -344,7 +345,8 @@ storeSample SampleStore{..} adminActor adminGroup =
                   <> " - "
                   <> LT.unpack (pShowNoColor s)
           for_ (HM.toList entityPerms) $ \(space, permission) -> do
-            succeeded <- setEntityPermission adminActor permission current space
+            succeeded <-
+              setEntityPermission (NE.singleton adminActor) permission current space
             unless succeeded $ do
               s <- get
               error $
@@ -355,13 +357,13 @@ storeSample SampleStore{..} adminActor adminGroup =
           traverse_ loadPermissions children
     loadPermissions sampleGroups
     for_ (HM.toList sampleActors) $ \(aId, gs) -> do
-      succeeded <- storeActor adminActor aId
+      succeeded <- storeActor (NE.singleton adminActor) aId
       unless succeeded $ do
         s <- get
         error $
           "Failed to store actor " <> show aId <> " - " <> LT.unpack (pShowNoColor s)
       for_ (HS.toList gs) $ \gId -> do
-        succeeded <- addMember adminActor gId aId
+        succeeded <- addMember (NE.singleton adminActor) gId aId
         unless succeeded $ do
           s <- get
           error $

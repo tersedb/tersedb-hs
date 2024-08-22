@@ -1,9 +1,3 @@
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE NamedFieldPuns #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-
 module Spec.Sample.Tree where
 
 import Lib.Actions.Safe (emptyShared)
@@ -46,10 +40,11 @@ import Lib.Types.Store.Groups (
   roots,
  )
 
-import Control.Lens (at, ix, (%~), (&), (.~))
+import Control.Lens (at, ix, (%~), (&), (.~), (?~))
 import Control.Monad.Extra (unless)
 import Control.Monad.State (State, execState, get, modify)
 import Data.Foldable (traverse_)
+import qualified Data.List.NonEmpty as NE
 import Data.Maybe (fromMaybe)
 import qualified Data.Text.Lazy as LT
 import Test.QuickCheck (
@@ -79,13 +74,13 @@ instance Functor SampleGroupTree where
 -- | Breadth-first approach
 instance Foldable SampleGroupTree where
   foldr f acc (SampleGroupTree _ _ _ _ x xs) =
-    foldr (\x' acc' -> foldr f acc' x') (f x acc) xs
+    foldr (flip (foldr f)) (f x acc) xs
 
 instance Traversable SampleGroupTree where
   sequenceA SampleGroupTree{..} =
-    (SampleGroupTree current univ org recr)
+    SampleGroupTree current univ org recr
       <$> auxPerGroup
-      <*> sequenceA (map sequenceA children)
+      <*> traverse sequenceA children
 
 instance Arbitrary (SampleGroupTree ()) where
   arbitrary = resize 10 go
@@ -108,7 +103,7 @@ instance Arbitrary (SampleGroupTree ()) where
 
 storeSampleTree :: SampleGroupTree a -> ActorId -> GroupId -> Shared
 storeSampleTree xs adminActor adminGroup = flip execState (emptyShared adminActor adminGroup) $ do
-  succeeded <- storeGroup adminActor (current xs)
+  succeeded <- storeGroup (NE.singleton adminActor) (current xs)
   unless succeeded $ do
     s <- get
     error $
@@ -119,12 +114,13 @@ storeSampleTree xs adminActor adminGroup = flip execState (emptyShared adminActo
   go xs
  where
   setupNode current univ org recr = do
-    succeeded <- storeGroup adminActor current -- adds current as a root
+    succeeded <- storeGroup (NE.singleton adminActor) current -- adds current as a root
     unless succeeded $ do
       s <- get
       error $
         "Failed to store group " <> show current <> " - " <> LT.unpack (pShowNoColor s)
-    succeeded <- setGroupPermission adminActor (Just Adjust) adminGroup current
+    succeeded <-
+      setGroupPermission (NE.singleton adminActor) (Just Adjust) adminGroup current
     unless succeeded $ do
       s <- get
       error $
@@ -132,7 +128,8 @@ storeSampleTree xs adminActor adminGroup = flip execState (emptyShared adminActo
           <> show current
           <> " - "
           <> LT.unpack (pShowNoColor s)
-    succeeded <- setMemberPermission adminActor Create adminGroup current
+    succeeded <-
+      setMemberPermission (NE.singleton adminActor) Create adminGroup current
     unless succeeded $ do
       s <- get
       error $
@@ -140,7 +137,7 @@ storeSampleTree xs adminActor adminGroup = flip execState (emptyShared adminActo
           <> show current
           <> " - "
           <> LT.unpack (pShowNoColor s)
-    succeeded <- setUniversePermission adminActor univ current
+    succeeded <- setUniversePermission (NE.singleton adminActor) univ current
     unless succeeded $ do
       s <- get
       error $
@@ -148,7 +145,7 @@ storeSampleTree xs adminActor adminGroup = flip execState (emptyShared adminActo
           <> show (univ, current)
           <> " - "
           <> LT.unpack (pShowNoColor s)
-    succeeded <- setOrganizationPermission adminActor org current
+    succeeded <- setOrganizationPermission (NE.singleton adminActor) org current
     unless succeeded $ do
       s <- get
       error $
@@ -156,7 +153,7 @@ storeSampleTree xs adminActor adminGroup = flip execState (emptyShared adminActo
           <> show (org, current)
           <> " - "
           <> LT.unpack (pShowNoColor s)
-    succeeded <- setRecruiterPermission adminActor recr current
+    succeeded <- setRecruiterPermission (NE.singleton adminActor) recr current
     unless succeeded $ do
       s <- get
       error $
@@ -187,7 +184,7 @@ storeSampleTree xs adminActor adminGroup = flip execState (emptyShared adminActo
 -- | Uses unsafe methods
 loadSampleTree :: SampleGroupTree a -> Shared
 loadSampleTree xs = flip execState unsafeEmptyShared $ do
-  modify $ store . toGroups . roots . at (current xs) .~ Just ()
+  modify $ store . toGroups . roots . at (current xs) ?~ ()
   go xs
  where
   setupNode current univ org recr = do

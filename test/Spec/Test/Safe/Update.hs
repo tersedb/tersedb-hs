@@ -95,25 +95,25 @@ updateTests = describe "Update" $ do
                       setStage adminActor adminGroup aId gId
                       worked <-
                         setUniversePermission
-                          adminActor
+                          (NE.singleton adminActor)
                           (CollectionPermissionWithExemption Read False)
                           gId
                       unless worked $ error $ "Couldn't grant read universe permission " <> show aId
-                      worked <- storeSpace adminActor sId
+                      worked <- storeSpace (NE.singleton adminActor) sId
                       unless worked $ error $ "Couldn't store space " <> show sId
-                      worked <- storeSpace adminActor sId'
+                      worked <- storeSpace (NE.singleton adminActor) sId'
                       unless worked $ error $ "Couldn't store space " <> show sId'
-                      worked <- setEntityPermission adminActor Create adminGroup sId
+                      worked <- setEntityPermission (NE.singleton adminActor) Create adminGroup sId
                       unless worked $ error $ "Couldn't set entity permission " <> show sId
-                      mWorked <- storeEntity adminActor eId sId vId Nothing
+                      mWorked <- storeEntity (NE.singleton adminActor) eId sId vId Nothing
                       case mWorked of
                         Just (Right ()) -> pure ()
                         _ -> error $ "Couldn't store entity " <> show (eId, vId)
-                      worked <- setEntityPermission adminActor Create gId sId'
+                      worked <- setEntityPermission (NE.singleton adminActor) Create gId sId'
                       unless worked $ error $ "Couldn't set entity permission " <> show sId'
-                      worked <- setEntityPermission adminActor Delete gId sId
+                      worked <- setEntityPermission (NE.singleton adminActor) Delete gId sId
                       unless worked $ error $ "Couldn't set entity permission " <> show sId
-                      worked <- updateEntitySpace aId eId sId'
+                      worked <- updateEntitySpace (NE.singleton aId) eId sId'
                       unless worked $ error $ "Couldn't move entity " <> show eId
                 (s' ^. store . toSpaces . at sId . non mempty . entities . at eId)
                   `shouldBe` Nothing
@@ -135,23 +135,23 @@ updateTests = describe "Update" $ do
                       setStage adminActor adminGroup aId gId
                       worked <-
                         setUniversePermission
-                          adminActor
+                          (NE.singleton adminActor)
                           (CollectionPermissionWithExemption Read False)
                           gId
                       unless worked $ error $ "Couldn't grant read universe permission " <> show aId
-                      worked <- storeSpace adminActor sId
+                      worked <- storeSpace (NE.singleton adminActor) sId
                       unless worked $ error $ "Couldn't store space " <> show sId
-                      worked <- storeSpace adminActor sId'
+                      worked <- storeSpace (NE.singleton adminActor) sId'
                       unless worked $ error $ "Couldn't store space " <> show sId'
-                      worked <- setEntityPermission adminActor Create adminGroup sId
+                      worked <- setEntityPermission (NE.singleton adminActor) Create adminGroup sId
                       unless worked $ error $ "Couldn't set entity permission " <> show sId
-                      mWorked <- storeEntity adminActor eId sId vId Nothing
+                      mWorked <- storeEntity (NE.singleton adminActor) eId sId vId Nothing
                       case mWorked of
                         Just (Right ()) -> pure ()
                         _ -> error $ "Couldn't store entity " <> show (eId, vId)
-                      worked <- setEntityPermission adminActor Create gId sId'
+                      worked <- setEntityPermission (NE.singleton adminActor) Create gId sId'
                       unless worked $ error $ "Couldn't set entity permission " <> show sId'
-                      updateEntitySpace aId eId sId'
+                      updateEntitySpace (NE.singleton aId) eId sId'
                     s' = execState go s
                 evalState go s `shouldBe` False
                 (s' ^. store . toSpaces . at sId . non mempty . entities . at eId)
@@ -173,23 +173,23 @@ updateTests = describe "Update" $ do
                       setStage adminActor adminGroup aId gId
                       worked <-
                         setUniversePermission
-                          adminActor
+                          (NE.singleton adminActor)
                           (CollectionPermissionWithExemption Read False)
                           gId
                       unless worked $ error $ "Couldn't grant read universe permission " <> show aId
-                      worked <- storeSpace adminActor sId
+                      worked <- storeSpace (NE.singleton adminActor) sId
                       unless worked $ error $ "Couldn't store space " <> show sId
-                      worked <- storeSpace adminActor sId'
+                      worked <- storeSpace (NE.singleton adminActor) sId'
                       unless worked $ error $ "Couldn't store space " <> show sId'
-                      worked <- setEntityPermission adminActor Create adminGroup sId
+                      worked <- setEntityPermission (NE.singleton adminActor) Create adminGroup sId
                       unless worked $ error $ "Couldn't set entity permission " <> show sId
-                      mWorked <- storeEntity adminActor eId sId vId Nothing
+                      mWorked <- storeEntity (NE.singleton adminActor) eId sId vId Nothing
                       case mWorked of
                         Just (Right ()) -> pure ()
                         _ -> error $ "Couldn't store entity " <> show (eId, vId)
-                      worked <- setEntityPermission adminActor Delete gId sId
+                      worked <- setEntityPermission (NE.singleton adminActor) Delete gId sId
                       unless worked $ error $ "Couldn't set entity permission " <> show sId
-                      updateEntitySpace aId eId sId'
+                      updateEntitySpace (NE.singleton aId) eId sId'
                     s' = execState go s
                 evalState go s `shouldBe` False
                 (s' ^. store . toSpaces . at sId . non mempty . entities . at eId)
@@ -209,7 +209,7 @@ updateTests = describe "Update" $ do
                in forAll (elements $ HM.keys versions) $ \vId ->
                     forAll (elements . HM.keys $ HM.delete vId versions) $ \refId -> do
                       let s' = flip execState s $ do
-                            mE <- addReference adminActor vId refId
+                            mE <- addReference (NE.singleton adminActor) vId refId
                             case mE of
                               Just (Right ()) -> pure ()
                               _ -> error $ "Couldn't add reference " <> show (vId, refId, mE)
@@ -223,7 +223,7 @@ updateTests = describe "Update" $ do
                in forAll (elements $ HM.keys refs) $ \refId ->
                     forAll (elements . HS.toList . fromJust $ HM.lookup refId refs) $ \vId -> do
                       let s' = flip execState s $ do
-                            mE <- removeReference adminActor vId refId
+                            mE <- removeReference (NE.singleton adminActor) vId refId
                             case mE of
                               Just (Right ()) -> pure ()
                               _ -> error $ "Couldn't remove reference " <> show (vId, refId, mE)
@@ -241,7 +241,7 @@ updateTests = describe "Update" $ do
                in forAll selectVersionAndEntity $ \(eIdOfVId, vId) ->
                     forAll (elements . HM.keys $ HM.delete eIdOfVId entities) $ \subId -> do
                       let s' = flip execState s $ do
-                            mE <- addSubscription adminActor vId subId
+                            mE <- addSubscription (NE.singleton adminActor) vId subId
                             case mE of
                               Just (Right ()) -> pure ()
                               _ -> error $ "Couldn't add subscription " <> show (vId, subId, mE)
@@ -256,7 +256,7 @@ updateTests = describe "Update" $ do
                in forAll (elements $ HM.keys subs) $ \subId ->
                     forAll (elements . HS.toList . fromJust $ HM.lookup subId subs) $ \vId -> do
                       let s' = flip execState s $ do
-                            mE <- removeSubscription adminActor vId subId
+                            mE <- removeSubscription (NE.singleton adminActor) vId subId
                             case mE of
                               Just (Right ()) -> pure ()
                               _ -> error $ "Couldn't remove subscription " <> show (vId, subId, mE)
@@ -282,7 +282,7 @@ updateTests = describe "Update" $ do
               pure (s, eId, newFork, adminA, adminG)
          in forAll gen $ \(s, eId, newFork, adminActor, adminGroup) -> do
               let s' = flip execState s $ do
-                    mE <- updateFork adminActor eId (Just newFork)
+                    mE <- updateFork (NE.singleton adminActor) eId (Just newFork)
                     case mE of
                       Just (Right ()) -> pure ()
                       _ -> error $ "Couldn't remove version " <> show (newFork, mE)
@@ -302,7 +302,7 @@ updateTests = describe "Update" $ do
                   )
                   $ \newSId -> do
                     let s' = flip execState s $ do
-                          mE <- moveEntity adminActor eId newSId
+                          mE <- moveEntity (NE.singleton adminActor) eId newSId
                           case mE of
                             Just (Right ()) -> pure ()
                             _ -> error $ "Couldn't move entity " <> show (eId, newSId, mE)
@@ -332,7 +332,7 @@ updateTests = describe "Update" $ do
                           pure (v, offsetMagnitude)
                      in forAll genV $ \(vId, offset) -> do
                           let s' = flip execState s $ do
-                                mE <- offsetVersionIndex adminActor vId offset
+                                mE <- offsetVersionIndex (NE.singleton adminActor) vId offset
                                 case mE of
                                   Just (Right ()) -> pure ()
                                   _ -> error $ "Couldn't offset version " <> show (eId, vId, mE)
@@ -358,7 +358,7 @@ updateTests = describe "Update" $ do
                           pure (v, idx)
                      in forAll genV $ \(vId, idx) -> do
                           let s' = flip execState s $ do
-                                mE <- setVersionIndex adminActor vId idx
+                                mE <- setVersionIndex (NE.singleton adminActor) vId idx
                                 case mE of
                                   Just (Right ()) -> pure ()
                                   _ -> error $ "Couldn't set version index " <> show (eId, vId, mE)
@@ -377,7 +377,7 @@ updateTests = describe "Update" $ do
               let gsWithParent = HM.filter (\g -> isJust (g ^. prev)) $ s ^. store . toGroups . nodes
                in forAll (elements (HM.toList gsWithParent)) $ \(gId :: GroupId, g) -> do
                     let s' = flip execState s $ do
-                          mE <- updateGroupParent adminActor gId Nothing
+                          mE <- updateGroupParent (NE.singleton adminActor) gId Nothing
                           case mE of
                             Just (Right ()) -> pure ()
                             _ -> error $ "Couldn't set group parent " <> show (gId, mE)
@@ -393,7 +393,7 @@ updateTests = describe "Update" $ do
               let gsWithParent = HM.filter (\g -> isJust (g ^. prev)) $ s ^. store . toGroups . nodes
                in forAll (elements (HM.toList gsWithParent)) $ \(gId :: GroupId, g) -> do
                     let s' = flip execState s $ do
-                          worked <- unlinkGroups adminActor parentId gId
+                          worked <- unlinkGroups (NE.singleton adminActor) parentId gId
                           unless worked $ error $ "Couldn't unlink groups " <> show (parentId, gId)
                         parentId = fromJust $ g ^. prev
                     (s' ^? store . toGroups . nodes . ix gId . prev . _Just) `shouldBe` Nothing
@@ -410,9 +410,9 @@ updateTests = describe "Update" $ do
               let gsWithParent = HM.filter (\g -> isJust (g ^. prev)) $ s ^. store . toGroups . nodes
                in forAll (elements (HM.toList gsWithParent)) $ \(gId :: GroupId, _) ->
                     let s' = flip execState s $ do
-                          worked <- storeGroup adminActor newGId
+                          worked <- storeGroup (NE.singleton adminActor) newGId
                           unless worked $ error $ "Couldn't store group " <> show newGId
-                          mE <- linkGroups adminActor gId newGId
+                          mE <- linkGroups (NE.singleton adminActor) gId newGId
                           case mE of
                             Just (Right ()) -> pure ()
                             _ -> error $ "Couldn't set child " <> show (gId, newGId, mE)
@@ -427,13 +427,13 @@ updateTests = describe "Update" $ do
 setStage
   :: (MonadState Shared m) => ActorId -> GroupId -> ActorId -> GroupId -> m ()
 setStage adminActor adminGroup aId gId = do
-  worked <- storeActor adminActor aId
+  worked <- storeActor (NE.singleton adminActor) aId
   unless worked $ error $ "Couldn't create actor " <> show aId
-  worked <- storeGroup adminActor gId
+  worked <- storeGroup (NE.singleton adminActor) gId
   unless worked $ error $ "Couldn't create group " <> show gId
-  worked <- setMemberPermission adminActor Create adminGroup gId
+  worked <- setMemberPermission (NE.singleton adminActor) Create adminGroup gId
   unless worked $
     error $
       "Couldn't grant membership creation to admin group " <> show gId
-  worked <- addMember adminActor gId aId
+  worked <- addMember (NE.singleton adminActor) gId aId
   unless worked $ error $ "Couldn't add member " <> show (gId, aId)

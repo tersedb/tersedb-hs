@@ -1,12 +1,10 @@
 module Spec.Test.Safe.Read where
 
-import Spec.Sample.Store (
-  SampleStore (..),
-  arbitraryEmptyShared,
-  arbitraryShared,
-  loadSample,
- )
-
+import Control.Lens ((^.))
+import Control.Monad.Extra (unless)
+import Control.Monad.State (State, evalState, execState)
+import qualified Data.HashMap.Strict as HM
+import qualified Data.List.NonEmpty as NE
 import Lib.Actions.Safe (emptyShared)
 import Lib.Actions.Safe.Store (
   addMember,
@@ -24,15 +22,15 @@ import Lib.Actions.Safe.Update.Group (
   setSpacePermission,
   setUniversePermission,
  )
-import Lib.Actions.Safe.Verify.Actor (canReadActor)
-import Lib.Actions.Safe.Verify.Group (canReadGroup)
-import Lib.Actions.Safe.Verify.Member (canReadMember)
+import Lib.Actions.Safe.Verify.Actor (anyCanReadActor)
+import Lib.Actions.Safe.Verify.Group (anyCanReadGroup)
+import Lib.Actions.Safe.Verify.Member (anyCanReadMember)
 import Lib.Actions.Safe.Verify.SpaceAndEntity (
-  canReadAllEntities,
-  canReadEntity,
-  canReadSpace,
-  canReadSpaceOld,
-  canReadVersion,
+  anyCanReadAllEntities,
+  anyCanReadEntity,
+  anyCanReadSpace,
+  anyCanReadSpaceOld,
+  anyCanReadVersion,
  )
 import Lib.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
 import Lib.Types.Permission (
@@ -46,13 +44,11 @@ import Lib.Types.Store (
   toActors,
   toSpaces,
  )
-
-import Control.Lens ((^.))
-import Control.Monad.Extra (unless)
-import Control.Monad.State (State, evalState, execState)
-import qualified Data.HashMap.Strict as HM
+import Spec.Sample.Store (
+  arbitraryEmptyShared,
+  arbitraryShared,
+ )
 import Test.QuickCheck (
-  arbitrary,
   elements,
   forAll,
   property,
@@ -70,27 +66,25 @@ readTests = describe "Read" $ do
             let genAId = elements . HM.keys $ s ^. store . toActors
                 genSId = elements . HM.keys $ s ^. store . toSpaces
              in forAll ((,) <$> genAId <*> genSId) $ \(aId, sId) ->
-                  let resNew = evalState (canReadSpace aId sId) s
-                      resOld = evalState (canReadSpaceOld aId sId) s
+                  let resNew = evalState (anyCanReadSpace (NE.singleton aId) sId) s
+                      resOld = evalState (anyCanReadSpaceOld (NE.singleton aId) sId) s
                    in resNew `shouldBe` resOld
   describe "Should Succeed" $ do
     it "Spaces" $
       forAll arbitraryEmptyShared $ \(s, adminActor, adminGroup) ->
         property $ \(sId :: SpaceId, aId :: ActorId, gId :: GroupId) ->
-          let s = emptyShared adminActor adminGroup
-              go :: State Shared Bool
+          let go :: State Shared Bool
               go = do
                 setup adminActor adminGroup aId gId
-                worked <- storeSpace adminActor sId
+                worked <- storeSpace (NE.singleton adminActor) sId
                 unless worked $ error $ "Couldn't make space " <> show sId
                 worked <-
                   setUniversePermission
-                    adminActor
+                    (NE.singleton adminActor)
                     (CollectionPermissionWithExemption Read False)
                     gId
                 unless worked $ error $ "Couldn't set universe permission " <> show gId
-                canReadSpace aId sId
-              s' = execState go s
+                anyCanReadSpace (NE.singleton aId) sId
            in evalState go s `shouldBe` True
     it "Entities" $
       property $
@@ -104,17 +98,17 @@ readTests = describe "Read" $ do
                 go :: State Shared Bool
                 go = do
                   setup adminActor adminGroup aId gId
-                  worked <- storeSpace adminActor sId
+                  worked <- storeSpace (NE.singleton adminActor) sId
                   unless worked $ error $ "Couldn't make space " <> show sId
                   worked <-
                     setUniversePermission
-                      adminActor
+                      (NE.singleton adminActor)
                       (CollectionPermissionWithExemption Read False)
                       gId
                   unless worked $ error $ "Couldn't set universe permission " <> show gId
-                  worked <- setEntityPermission adminActor Read gId sId
+                  worked <- setEntityPermission (NE.singleton adminActor) Read gId sId
                   unless worked $ error $ "Couldn't set entity permission " <> show gId
-                  canReadAllEntities aId sId
+                  anyCanReadAllEntities (NE.singleton aId) sId
                 s' = execState go s
              in shouldSatisfy (s', aId, gId, sId) $ \_ -> evalState go s == True
     it "Entity" $
@@ -131,23 +125,23 @@ readTests = describe "Read" $ do
                 go :: State Shared Bool
                 go = do
                   setup adminActor adminGroup aId gId
-                  worked <- storeSpace adminActor sId
+                  worked <- storeSpace (NE.singleton adminActor) sId
                   unless worked $ error $ "Couldn't make space " <> show sId
-                  worked <- setEntityPermission adminActor Create adminGroup sId
+                  worked <- setEntityPermission (NE.singleton adminActor) Create adminGroup sId
                   unless worked $ error $ "Couldn't grant entity permissions " <> show sId
-                  mWorked <- storeEntity adminActor eId sId vId Nothing
+                  mWorked <- storeEntity (NE.singleton adminActor) eId sId vId Nothing
                   case mWorked of
                     Just (Right ()) -> pure ()
                     _ -> error $ "Couldn't store entity " <> show (eId, vId)
                   worked <-
                     setUniversePermission
-                      adminActor
+                      (NE.singleton adminActor)
                       (CollectionPermissionWithExemption Read False)
                       gId
                   unless worked $ error $ "Couldn't set universe permission " <> show gId
-                  worked <- setEntityPermission adminActor Read gId sId
+                  worked <- setEntityPermission (NE.singleton adminActor) Read gId sId
                   unless worked $ error $ "Couldn't set entity permission " <> show gId
-                  canReadEntity aId eId
+                  anyCanReadEntity (NE.singleton aId) eId
                 s' = execState go s
              in shouldSatisfy (s', aId, gId, sId) $ \_ -> evalState go s == True
     it "Version" $
@@ -164,23 +158,23 @@ readTests = describe "Read" $ do
                 go :: State Shared Bool
                 go = do
                   setup adminActor adminGroup aId gId
-                  worked <- storeSpace adminActor sId
+                  worked <- storeSpace (NE.singleton adminActor) sId
                   unless worked $ error $ "Couldn't make space " <> show sId
-                  worked <- setEntityPermission adminActor Create adminGroup sId
+                  worked <- setEntityPermission (NE.singleton adminActor) Create adminGroup sId
                   unless worked $ error $ "Couldn't grant entity permissions " <> show sId
-                  mWorked <- storeEntity adminActor eId sId vId Nothing
+                  mWorked <- storeEntity (NE.singleton adminActor) eId sId vId Nothing
                   case mWorked of
                     Just (Right ()) -> pure ()
                     _ -> error $ "Couldn't store entity " <> show (eId, vId)
                   worked <-
                     setUniversePermission
-                      adminActor
+                      (NE.singleton adminActor)
                       (CollectionPermissionWithExemption Read False)
                       gId
                   unless worked $ error $ "Couldn't set universe permission " <> show gId
-                  worked <- setEntityPermission adminActor Read gId sId
+                  worked <- setEntityPermission (NE.singleton adminActor) Read gId sId
                   unless worked $ error $ "Couldn't set entity permission " <> show gId
-                  canReadVersion aId vId
+                  anyCanReadVersion (NE.singleton aId) vId
                 s' = execState go s
              in shouldSatisfy (s', aId, gId, sId) $ \_ -> evalState go s == True
     it "Group" $
@@ -195,15 +189,15 @@ readTests = describe "Read" $ do
                 go :: State Shared Bool
                 go = do
                   setup adminActor adminGroup aId gId
-                  worked <- storeGroup adminActor gId'
+                  worked <- storeGroup (NE.singleton adminActor) gId'
                   unless worked $ error $ "Couldn't make group " <> show gId'
                   worked <-
                     setOrganizationPermission
-                      adminActor
+                      (NE.singleton adminActor)
                       (CollectionPermissionWithExemption Read False)
                       gId
                   unless worked $ error $ "Couldn't set organization permission " <> show gId
-                  canReadGroup aId gId'
+                  anyCanReadGroup (NE.singleton aId) gId'
                 s' = execState go s
              in shouldSatisfy (s', aId, gId, gId') $ \_ -> evalState go s == True
     it "Member" $
@@ -218,17 +212,17 @@ readTests = describe "Read" $ do
                 go :: State Shared Bool
                 go = do
                   setup adminActor adminGroup aId gId
-                  worked <- storeGroup adminActor gId'
+                  worked <- storeGroup (NE.singleton adminActor) gId'
                   unless worked $ error $ "Couldn't make group " <> show gId'
                   worked <-
                     setOrganizationPermission
-                      adminActor
+                      (NE.singleton adminActor)
                       (CollectionPermissionWithExemption Read False)
                       gId
                   unless worked $ error $ "Couldn't set organization permission " <> show gId
-                  worked <- setMemberPermission adminActor Read gId gId'
+                  worked <- setMemberPermission (NE.singleton adminActor) Read gId gId'
                   unless worked $ error $ "Couldn't set member permission " <> show gId
-                  canReadMember aId gId'
+                  anyCanReadMember (NE.singleton aId) gId'
                 s' = execState go s
              in shouldSatisfy (s', aId, gId, gId') $ \_ -> evalState go s == True
     it "Actor" $
@@ -237,9 +231,9 @@ readTests = describe "Read" $ do
             go :: State Shared Bool
             go = do
               setup adminActor adminGroup aId gId
-              worked <- setRecruiterPermission adminActor Read gId
+              worked <- setRecruiterPermission (NE.singleton adminActor) Read gId
               unless worked $ error $ "Couldn't set recruiter permission " <> show gId
-              canReadActor aId
+              anyCanReadActor (NE.singleton aId)
             s' = execState go s
          in shouldSatisfy (s', aId, gId) $ \_ -> evalState go s == True
   describe "Should Fail" $ do
@@ -255,15 +249,15 @@ readTests = describe "Read" $ do
                 go :: State Shared Bool
                 go = do
                   setup adminActor adminGroup aId gId
-                  worked <- storeSpace adminActor sId
+                  worked <- storeSpace (NE.singleton adminActor) sId
                   unless worked $ error $ "Couldn't make space " <> show sId
                   worked <-
                     setUniversePermission
-                      adminActor
+                      (NE.singleton adminActor)
                       (CollectionPermissionWithExemption Blind False)
                       gId
                   unless worked $ error $ "Couldn't set universe permission " <> show gId
-                  canReadSpace aId sId
+                  anyCanReadSpace (NE.singleton aId) sId
                 s' = execState go s
              in shouldSatisfy (s', aId, gId, sId) $ \_ -> evalState go s == False
     it "Spaces when explicit" $
@@ -278,17 +272,18 @@ readTests = describe "Read" $ do
                 go :: State Shared Bool
                 go = do
                   setup adminActor adminGroup aId gId
-                  worked <- storeSpace adminActor sId
+                  worked <- storeSpace (NE.singleton adminActor) sId
                   unless worked $ error $ "Couldn't make space " <> show sId
                   worked <-
                     setUniversePermission
-                      adminActor
+                      (NE.singleton adminActor)
                       (CollectionPermissionWithExemption Read False)
                       gId
                   unless worked $ error $ "Couldn't set universe permission " <> show gId
-                  worked <- setSpacePermission adminActor (Just NonExistent) gId sId
+                  worked <-
+                    setSpacePermission (NE.singleton adminActor) (Just NonExistent) gId sId
                   unless worked $ error $ "Couldn't set spaces permission " <> show (gId, sId)
-                  canReadSpace aId sId
+                  anyCanReadSpace (NE.singleton aId) sId
                 s' = execState go s
              in shouldSatisfy (s', aId, gId, sId) $ \_ -> evalState go s == False
     it "Spaces when implicit" $
@@ -303,9 +298,9 @@ readTests = describe "Read" $ do
                 go :: State Shared Bool
                 go = do
                   setup adminActor adminGroup aId gId
-                  worked <- storeSpace adminActor sId
+                  worked <- storeSpace (NE.singleton adminActor) sId
                   unless worked $ error $ "Couldn't make space " <> show sId
-                  canReadSpace aId sId
+                  anyCanReadSpace (NE.singleton aId) sId
                 s' = execState go s
              in shouldSatisfy (s', aId, gId, sId) $ \_ -> evalState go s == False
     it "Entities when explicit" $
@@ -320,17 +315,17 @@ readTests = describe "Read" $ do
                 go :: State Shared Bool
                 go = do
                   setup adminActor adminGroup aId gId
-                  worked <- storeSpace adminActor sId
+                  worked <- storeSpace (NE.singleton adminActor) sId
                   unless worked $ error $ "Couldn't make space " <> show sId
                   worked <-
                     setUniversePermission
-                      adminActor
+                      (NE.singleton adminActor)
                       (CollectionPermissionWithExemption Read False)
                       gId
                   unless worked $ error $ "Couldn't set universe permission " <> show gId
-                  worked <- setEntityPermission adminActor Blind gId sId
+                  worked <- setEntityPermission (NE.singleton adminActor) Blind gId sId
                   unless worked $ error $ "Couldn't set entity permission " <> show gId
-                  canReadAllEntities aId sId
+                  anyCanReadAllEntities (NE.singleton aId) sId
                 s' = execState go s
              in shouldSatisfy (s', aId, gId, sId) $ \_ -> evalState go s == False
     it "Entity when explicit" $
@@ -347,23 +342,23 @@ readTests = describe "Read" $ do
                 go :: State Shared Bool
                 go = do
                   setup adminActor adminGroup aId gId
-                  worked <- storeSpace adminActor sId
+                  worked <- storeSpace (NE.singleton adminActor) sId
                   unless worked $ error $ "Couldn't make space " <> show sId
-                  worked <- setEntityPermission adminActor Create adminGroup sId
+                  worked <- setEntityPermission (NE.singleton adminActor) Create adminGroup sId
                   unless worked $ error $ "Couldn't grant entity permissions " <> show sId
-                  mWorked <- storeEntity adminActor eId sId vId Nothing
+                  mWorked <- storeEntity (NE.singleton adminActor) eId sId vId Nothing
                   case mWorked of
                     Just (Right ()) -> pure ()
                     _ -> error $ "Couldn't make entity " <> show (eId, vId)
                   worked <-
                     setUniversePermission
-                      adminActor
+                      (NE.singleton adminActor)
                       (CollectionPermissionWithExemption Read False)
                       gId
                   unless worked $ error $ "Couldn't set universe permission " <> show gId
-                  worked <- setEntityPermission adminActor Blind gId sId
+                  worked <- setEntityPermission (NE.singleton adminActor) Blind gId sId
                   unless worked $ error $ "Couldn't set entity permission " <> show gId
-                  canReadEntity aId eId
+                  anyCanReadEntity (NE.singleton aId) eId
                 s' = execState go s
              in shouldSatisfy (s', aId, gId, sId) $ \_ -> evalState go s == False
     it "Entities when implicit" $
@@ -378,15 +373,15 @@ readTests = describe "Read" $ do
                 go :: State Shared Bool
                 go = do
                   setup adminActor adminGroup aId gId
-                  worked <- storeSpace adminActor sId
+                  worked <- storeSpace (NE.singleton adminActor) sId
                   unless worked $ error $ "Couldn't make space " <> show sId
                   worked <-
                     setUniversePermission
-                      adminActor
+                      (NE.singleton adminActor)
                       (CollectionPermissionWithExemption Read False)
                       gId
                   unless worked $ error $ "Couldn't set universe permission " <> show gId
-                  canReadAllEntities aId sId
+                  anyCanReadAllEntities (NE.singleton aId) sId
                 s' = execState go s
              in shouldSatisfy (s', aId, gId, sId) $ \_ -> evalState go s == False
     it "Entity when implicit" $
@@ -403,21 +398,21 @@ readTests = describe "Read" $ do
                 go :: State Shared Bool
                 go = do
                   setup adminActor adminGroup aId gId
-                  worked <- storeSpace adminActor sId
+                  worked <- storeSpace (NE.singleton adminActor) sId
                   unless worked $ error $ "Couldn't make space " <> show sId
-                  worked <- setEntityPermission adminActor Create adminGroup sId
+                  worked <- setEntityPermission (NE.singleton adminActor) Create adminGroup sId
                   unless worked $ error $ "Couldn't grant entity permissions " <> show sId
-                  mWorked <- storeEntity adminActor eId sId vId Nothing
+                  mWorked <- storeEntity (NE.singleton adminActor) eId sId vId Nothing
                   case mWorked of
                     Just (Right ()) -> pure ()
                     _ -> error $ "Couldn't make entity " <> show (eId, vId)
                   worked <-
                     setUniversePermission
-                      adminActor
+                      (NE.singleton adminActor)
                       (CollectionPermissionWithExemption Read False)
                       gId
                   unless worked $ error $ "Couldn't set universe permission " <> show gId
-                  canReadEntity aId eId
+                  anyCanReadEntity (NE.singleton aId) eId
                 s' = execState go s
              in shouldSatisfy (s', aId, gId, sId) $ \_ -> evalState go s == False
     it "Group when explicit via universe" $
@@ -432,15 +427,15 @@ readTests = describe "Read" $ do
                 go :: State Shared Bool
                 go = do
                   setup adminActor adminGroup aId gId
-                  worked <- storeGroup adminActor gId'
+                  worked <- storeGroup (NE.singleton adminActor) gId'
                   unless worked $ error $ "Couldn't make group " <> show gId'
                   worked <-
                     setOrganizationPermission
-                      adminActor
+                      (NE.singleton adminActor)
                       (CollectionPermissionWithExemption Blind False)
                       gId
                   unless worked $ error $ "Couldn't set organization permission " <> show gId
-                  canReadGroup aId gId'
+                  anyCanReadGroup (NE.singleton aId) gId'
                 s' = execState go s
              in shouldSatisfy (s', aId, gId, gId') $ \_ -> evalState go s == False
     it "Group when explicit" $
@@ -455,17 +450,18 @@ readTests = describe "Read" $ do
                 go :: State Shared Bool
                 go = do
                   setup adminActor adminGroup aId gId
-                  worked <- storeGroup adminActor gId'
+                  worked <- storeGroup (NE.singleton adminActor) gId'
                   unless worked $ error $ "Couldn't make group " <> show gId'
                   worked <-
                     setOrganizationPermission
-                      adminActor
+                      (NE.singleton adminActor)
                       (CollectionPermissionWithExemption Read False)
                       gId
                   unless worked $ error $ "Couldn't set organization permission " <> show gId
-                  worked <- setGroupPermission adminActor (Just NonExistent) gId gId'
+                  worked <-
+                    setGroupPermission (NE.singleton adminActor) (Just NonExistent) gId gId'
                   unless worked $ error $ "Couldn't set group permission " <> show (gId, gId')
-                  canReadGroup aId gId'
+                  anyCanReadGroup (NE.singleton aId) gId'
                 s' = execState go s
              in shouldSatisfy (s', aId, gId, gId') $ \_ -> evalState go s == False
     it "Group when implicit" $
@@ -480,9 +476,9 @@ readTests = describe "Read" $ do
                 go :: State Shared Bool
                 go = do
                   setup adminActor adminGroup aId gId
-                  worked <- storeGroup adminActor gId'
+                  worked <- storeGroup (NE.singleton adminActor) gId'
                   unless worked $ error $ "Couldn't make group " <> show gId'
-                  canReadGroup aId gId'
+                  anyCanReadGroup (NE.singleton aId) gId'
                 s' = execState go s
              in shouldSatisfy (s', aId, gId, gId') $ \_ -> evalState go s == False
     it "Member when explicit" $
@@ -497,17 +493,17 @@ readTests = describe "Read" $ do
                 go :: State Shared Bool
                 go = do
                   setup adminActor adminGroup aId gId
-                  worked <- storeGroup adminActor gId'
+                  worked <- storeGroup (NE.singleton adminActor) gId'
                   unless worked $ error $ "Couldn't make group " <> show gId'
                   worked <-
                     setOrganizationPermission
-                      adminActor
+                      (NE.singleton adminActor)
                       (CollectionPermissionWithExemption Read False)
                       gId
                   unless worked $ error $ "Couldn't set organization permission " <> show gId
-                  worked <- setMemberPermission adminActor Blind gId gId'
+                  worked <- setMemberPermission (NE.singleton adminActor) Blind gId gId'
                   unless worked $ error $ "Couldn't set member permission " <> show gId
-                  canReadMember aId gId'
+                  anyCanReadMember (NE.singleton aId) gId'
                 s' = execState go s
              in shouldSatisfy (s', aId, gId, gId') $ \_ -> evalState go s == False
     it "Member when implicit" $
@@ -522,15 +518,15 @@ readTests = describe "Read" $ do
                 go :: State Shared Bool
                 go = do
                   setup adminActor adminGroup aId gId
-                  worked <- storeGroup adminActor gId'
+                  worked <- storeGroup (NE.singleton adminActor) gId'
                   unless worked $ error $ "Couldn't make group " <> show gId'
                   worked <-
                     setOrganizationPermission
-                      adminActor
+                      (NE.singleton adminActor)
                       (CollectionPermissionWithExemption Read False)
                       gId
                   unless worked $ error $ "Couldn't set organization permission " <> show gId
-                  canReadMember aId gId'
+                  anyCanReadMember (NE.singleton aId) gId'
                 s' = execState go s
              in shouldSatisfy (s', aId, gId, gId') $ \_ -> evalState go s == False
     it "Actor when explicit" $
@@ -539,9 +535,9 @@ readTests = describe "Read" $ do
             go :: State Shared Bool
             go = do
               setup adminActor adminGroup aId gId
-              worked <- setRecruiterPermission adminActor Blind gId
+              worked <- setRecruiterPermission (NE.singleton adminActor) Blind gId
               unless worked $ error $ "Couldn't set recruiter permission " <> show gId
-              canReadActor aId
+              anyCanReadActor (NE.singleton aId)
             s' = execState go s
          in shouldSatisfy (s', aId, gId) $ \_ -> evalState go s == False
     it "Actor when implicit" $
@@ -550,18 +546,18 @@ readTests = describe "Read" $ do
             go :: State Shared Bool
             go = do
               setup adminActor adminGroup aId gId
-              canReadActor aId
+              anyCanReadActor (NE.singleton aId)
             s' = execState go s
          in shouldSatisfy (s', aId, gId) $ \_ -> evalState go s == False
  where
   setup adminActor adminGroup aId gId = do
-    worked <- storeActor adminActor aId
+    worked <- storeActor (NE.singleton adminActor) aId
     unless worked $ error $ "Couldn't make actor " <> show aId
-    worked <- storeGroup adminActor gId
+    worked <- storeGroup (NE.singleton adminActor) gId
     unless worked $ error $ "Couldn't make group " <> show gId
-    worked <- setMemberPermission adminActor Create adminGroup gId
+    worked <- setMemberPermission (NE.singleton adminActor) Create adminGroup gId
     unless worked $ error $ "Couldn't set group permission " <> show gId
-    worked <- addMember adminActor gId aId
+    worked <- addMember (NE.singleton adminActor) gId aId
     unless worked $ error $ "Couldn't add member " <> show (gId, aId)
 
 -- FIXME each group or space or something should have a set of shit it specifically _can't_ see?

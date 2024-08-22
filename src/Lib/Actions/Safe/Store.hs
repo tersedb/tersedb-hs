@@ -1,5 +1,8 @@
 module Lib.Actions.Safe.Store where
 
+import Control.Monad.Extra (andM)
+import Control.Monad.State (MonadState)
+import Data.List.NonEmpty (NonEmpty)
 import Lib.Actions.Safe.Verify (
   anyCanCreateActor,
   anyCanCreateEntity,
@@ -22,9 +25,6 @@ import Lib.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
 import Lib.Types.Store (
   Shared,
  )
-import Data.List.NonEmpty (NonEmpty)
-import Control.Monad.Extra (andM)
-import Control.Monad.State (MonadState)
 
 storeGroup
   :: (MonadState Shared m)

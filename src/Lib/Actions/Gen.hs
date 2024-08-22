@@ -1,5 +1,8 @@
 module Lib.Actions.Gen where
 
+import Control.Monad.IO.Class (MonadIO)
+import Data.List.NonEmpty (NonEmpty)
+import Data.Maybe.HT (toMaybe)
 import Lib.Actions.Safe.Store (
   storeActor,
   storeEntity,
@@ -9,9 +12,6 @@ import Lib.Actions.Safe.Store (
  )
 import Lib.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
 import Lib.Types.Monad (SheepdogM)
-import Control.Monad.IO.Class (MonadIO)
-import Data.Maybe.HT (toMaybe)
-import Data.List.NonEmpty (NonEmpty)
 import System.Random.Stateful (Uniform (uniformM), globalStdGen)
 
 generateWithAuthority

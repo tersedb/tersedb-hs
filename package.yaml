@@ -20,20 +20,21 @@ category:            Web
 description: Please see the README on GitHub at <https://github.com/tersedb/tersedb-hs#readme>
 
 default-extensions:
-  - FlexibleContexts
-  - ScopedTypeVariables
-  - GeneralizedNewtypeDeriving
-  - RecordWildCards
-  - NamedFieldPuns
   - DerivingVia
   - DataKinds
   - DeriveGeneric
+  - FlexibleContexts
+  - FlexibleInstances
+  - GeneralizedNewtypeDeriving
+  - InstanceSigs
+  - KindSignatures
+  - NamedFieldPuns
   - RankNTypes
+  - RecordWildCards
+  - ScopedTypeVariables
+  - StandaloneDeriving
   - TemplateHaskell
   - TypeFamilies
-  - KindSignatures
-  - StandaloneDeriving
-  - InstanceSigs
 
 dependencies:
   - base >= 4.7 && < 5
