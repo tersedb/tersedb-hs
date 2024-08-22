@@ -9,8 +9,8 @@ import Lib.Actions.Safe.Verify (
   canDeleteMember,
   canDeleteSpace,
   canDeleteVersion,
-  canReadVersion,
-  canUpdateEntity,
+  canDeleteActor,
+  canDeleteGroup,
   canUpdateVersion,
   conditionally,
  )
@@ -19,6 +19,8 @@ import Lib.Actions.Unsafe.Remove (
   unsafeRemoveMember,
   unsafeRemoveSpace,
   unsafeRemoveVersion,
+  unsafeRemoveActor,
+  unsafeRemoveGroup,
  )
 import Lib.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
 import Lib.Types.Store (
@@ -100,3 +102,22 @@ removeMember
   -> m Bool
 removeMember remover gId aId =
   canDeleteMember remover gId >>= conditionally (unsafeRemoveMember gId aId)
+
+removeActor
+  :: MonadState Shared m
+  => ActorId
+  -> ActorId
+  -> m Bool
+removeActor remover aId =
+  canDeleteActor remover aId >>= conditionally (unsafeRemoveActor aId)
+
+removeGroup
+  :: MonadState Shared m
+  => ActorId
+  -> GroupId
+  -> m (Maybe (Either GroupId ()))
+removeGroup remover gId = do
+  canAdjust <- canDeleteGroup remover gId
+  if not canAdjust
+    then pure Nothing
+    else Just <$> unsafeRemoveGroup gId

@@ -13,6 +13,8 @@ import Lib.Actions.Safe.Remove (
   removeMember,
   removeSpace,
   removeVersion,
+  removeGroup,
+  removeActor,
  )
 import Lib.Actions.Safe.Update.Group (
   setEntityPermission,
@@ -35,7 +37,7 @@ import Lib.Types.Store (
   toVersions,
  )
 import Lib.Types.Store.Entity (fork, space, versions)
-import Lib.Types.Store.Groups (members, nodes)
+import Lib.Types.Store.Groups (members, nodes, edges)
 import Lib.Types.Store.Space (entities)
 import Lib.Types.Store.Tabulation.Group (hasLessOrEqualPermissionsTo)
 import Lib.Types.Store.Version (entity, references, subscriptions)
@@ -146,3 +148,33 @@ removeTests = describe "Remove" $ do
                       (s' ^? store . toGroups . nodes . ix gId . members . ix aId) `shouldBe` Nothing
                     context "Group in Actor" $
                       (s' ^? store . toActors . ix aId . ix gId) `shouldBe` Nothing
+  describe "Actor" $
+    it "should remove member from group" $
+      let gen = suchThat arbitraryShared $ \(s, _, _) ->
+            not . null $ s ^. store . toActors
+       in forAll gen $ \(s, adminActor, adminGroup) ->
+            let genG = elements . HM.keys $ s ^. store . toActors
+             in forAll genG $ \(aId :: ActorId) -> do
+                  let s' = flip execState s $ do
+                        worked <- removeActor adminActor aId
+                        unless worked $
+                          error $
+                            "Couldn't remove actor " <> show aId
+                  (s' ^? store . toActors . ix aId) `shouldBe` Nothing
+                  (foldMap (^. members) (s' ^. store . toGroups . nodes) ^. at aId) `shouldBe` Nothing
+  describe "Group" $
+    it "should remove member from group" $
+      let gen = suchThat arbitraryShared $ \(s, _, _) ->
+            not . null $ s ^. store . toGroups . nodes
+       in forAll gen $ \(s, adminActor, adminGroup) ->
+            let genG = elements . HM.keys $ s ^. store . toGroups . nodes
+             in forAll genG $ \gId -> do
+                  let s' = flip execState s $ do
+                        eWorked <- removeGroup adminActor gId
+                        case eWorked of
+                          Just (Right ()) -> pure ()
+                          _ -> error $ "Couldn't remove group " <> show gId
+                  (s' ^? store . toGroups . nodes . ix gId) `shouldBe` Nothing
+                  let (froms, tos) = unzip . HS.toList $ s' ^. store . toGroups . edges
+                  filter (== gId) froms `shouldBe` mempty
+                  filter (== gId) tos `shouldBe` mempty
