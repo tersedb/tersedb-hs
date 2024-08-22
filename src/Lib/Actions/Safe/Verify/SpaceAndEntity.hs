@@ -18,7 +18,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 You can reach me at athan.clark@gmail.com.
 -}
 
-
 module Lib.Actions.Safe.Verify.SpaceAndEntity (
   anyCanReadSpace,
   anyCanCreateSpace,
@@ -99,7 +98,8 @@ canReadSpace reader sId = do
             (CollectionPermissionWithExemption Read True)
         else pure True
 
-anyCanReadSpace :: (MonadState Shared m) => NonEmpty ActorId -> SpaceId -> m Bool
+anyCanReadSpace
+  :: (MonadState Shared m) => NonEmpty ActorId -> SpaceId -> m Bool
 anyCanReadSpace readers sId =
   anyM (`canReadSpace` sId) (NE.toList readers)
 

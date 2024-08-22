@@ -18,7 +18,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 You can reach me at athan.clark@gmail.com.
 -}
 
-
 module Lib.Actions.Safe.Verify.Group (
   anyCanReadGroup,
   anyCanCreateGroup,
@@ -55,7 +54,8 @@ canReadGroup reader gId = do
     reader
     Read
 
-anyCanReadGroup :: (MonadState Shared m) => NonEmpty ActorId -> GroupId -> m Bool
+anyCanReadGroup
+  :: (MonadState Shared m) => NonEmpty ActorId -> GroupId -> m Bool
 anyCanReadGroup readers gId =
   anyM (`canReadGroup` gId) (NE.toList readers)
 

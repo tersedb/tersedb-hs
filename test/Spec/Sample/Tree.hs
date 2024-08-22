@@ -18,7 +18,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 You can reach me at athan.clark@gmail.com.
 -}
 
-
 module Spec.Sample.Tree where
 
 import Lib.Actions.Safe (emptyShared)

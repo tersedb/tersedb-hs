@@ -18,7 +18,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 You can reach me at athan.clark@gmail.com.
 -}
 
-
 module Lib.Types.Monad where
 
 import Lib.Types.Store (Shared, Store, store, temp)

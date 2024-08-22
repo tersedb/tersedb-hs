@@ -18,13 +18,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 You can reach me at athan.clark@gmail.com.
 -}
 
-
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE NamedFieldPuns #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-
 module Spec.Test.Groups where
 
 import Spec.Sample.Tree (
@@ -56,8 +49,7 @@ import Lib.Types.Store.Groups (
  )
 import Lib.Types.Store.Tabulation.Group (hasLessOrEqualPermissionsTo)
 
-import Control.Lens (at, ix, (.~), (^.))
-import Control.Monad (void)
+import Control.Lens (at, ix, (?~), (^.))
 import Control.Monad.State (State, execState, modify)
 import Data.Foldable (traverse_)
 import qualified Data.HashMap.Strict as HM
@@ -80,7 +72,7 @@ groupsTests = do
       property $ \(xs :: [GroupId]) ->
         if length xs <= 1
           then True `shouldBe` True
-          else hasCycle (loadCycle xs) `shouldBe` Just (xs !! 0 : reverse xs)
+          else hasCycle (loadCycle xs) `shouldBe` Just (head xs : reverse xs)
   describe "logical mechanism" $ do
     it "tabulating while linking is the same as tabulating after linking" $
       property $ \(xs :: SampleGroupTree ()) ->
@@ -144,19 +136,19 @@ loadCycle :: [GroupId] -> Groups
 loadCycle gs = execState go emptyGroups
  where
   addGroup :: GroupId -> State Groups ()
-  addGroup gId = modify $ nodes . at gId .~ Just emptyGroup
+  addGroup gId = modify $ nodes . at gId ?~ emptyGroup
 
   addSingleLink :: (GroupId, GroupId) -> State Groups ()
   addSingleLink (from, to) = do
-    modify $ nodes . ix from . next . at to .~ Just ()
-    modify $ nodes . ix to . prev .~ Just from
+    modify $ nodes . ix from . next . at to ?~ ()
+    modify $ nodes . ix to . prev ?~ from
 
   go :: State Groups ()
   go = do
-    void $ traverse addGroup gs
+    traverse_ addGroup gs
     if length gs <= 1
       then pure ()
       else do
-        modify $ roots . at (gs !! 0) .~ Just ()
-        void $ traverse addSingleLink (pairs gs)
-        addSingleLink (gs !! (length gs - 1), gs !! 0)
+        modify $ roots . at (head gs) ?~ ()
+        traverse_ addSingleLink (pairs gs)
+        addSingleLink (gs !! (length gs - 1), head gs)

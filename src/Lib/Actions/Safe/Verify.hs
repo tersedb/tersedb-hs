@@ -18,7 +18,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 You can reach me at athan.clark@gmail.com.
 -}
 
-
 module Lib.Actions.Safe.Verify (
   module Lib.Actions.Safe.Verify.SpaceAndEntity,
   module Lib.Actions.Safe.Verify.Group,

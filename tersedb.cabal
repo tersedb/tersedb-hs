@@ -146,6 +146,7 @@ test-suite sheepdogdb-test
       Spec.Sample.Store
       Spec.Sample.Tree
       Spec.Test.Groups
+      Spec.Test.Joint
       Spec.Test.Safe.Create
       Spec.Test.Safe.Delete
       Spec.Test.Safe.Read

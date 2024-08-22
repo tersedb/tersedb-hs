@@ -18,13 +18,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 You can reach me at athan.clark@gmail.com.
 -}
 
-
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE NamedFieldPuns #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-
 import Control.Lens ((^.))
 import Control.Monad.Extra (unless)
 import Control.Monad.State (execState, get)
@@ -68,6 +61,7 @@ import Spec.Sample.Store (
  )
 import Spec.Sample.Tree (SampleGroupTree (..))
 import Spec.Test.Groups (groupsTests, testPermissionInheritance)
+import Spec.Test.Joint (jointTests)
 import Spec.Test.Safe.Create (createTests)
 import Spec.Test.Safe.Delete (removeTests)
 import Spec.Test.Safe.Read (readTests)
@@ -98,7 +92,7 @@ main = sydTest $ do
     it "all spaces are disjoint" $
       property $ \(xs :: SampleStore) ->
         let s = loadSample xs
-         in foldr HS.intersection mempty (fmap (^. entities) (s ^. store . toSpaces))
+         in foldr (HS.intersection . (^. entities)) mempty (s ^. store . toSpaces)
               `shouldBe` mempty
     it "all elements exist in their space" $
       property $ \(xs :: SampleStore) ->
@@ -143,3 +137,4 @@ main = sydTest $ do
         createTests
         updateTests
         removeTests
+    jointTests
