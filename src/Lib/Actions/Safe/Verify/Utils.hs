@@ -25,6 +25,7 @@ import Lib.Types.Permission (
   CollectionPermission,
   CollectionPermissionWithExemption,
   collectionPermission,
+  HasMinimumPermission (..),
  )
 import Lib.Types.Store (
   Shared,
@@ -49,7 +50,7 @@ can do the action, depicted by the Lens
 -}
 canDoWithTab
   :: ( MonadState Shared m
-     , Ord a
+     , HasMinimumPermission a
      )
   => (TabulatedPermissionsForGroup -> a)
   -- ^ Specific permission being checked
@@ -64,13 +65,13 @@ canDoWithTab proj creator getP = do
     Just groups ->
       let perGroup gId =
             let tab = s ^. temp . toTabulatedGroups . at gId . non mempty
-             in proj tab >= getP tab
+             in proj tab `hasMinimumPermission` getP tab
        in any perGroup groups
     _ -> False
 
 canDo
   :: ( MonadState Shared m
-     , Ord a
+     , HasMinimumPermission a
      )
   => (TabulatedPermissionsForGroup -> a)
   -- ^ Specific permission being checked

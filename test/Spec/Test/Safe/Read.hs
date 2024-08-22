@@ -20,10 +20,11 @@ You can reach me at athan.clark@gmail.com.
 
 module Spec.Test.Safe.Read where
 
-import Control.Lens ((^.))
+import Control.Lens ((^.), at, (^?!), ix, (^?))
 import Control.Monad.Extra (unless)
 import Control.Monad.State (State, evalState, execState)
 import qualified Data.HashMap.Strict as HM
+import qualified Data.HashSet as HS
 import qualified Data.List.NonEmpty as NE
 import Lib.Actions.Safe (emptyShared)
 import Lib.Actions.Safe.Store (
@@ -61,9 +62,15 @@ import Lib.Types.Permission (
 import Lib.Types.Store (
   Shared,
   store,
+  temp,
   toActors,
   toSpaces,
+  toGroups,
+  toTabulatedGroups,
+  toSpacesHiddenTo,
+  toSpacePermissions,
  )
+import Lib.Types.Store.Groups (nodes)
 import Spec.Sample.Store (
   arbitraryEmptyShared,
   arbitraryShared,
@@ -88,7 +95,14 @@ readTests = describe "Read" $ do
              in forAll ((,) <$> genAId <*> genSId) $ \(aId, sId) ->
                   let resNew = evalState (anyCanReadSpace (NE.singleton aId) sId) s
                       resOld = evalState (anyCanReadSpaceOld (NE.singleton aId) sId) s
-                   in resNew `shouldBe` resOld
+                      gs = HS.toList $ s ^?! store . toActors . ix aId
+                   in shouldSatisfy
+                        ( gs
+                        , (\g -> (g, s ^?! store . toGroups . nodes . ix g)) <$> gs
+                        , (\g -> (g, s ^?! temp . toTabulatedGroups . ix g)) <$> gs
+                        , s ^? temp . toSpacesHiddenTo . ix sId
+                        , (\g -> (g, s ^? store . toSpacePermissions . ix g)) <$> gs
+                        , resNew, resOld, aId, sId) $ \_ -> resNew == resOld
   describe "Should Succeed" $ do
     it "Spaces" $
       forAll arbitraryEmptyShared $ \(s, adminActor, adminGroup) ->

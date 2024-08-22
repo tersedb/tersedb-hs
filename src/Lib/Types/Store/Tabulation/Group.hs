@@ -17,14 +17,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 You can reach me at athan.clark@gmail.com.
 -}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE DerivingVia #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE TemplateHaskell #-}
 
 module Lib.Types.Store.Tabulation.Group where
 
@@ -32,8 +24,8 @@ import Lib.Types.Id (GroupId, SpaceId)
 import Lib.Types.Permission (
   CollectionPermission,
   CollectionPermissionWithExemption,
+  hasMinimumPermission,
  )
-
 import Control.Lens.TH (makeLensesFor)
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HM
@@ -136,8 +128,8 @@ hasLessOrEqualPermissionsTo
 hasLessOrEqualPermissionsTo
   (TabulatedPermissionsForGroup xu xo xr xs xe xg xm)
   (TabulatedPermissionsForGroup yu yo yr ys ye yg ym) =
-    xu <= yu
-      && xo <= yo
+    yu `hasMinimumPermission` xu
+      && yo `hasMinimumPermission` xo
       && xr <= yr
       && HM.isSubmapOfBy (<=) xs ys
       && HM.isSubmapOfBy (<=) xe ye

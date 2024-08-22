@@ -17,13 +17,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 You can reach me at athan.clark@gmail.com.
 -}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE DerivingVia #-}
-{-# LANGUAGE NamedFieldPuns #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE TemplateHaskell #-}
 
 module Lib.Types.Permission where
 
@@ -35,6 +28,11 @@ import Data.Semigroup (Max (..))
 import Deriving.Aeson.Stock (CustomJSON (..), Generic, PrefixedSnake)
 import Test.QuickCheck (Arbitrary (arbitrary), elements)
 
+
+class HasMinimumPermission a where
+  hasMinimumPermission :: a -> a -> Bool
+
+
 data CollectionPermission
   = Blind
   | Read
@@ -42,6 +40,8 @@ data CollectionPermission
   | Update
   | Delete
   deriving (Eq, Ord, Show, Read, Generic)
+instance HasMinimumPermission CollectionPermission where
+  hasMinimumPermission = (>=)
 instance Hashable CollectionPermission
 instance ToJSON CollectionPermission where
   toJSON x = String $ case x of
@@ -77,14 +77,11 @@ data CollectionPermissionWithExemption = CollectionPermissionWithExemption
   deriving
     (ToJSON, FromJSON)
     via PrefixedSnake "collectionPermission" CollectionPermissionWithExemption
-instance Ord CollectionPermissionWithExemption where
-  compare (CollectionPermissionWithExemption xp xe) (CollectionPermissionWithExemption yp ye) =
-    case compare xp yp of
-      EQ -> case (xe, ye) of
-        (False, True) -> LT
-        (True, False) -> GT
-        _ -> EQ
-      c -> c
+instance HasMinimumPermission CollectionPermissionWithExemption where
+  hasMinimumPermission (CollectionPermissionWithExemption xp _)
+    (CollectionPermissionWithExemption yp False) = xp >= yp
+  hasMinimumPermission (CollectionPermissionWithExemption xp xe)
+    (CollectionPermissionWithExemption yp True) = xe && (xp >= yp)
 instance Hashable CollectionPermissionWithExemption
 instance Semigroup CollectionPermissionWithExemption where
   (CollectionPermissionWithExemption xp xe)

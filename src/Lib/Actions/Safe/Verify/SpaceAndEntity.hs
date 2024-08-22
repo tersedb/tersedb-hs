@@ -85,7 +85,17 @@ import Lib.Types.Store.Version (entity)
 -- * Spaces
 
 canReadSpace :: (MonadState Shared m) => ActorId -> SpaceId -> m Bool
-canReadSpace reader sId = do
+canReadSpace reader sId =
+  canDo (withCollectionPermission sId forUniverse forSpaces) reader Read
+
+anyCanReadSpace
+  :: (MonadState Shared m) => NonEmpty ActorId -> SpaceId -> m Bool
+anyCanReadSpace readers sId =
+  anyM (`canReadSpace` sId) (NE.toList readers)
+
+-- legacy implementation that's slow
+canReadSpaceOld :: (MonadState Shared m) => ActorId -> SpaceId -> m Bool
+canReadSpaceOld reader sId = do
   s <- get
   case s ^. store . toActors . at reader of
     Nothing -> pure False
@@ -97,16 +107,6 @@ canReadSpace reader sId = do
             reader
             (CollectionPermissionWithExemption Read True)
         else pure True
-
-anyCanReadSpace
-  :: (MonadState Shared m) => NonEmpty ActorId -> SpaceId -> m Bool
-anyCanReadSpace readers sId =
-  anyM (`canReadSpace` sId) (NE.toList readers)
-
--- legacy implementation that's slow
-canReadSpaceOld :: (MonadState Shared m) => ActorId -> SpaceId -> m Bool
-canReadSpaceOld reader sId =
-  canDo (withCollectionPermission sId forUniverse forSpaces) reader Read
 
 anyCanReadSpaceOld
   :: (MonadState Shared m) => NonEmpty ActorId -> SpaceId -> m Bool

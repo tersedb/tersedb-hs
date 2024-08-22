@@ -70,6 +70,7 @@ library
       InstanceSigs
       KindSignatures
       NamedFieldPuns
+      OverloadedStrings
       RankNTypes
       RecordWildCards
       ScopedTypeVariables
@@ -113,6 +114,7 @@ executable sheepdogdb-exe
       InstanceSigs
       KindSignatures
       NamedFieldPuns
+      OverloadedStrings
       RankNTypes
       RecordWildCards
       ScopedTypeVariables
@@ -167,6 +169,7 @@ test-suite sheepdogdb-test
       InstanceSigs
       KindSignatures
       NamedFieldPuns
+      OverloadedStrings
       RankNTypes
       RecordWildCards
       ScopedTypeVariables

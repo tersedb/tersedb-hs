@@ -29,6 +29,7 @@ default-extensions:
   - InstanceSigs
   - KindSignatures
   - NamedFieldPuns
+  - OverloadedStrings
   - RankNTypes
   - RecordWildCards
   - ScopedTypeVariables

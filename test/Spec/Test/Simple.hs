@@ -17,11 +17,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 You can reach me at athan.clark@gmail.com.
 -}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE NamedFieldPuns #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 
 module Spec.Test.Simple where
 
@@ -30,6 +25,7 @@ import Lib.Types.Permission (
   CollectionPermission (..),
   CollectionPermissionWithExemption (..),
   SinglePermission,
+  hasMinimumPermission,
  )
 import Lib.Types.Store.Tabulation.Group (
   TabulatedPermissionsForGroup,
@@ -73,10 +69,12 @@ simpleTests = do
   describe "CollectionPermissionWithExemption" $ do
     it "has a lower bound" $
       property $
-        \(x :: CollectionPermissionWithExemption) -> x `shouldSatisfy` (>= minBound)
+        \(x :: CollectionPermissionWithExemption) ->
+          x `shouldSatisfy` (`hasMinimumPermission` minBound)
     it "has an upper bound" $
       property $
-        \(x :: CollectionPermissionWithExemption) -> x `shouldSatisfy` (<= maxBound)
+        \(x :: CollectionPermissionWithExemption) ->
+          x `shouldSatisfy` (maxBound `hasMinimumPermission`)
     it "is a semigroup" $
       property $
         \(x :: CollectionPermissionWithExemption) y z -> (x <> y) <> z `shouldBe` x <> (y <> z)
