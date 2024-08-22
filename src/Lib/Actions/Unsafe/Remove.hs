@@ -4,12 +4,12 @@ import Control.Lens (at, ix, non, (%~), (.~), (^.), _Left)
 import Control.Monad.State (MonadState (get, put), modify, runState)
 import Data.Foldable (foldlM, for_)
 import qualified Data.List.NonEmpty as NE
-import Lib.Actions.Unsafe.Update.Group (unsafeUnlinkGroups)
 import Lib.Actions.Unsafe.Update (
   unsafeRemoveReference,
   unsafeRemoveSubscription,
   unsafeUpdateFork,
  )
+import Lib.Actions.Unsafe.Update.Group (unsafeUnlinkGroups)
 import Lib.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
 import Lib.Types.Store (
   Shared,
@@ -25,7 +25,15 @@ import Lib.Types.Store (
   toVersions,
  )
 import Lib.Types.Store.Entity (versions)
-import Lib.Types.Store.Groups (emptyGroup, members, nodes, prev, next, roots, outs)
+import Lib.Types.Store.Groups (
+  emptyGroup,
+  members,
+  next,
+  nodes,
+  outs,
+  prev,
+  roots,
+ )
 import Lib.Types.Store.Space (entities)
 import Lib.Types.Store.Version (entity, references, subscriptions)
 
@@ -142,9 +150,8 @@ unsafeRemoveMember gId aId = do
   modify $
     store . toGroups . nodes . at gId . non emptyGroup . members . at aId .~ Nothing
 
-
 unsafeRemoveActor
-  :: MonadState Shared m
+  :: (MonadState Shared m)
   => ActorId
   -> m ()
 unsafeRemoveActor aId = do
@@ -153,14 +160,13 @@ unsafeRemoveActor aId = do
     unsafeRemoveMember gId aId
   modify $ store . toActors . at aId .~ Nothing
 
-
 unsafeRemoveGroup
-  :: MonadState Shared m
+  :: (MonadState Shared m)
   => GroupId
   -> m (Either GroupId ())
 unsafeRemoveGroup gId = do
   s <- get
-  case s ^. store . toGroups . nodes . at gId of 
+  case s ^. store . toGroups . nodes . at gId of
     Nothing -> pure (Left gId)
     Just g -> do
       for_ (g ^. members) $ \aId ->

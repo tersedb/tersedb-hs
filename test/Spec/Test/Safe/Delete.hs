@@ -9,12 +9,12 @@ import qualified Data.HashSet as HS
 import qualified Data.List.NonEmpty as NE
 import Data.Maybe (fromJust, fromMaybe)
 import Lib.Actions.Safe.Remove (
+  removeActor,
   removeEntity,
+  removeGroup,
   removeMember,
   removeSpace,
   removeVersion,
-  removeGroup,
-  removeActor,
  )
 import Lib.Actions.Safe.Update.Group (
   setEntityPermission,
@@ -37,7 +37,7 @@ import Lib.Types.Store (
   toVersions,
  )
 import Lib.Types.Store.Entity (fork, space, versions)
-import Lib.Types.Store.Groups (members, nodes, edges)
+import Lib.Types.Store.Groups (edges, members, nodes)
 import Lib.Types.Store.Space (entities)
 import Lib.Types.Store.Tabulation.Group (hasLessOrEqualPermissionsTo)
 import Lib.Types.Store.Version (entity, references, subscriptions)
@@ -161,7 +161,8 @@ removeTests = describe "Remove" $ do
                           error $
                             "Couldn't remove actor " <> show aId
                   (s' ^? store . toActors . ix aId) `shouldBe` Nothing
-                  (foldMap (^. members) (s' ^. store . toGroups . nodes) ^. at aId) `shouldBe` Nothing
+                  (foldMap (^. members) (s' ^. store . toGroups . nodes) ^. at aId)
+                    `shouldBe` Nothing
   describe "Group" $
     it "should remove member from group" $
       let gen = suchThat arbitraryShared $ \(s, _, _) ->

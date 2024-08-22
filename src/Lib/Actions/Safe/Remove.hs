@@ -5,22 +5,22 @@ import Control.Monad.Extra (allM, andM)
 import Control.Monad.State (MonadState (get))
 import qualified Data.HashSet as HS
 import Lib.Actions.Safe.Verify (
+  canDeleteActor,
   canDeleteEntity,
+  canDeleteGroup,
   canDeleteMember,
   canDeleteSpace,
   canDeleteVersion,
-  canDeleteActor,
-  canDeleteGroup,
   canUpdateVersion,
   conditionally,
  )
 import Lib.Actions.Unsafe.Remove (
+  unsafeRemoveActor,
   unsafeRemoveEntity,
+  unsafeRemoveGroup,
   unsafeRemoveMember,
   unsafeRemoveSpace,
   unsafeRemoveVersion,
-  unsafeRemoveActor,
-  unsafeRemoveGroup,
  )
 import Lib.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
 import Lib.Types.Store (
@@ -104,7 +104,7 @@ removeMember remover gId aId =
   canDeleteMember remover gId >>= conditionally (unsafeRemoveMember gId aId)
 
 removeActor
-  :: MonadState Shared m
+  :: (MonadState Shared m)
   => ActorId
   -> ActorId
   -> m Bool
@@ -112,7 +112,7 @@ removeActor remover aId =
   canDeleteActor remover aId >>= conditionally (unsafeRemoveActor aId)
 
 removeGroup
-  :: MonadState Shared m
+  :: (MonadState Shared m)
   => ActorId
   -> GroupId
   -> m (Maybe (Either GroupId ()))
