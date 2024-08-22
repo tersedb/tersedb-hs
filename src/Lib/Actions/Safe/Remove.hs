@@ -3,15 +3,16 @@ module Lib.Actions.Safe.Remove where
 import Control.Lens (ix, (^.), (^?))
 import Control.Monad.Extra (allM, andM)
 import Control.Monad.State (MonadState (get))
+import Data.List.NonEmpty (NonEmpty)
 import qualified Data.HashSet as HS
 import Lib.Actions.Safe.Verify (
-  canDeleteActor,
-  canDeleteEntity,
-  canDeleteGroup,
-  canDeleteMember,
-  canDeleteSpace,
-  canDeleteVersion,
-  canUpdateVersion,
+  anyCanDeleteActor,
+  anyCanDeleteEntity,
+  anyCanDeleteGroup,
+  anyCanDeleteMember,
+  anyCanDeleteSpace,
+  anyCanDeleteVersion,
+  anyCanUpdateVersion,
   conditionally,
  )
 import Lib.Actions.Unsafe.Remove (
@@ -37,17 +38,17 @@ import Lib.Types.Store.Space (entities)
 
 removeVersion
   :: (MonadState Shared m)
-  => ActorId
+  => NonEmpty ActorId
   -> VersionId
   -> m (Maybe (Either (Either VersionId EntityId) ()))
 removeVersion remover vId = do
   s <- get
   canAdjust <-
     andM
-      [ canDeleteVersion remover vId
+      [ anyCanDeleteVersion remover vId
       , case s ^? temp . toReferencesFrom . ix vId of
           Nothing -> pure True
-          Just refs -> allM (canUpdateVersion remover) (HS.toList refs)
+          Just refs -> allM (anyCanUpdateVersion remover) (HS.toList refs)
           -- NOTE we don't need to check for `canReadVersion` or `canReadEntity` for
           -- this version's references and subscriptions, because we're essentially
           -- making this version blind to them by deleting it
@@ -58,19 +59,17 @@ removeVersion remover vId = do
 
 removeEntity
   :: (MonadState Shared m)
-  => ActorId
+  => NonEmpty ActorId
   -> EntityId
   -> m (Maybe (Either (Either VersionId EntityId) ()))
 removeEntity remover eId = do
   s <- get
   canAdjust <-
     andM
-      [ case s ^? store . toEntities . ix eId of
-          Nothing -> pure False
-          Just e -> canDeleteEntity remover (e ^. space) eId
+      [ anyCanDeleteEntity remover eId
       , case s ^? temp . toSubscriptionsFrom . ix eId of
           Nothing -> pure True
-          Just subs -> allM (canUpdateVersion remover) (HS.toList subs)
+          Just subs -> allM (anyCanUpdateVersion remover) (HS.toList subs)
       ]
   if not canAdjust
     then pure Nothing
@@ -78,7 +77,7 @@ removeEntity remover eId = do
 
 removeSpace
   :: (MonadState Shared m)
-  => ActorId
+  => NonEmpty ActorId
   -> SpaceId
   -> m (Maybe (Either (Either (Either VersionId EntityId) SpaceId) ()))
 removeSpace remover sId = do
@@ -87,8 +86,8 @@ removeSpace remover sId = do
     Nothing -> pure False
     Just s ->
       andM
-        [ canDeleteSpace remover sId
-        , allM (canDeleteEntity remover sId) (HS.toList (s ^. entities))
+        [ anyCanDeleteSpace remover sId
+        , allM (anyCanDeleteEntity remover) (HS.toList (s ^. entities))
         ]
   if not canAdjust
     then pure Nothing
@@ -96,28 +95,28 @@ removeSpace remover sId = do
 
 removeMember
   :: (MonadState Shared m)
-  => ActorId
+  => NonEmpty ActorId
   -> GroupId
   -> ActorId
   -> m Bool
 removeMember remover gId aId =
-  canDeleteMember remover gId >>= conditionally (unsafeRemoveMember gId aId)
+  anyCanDeleteMember remover gId >>= conditionally (unsafeRemoveMember gId aId)
 
 removeActor
   :: (MonadState Shared m)
-  => ActorId
+  => NonEmpty ActorId
   -> ActorId
   -> m Bool
 removeActor remover aId =
-  canDeleteActor remover aId >>= conditionally (unsafeRemoveActor aId)
+  anyCanDeleteActor remover aId >>= conditionally (unsafeRemoveActor aId)
 
 removeGroup
   :: (MonadState Shared m)
-  => ActorId
+  => NonEmpty ActorId
   -> GroupId
   -> m (Maybe (Either GroupId ()))
 removeGroup remover gId = do
-  canAdjust <- canDeleteGroup remover gId
+  canAdjust <- anyCanDeleteGroup remover gId
   if not canAdjust
     then pure Nothing
     else Just <$> unsafeRemoveGroup gId

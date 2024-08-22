@@ -1,6 +1,6 @@
 module Lib.Actions.Safe.Update.Group where
 
-import Lib.Actions.Safe.Verify (canUpdateGroup, conditionally)
+import Lib.Actions.Safe.Verify (anyCanUpdateGroup, conditionally)
 import Lib.Actions.Safe.Verify.Group (hasGroupPermission)
 import Lib.Actions.Safe.Verify.Member (hasMemberPermission)
 import Lib.Actions.Safe.Verify.SpaceAndEntity (
@@ -35,25 +35,26 @@ import Lib.Types.Store.Tabulation.Group (
   forRecruiter,
   forUniverse,
  )
-
 import Control.Lens (ix, (^.), (^?), _Just)
-import Control.Monad.Extra (andM)
+import Control.Monad.Extra (andM, anyM)
 import Control.Monad.State (MonadState, get)
 import Data.HashSet (HashSet)
 import qualified Data.HashSet as HS
 import Data.Maybe (fromMaybe)
+import Data.List.NonEmpty (NonEmpty)
+import qualified Data.List.NonEmpty as NE
 
 linkGroups
   :: (MonadState Shared m)
-  => ActorId
+  => NonEmpty ActorId
   -> GroupId
   -> GroupId
   -> m (Maybe (Either LinkGroupError ()))
 linkGroups updater gId childId = do
   canAdjust <-
     andM
-      [ canUpdateGroup updater gId
-      , canUpdateGroup updater childId
+      [ anyCanUpdateGroup updater gId
+      , anyCanUpdateGroup updater childId
       ]
   if not canAdjust
     then pure Nothing
@@ -61,36 +62,36 @@ linkGroups updater gId childId = do
 
 unlinkGroups
   :: (MonadState Shared m)
-  => ActorId
+  => NonEmpty ActorId
   -> GroupId
   -> GroupId
   -> m Bool
 unlinkGroups updater gId childId = do
   canAdjust <-
     andM
-      [ canUpdateGroup updater gId
-      , canUpdateGroup updater childId
+      [ anyCanUpdateGroup updater gId
+      , anyCanUpdateGroup updater childId
       ]
   conditionally (unsafeUnlinkGroups gId childId) canAdjust
 
 updateGroupParent
   :: (MonadState Shared m)
-  => ActorId
+  => NonEmpty ActorId
   -> GroupId
   -> Maybe GroupId
   -> m (Maybe (Either LinkGroupError ()))
 updateGroupParent updater gId mParent = do
   canAdjust <-
     andM
-      [ canUpdateGroup updater gId
+      [ anyCanUpdateGroup updater gId
       , do
           s <- get
           case s ^? store . toGroups . nodes . ix gId . prev . _Just of
             Nothing -> pure True
-            Just oldParent -> canUpdateGroup updater oldParent
+            Just oldParent -> anyCanUpdateGroup updater oldParent
       , case mParent of
           Nothing -> pure True
-          Just newParent -> canUpdateGroup updater newParent
+          Just newParent -> anyCanUpdateGroup updater newParent
       ]
   if not canAdjust
     then pure Nothing
@@ -98,7 +99,7 @@ updateGroupParent updater gId mParent = do
 
 updateGroupChildren
   :: (MonadState Shared m)
-  => ActorId
+  => NonEmpty ActorId
   -> GroupId
   -> HashSet GroupId
   -> m (Maybe (Either LinkGroupError ()))
@@ -109,8 +110,8 @@ updateGroupChildren updater gId newChildren = do
     Just oldChildren -> do
       canAdjust <-
         andM $
-          (canUpdateGroup updater gId)
-            : (map (canUpdateGroup updater) (HS.toList (newChildren <> oldChildren)))
+          anyCanUpdateGroup updater gId
+            : map (anyCanUpdateGroup updater) (HS.toList (newChildren <> oldChildren))
       if not canAdjust
         then pure Nothing
         else Just <$> unsafeUpdateGroupChildren gId newChildren
@@ -118,7 +119,7 @@ updateGroupChildren updater gId newChildren = do
 -- | Will only update the group if the actor has same or greater permission
 setUniversePermission
   :: (MonadState Shared m)
-  => ActorId
+  => NonEmpty ActorId
   -- ^ actor attempting to set permission
   -> CollectionPermissionWithExemption
   -- ^ permission being set
@@ -128,8 +129,8 @@ setUniversePermission
 setUniversePermission creator p gId = do
   canAdjust <-
     andM
-      [ canUpdateGroup creator gId
-      , canDo (\t -> t ^. forUniverse) creator p
+      [ anyCanUpdateGroup creator gId
+      , anyM (\c -> canDo (^. forUniverse) c p) (NE.toList creator)
       ]
   conditionally
     (unsafeAdjustUniversePermission (const p) gId)
@@ -137,7 +138,7 @@ setUniversePermission creator p gId = do
 
 setOrganizationPermission
   :: (MonadState Shared m)
-  => ActorId
+  => NonEmpty ActorId
   -- ^ actor attempting to set permission
   -> CollectionPermissionWithExemption
   -- ^ permission being set
@@ -147,8 +148,8 @@ setOrganizationPermission
 setOrganizationPermission creator p gId = do
   canAdjust <-
     andM
-      [ canUpdateGroup creator gId
-      , canDo (\t -> t ^. forOrganization) creator p
+      [ anyCanUpdateGroup creator gId
+      , anyM (\c -> canDo (^. forOrganization) c p) (NE.toList creator)
       ]
   conditionally
     (unsafeAdjustOrganizationPermission (const p) gId)
@@ -156,7 +157,7 @@ setOrganizationPermission creator p gId = do
 
 setRecruiterPermission
   :: (MonadState Shared m)
-  => ActorId
+  => NonEmpty ActorId
   -- ^ actor attempting to set permission
   -> CollectionPermission
   -- ^ permission being set
@@ -166,8 +167,8 @@ setRecruiterPermission
 setRecruiterPermission creator p gId = do
   canAdjust <-
     andM
-      [ canUpdateGroup creator gId
-      , canDo (\t -> t ^. forRecruiter) creator p
+      [ anyCanUpdateGroup creator gId
+      , anyM (\c -> canDo (^. forRecruiter) c p) (NE.toList creator)
       ]
   conditionally
     (unsafeAdjustRecruiterPermission (const p) gId)
@@ -175,7 +176,7 @@ setRecruiterPermission creator p gId = do
 
 setSpacePermission
   :: (MonadState Shared m)
-  => ActorId
+  => NonEmpty ActorId
   -- ^ actor attempting to set permission
   -> Maybe SinglePermission
   -- ^ permission being set
@@ -187,8 +188,8 @@ setSpacePermission
 setSpacePermission creator p gId sId = do
   canAdjust <-
     andM
-      [ canUpdateGroup creator gId
-      , hasSpacePermission creator sId (fromMaybe Exists p)
+      [ anyCanUpdateGroup creator gId
+      , anyM (\c -> hasSpacePermission c sId (fromMaybe Exists p)) (NE.toList creator)
       ]
   conditionally
     (unsafeAdjustSpacePermission (const p) gId sId)
@@ -196,7 +197,7 @@ setSpacePermission creator p gId sId = do
 
 setEntityPermission
   :: (MonadState Shared m)
-  => ActorId
+  => NonEmpty ActorId
   -- ^ actor attempting to set permission
   -> CollectionPermission
   -- ^ permission being set
@@ -208,8 +209,8 @@ setEntityPermission
 setEntityPermission creator p gId sId = do
   canAdjust <-
     andM
-      [ canUpdateGroup creator gId
-      , hasEntityPermission creator sId p
+      [ anyCanUpdateGroup creator gId
+      , anyM (\c -> hasEntityPermission c sId p) (NE.toList creator)
       ]
   conditionally
     (unsafeAdjustEntityPermission (const p) gId sId)
@@ -217,7 +218,7 @@ setEntityPermission creator p gId sId = do
 
 setGroupPermission
   :: (MonadState Shared m)
-  => ActorId
+  => NonEmpty ActorId
   -- ^ actor attempting to set permission
   -> Maybe SinglePermission
   -- ^ permission being set
@@ -229,8 +230,8 @@ setGroupPermission
 setGroupPermission creator p gId towardGId = do
   canAdjust <-
     andM
-      [ canUpdateGroup creator gId
-      , hasGroupPermission creator towardGId (fromMaybe Exists p)
+      [ anyCanUpdateGroup creator gId
+      , anyM (\c -> hasGroupPermission c towardGId (fromMaybe Exists p)) (NE.toList creator)
       ]
   conditionally
     (unsafeAdjustGroupPermission (const p) gId towardGId)
@@ -238,7 +239,7 @@ setGroupPermission creator p gId towardGId = do
 
 setMemberPermission
   :: (MonadState Shared m)
-  => ActorId
+  => NonEmpty ActorId
   -- ^ actor attempting to set permission
   -> CollectionPermission
   -- ^ the permission being granted
@@ -250,8 +251,8 @@ setMemberPermission
 setMemberPermission creator p manipulatorGId manipulatedGId = do
   canAdjust <-
     andM
-      [ canUpdateGroup creator manipulatorGId
-      , hasMemberPermission creator manipulatedGId p
+      [ anyCanUpdateGroup creator manipulatorGId
+      , anyM (\c -> hasMemberPermission c manipulatedGId p) (NE.toList creator)
       ]
   conditionally
     (unsafeAdjustMemberPermission (const p) manipulatorGId manipulatedGId)

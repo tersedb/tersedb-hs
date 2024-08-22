@@ -1,4 +1,9 @@
-module Lib.Actions.Safe.Verify.SpaceAndEntity where
+module Lib.Actions.Safe.Verify.SpaceAndEntity
+  ( anyCanReadSpace, anyCanCreateSpace, anyCanUpdateSpace, anyCanDeleteSpace
+  , anyCanReadAllEntities, anyCanReadEntity, anyCanCreateEntity, anyCanUpdateAllEntities
+  , anyCanUpdateEntity, anyCanDeleteEntity, anyCanReadVersion, anyCanCreateVersion
+  , anyCanUpdateVersion, anyCanDeleteVersion, hasEntityPermission, hasSpacePermission
+  ) where
 
 import Lib.Actions.Safe.Verify.Utils (
   canDo,
@@ -26,7 +31,7 @@ import Lib.Types.Store (
   toSubscriptionsFrom,
   toVersions,
  )
-import Lib.Types.Store.Entity (fork, space, versions)
+import Lib.Types.Store.Entity (space, versions)
 import Lib.Types.Store.Space (entities)
 import Lib.Types.Store.Tabulation.Group (
   forEntities,
@@ -34,14 +39,14 @@ import Lib.Types.Store.Tabulation.Group (
   forUniverse,
  )
 import Lib.Types.Store.Version (entity)
-
+import Data.List.NonEmpty (NonEmpty)
+import qualified Data.List.NonEmpty as NE
 import Control.Lens (at, ix, non, (^.), (^?))
 import Control.Monad.Extra (allM, andM, anyM, orM)
 import Control.Monad.State (MonadState, get)
 import qualified Data.HashMap.Strict as HM
 import Data.HashSet (HashSet)
 import qualified Data.HashSet as HS
-import qualified Data.List.NonEmpty as NE
 import Data.Maybe (isJust)
 
 -- * Spaces
@@ -55,11 +60,16 @@ canReadSpace reader sId = do
       if isJust (s ^. temp . toSpacesHiddenTo . ix sId . at gId)
         then
           canDo
-            (\t -> t ^. forUniverse)
+            (^. forUniverse)
             reader
             (CollectionPermissionWithExemption Read True)
         else pure True
 
+anyCanReadSpace :: MonadState Shared m => NonEmpty ActorId -> SpaceId -> m Bool
+anyCanReadSpace readers sId =
+  anyM (`canReadSpace` sId) (NE.toList readers)
+
+-- legacy implementation that's slow
 canReadSpaceOld :: (MonadState Shared m) => ActorId -> SpaceId -> m Bool
 canReadSpaceOld reader sId =
   canDo (withCollectionPermission sId forUniverse forSpaces) reader Read
@@ -68,9 +78,16 @@ canCreateSpace :: (MonadState Shared m) => ActorId -> m Bool
 canCreateSpace creater =
   canDo (\t -> t ^. forUniverse . collectionPermission) creater Create
 
+anyCanCreateSpace :: MonadState Shared m => NonEmpty ActorId -> m Bool
+anyCanCreateSpace = anyM canCreateSpace . NE.toList
+
 canUpdateSpace :: (MonadState Shared m) => ActorId -> SpaceId -> m Bool
 canUpdateSpace updater sId =
   canDo (withCollectionPermission sId forUniverse forSpaces) updater Update
+
+anyCanUpdateSpace :: MonadState Shared m => NonEmpty ActorId -> SpaceId -> m Bool
+anyCanUpdateSpace updaters sId =
+  anyM (`canUpdateSpace` sId) (NE.toList updaters)
 
 canDeleteSpace :: (MonadState Shared m) => ActorId -> SpaceId -> m Bool
 canDeleteSpace deleter sId = do
@@ -103,6 +120,10 @@ canDeleteSpace deleter sId = do
         , allM (canUpdateEntity deleter) . HS.toList . HS.unions $ HM.elems forks
         ]
 
+anyCanDeleteSpace :: MonadState Shared m => NonEmpty ActorId -> SpaceId -> m Bool
+anyCanDeleteSpace deleters sId =
+  anyM (`canDeleteSpace` sId) (NE.toList deleters)
+
 hasSpacePermission
   :: (MonadState Shared m) => ActorId -> SpaceId -> SinglePermission -> m Bool
 hasSpacePermission aId sId p =
@@ -120,12 +141,20 @@ canReadAllEntities reader sId =
     , canReadSpace reader sId
     ]
 
+anyCanReadAllEntities :: MonadState Shared m => NonEmpty ActorId -> SpaceId -> m Bool
+anyCanReadAllEntities readers sId =
+  anyM (`canReadAllEntities` sId) (NE.toList readers)
+
 canReadEntity :: (MonadState Shared m) => ActorId -> EntityId -> m Bool
 canReadEntity reader eId = do
   s <- get
   case s ^. store . toEntities . at eId of
     Nothing -> pure False
     Just e -> canReadAllEntities reader (e ^. space)
+
+anyCanReadEntity :: MonadState Shared m => NonEmpty ActorId -> EntityId -> m Bool
+anyCanReadEntity readers eId =
+  anyM (`canReadEntity` eId) (NE.toList readers)
 
 canCreateEntity :: (MonadState Shared m) => ActorId -> SpaceId -> m Bool
 canCreateEntity creater sId =
@@ -134,12 +163,20 @@ canCreateEntity creater sId =
     , canReadSpace creater sId
     ]
 
+anyCanCreateEntity :: MonadState Shared m => NonEmpty ActorId -> SpaceId -> m Bool
+anyCanCreateEntity creaters sId =
+  anyM (`canCreateEntity` sId) (NE.toList creaters)
+
 canUpdateAllEntities :: (MonadState Shared m) => ActorId -> SpaceId -> m Bool
 canUpdateAllEntities updater sId =
   andM
     [ canDo (\t -> t ^. forEntities . at sId . non Blind) updater Update
     , canReadSpace updater sId
     ]
+
+anyCanUpdateAllEntities :: MonadState Shared m => NonEmpty ActorId -> SpaceId -> m Bool
+anyCanUpdateAllEntities updaters sId =
+  anyM (`canUpdateAllEntities` sId) (NE.toList updaters)
 
 canUpdateEntity :: (MonadState Shared m) => ActorId -> EntityId -> m Bool
 canUpdateEntity reader eId = do
@@ -148,9 +185,13 @@ canUpdateEntity reader eId = do
     Nothing -> pure False
     Just e -> canUpdateAllEntities reader (e ^. space)
 
+anyCanUpdateEntity :: MonadState Shared m => NonEmpty ActorId -> EntityId -> m Bool
+anyCanUpdateEntity updaters eId =
+  anyM (`canUpdateEntity` eId) (NE.toList updaters)
+
 canDeleteEntity
-  :: (MonadState Shared m) => ActorId -> SpaceId -> EntityId -> m Bool
-canDeleteEntity deleter sId eId = do
+  :: (MonadState Shared m) => ActorId -> EntityId -> m Bool
+canDeleteEntity deleter eId = do
   s <- get
   case s ^. store . toEntities . at eId of
     Nothing -> pure False
@@ -161,12 +202,16 @@ canDeleteEntity deleter sId eId = do
           subs = s ^. temp . toSubscriptionsFrom . at eId . non mempty
           forks = HM.filterWithKey (\vId _ -> vId `HS.member` vs) (s ^. temp . toForksFrom)
       andM
-        [ canDo (\t -> t ^. forEntities . at sId . non Blind) deleter Delete
-        , canReadSpace deleter sId
+        [ canDo (\t -> t ^. forEntities . at (e ^. space) . non Blind) deleter Delete
+        , canReadSpace deleter (e ^. space)
         , allM (canUpdateVersion deleter) . HS.toList . HS.unions $ HM.elems refs
         , allM (canUpdateVersion deleter) $ HS.toList subs
         , allM (canUpdateEntity deleter) . HS.toList . HS.unions $ HM.elems forks
         ]
+
+anyCanDeleteEntity :: MonadState Shared m => NonEmpty ActorId -> EntityId -> m Bool
+anyCanDeleteEntity deleters eId =
+  anyM (`canDeleteEntity` eId) (NE.toList deleters)
 
 hasEntityPermission
   :: (MonadState Shared m) => ActorId -> SpaceId -> CollectionPermission -> m Bool
@@ -186,8 +231,16 @@ canReadVersion updater vId = do
     Nothing -> pure False
     Just v -> canReadEntity updater (v ^. entity)
 
+anyCanReadVersion :: MonadState Shared m => NonEmpty ActorId -> VersionId -> m Bool
+anyCanReadVersion readers eId =
+  anyM (`canReadVersion` eId) (NE.toList readers)
+
 canCreateVersion :: (MonadState Shared m) => ActorId -> EntityId -> m Bool
 canCreateVersion = canUpdateEntity
+
+anyCanCreateVersion :: MonadState Shared m => NonEmpty ActorId -> EntityId -> m Bool
+anyCanCreateVersion creaters eId =
+  anyM (`canCreateVersion` eId) (NE.toList creaters)
 
 canUpdateVersion :: (MonadState Shared m) => ActorId -> VersionId -> m Bool
 canUpdateVersion updater vId = do
@@ -195,6 +248,10 @@ canUpdateVersion updater vId = do
   case s ^. store . toVersions . at vId of
     Nothing -> pure False
     Just v -> canUpdateEntity updater (v ^. entity)
+
+anyCanUpdateVersion :: MonadState Shared m => NonEmpty ActorId -> VersionId -> m Bool
+anyCanUpdateVersion updaters eId =
+  anyM (`canUpdateVersion` eId) (NE.toList updaters)
 
 -- | FIXME doesn't check to see if this is the last version in its entity
 canDeleteVersion :: (MonadState Shared m) => ActorId -> VersionId -> m Bool
@@ -204,12 +261,14 @@ canDeleteVersion updater vId = do
     Nothing -> pure False
     Just v -> canUpdateEntity updater (v ^. entity)
 
+anyCanDeleteVersion :: MonadState Shared m => NonEmpty ActorId -> VersionId -> m Bool
+anyCanDeleteVersion deleters eId =
+  anyM (`canDeleteVersion` eId) (NE.toList deleters)
+
 canDeleteVersionAndEntity
   :: (MonadState Shared m) => ActorId -> VersionId -> m Bool
 canDeleteVersionAndEntity updater vId = do
   s <- get
   case s ^. store . toVersions . at vId of
     Nothing -> pure False
-    Just v -> case s ^. store . toEntities . at (v ^. entity) of
-      Nothing -> pure False
-      Just e -> canDeleteEntity updater (e ^. space) (v ^. entity)
+    Just v -> canDeleteEntity updater (v ^. entity)

@@ -9,9 +9,9 @@ import Lib.Actions.Safe.Store (
  )
 import Lib.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
 import Lib.Types.Monad (SheepdogM)
-
 import Control.Monad.IO.Class (MonadIO)
 import Data.Maybe.HT (toMaybe)
+import Data.List.NonEmpty (NonEmpty)
 import System.Random.Stateful (Uniform (uniformM), globalStdGen)
 
 generateWithAuthority
@@ -25,17 +25,17 @@ generateWithAuthority perform = do
   worked <- perform ident
   pure (toMaybe worked ident)
 
-newGroup :: ActorId -> SheepdogM (Maybe GroupId)
+newGroup :: NonEmpty ActorId -> SheepdogM (Maybe GroupId)
 newGroup = generateWithAuthority . storeGroup
 
-newActor :: ActorId -> SheepdogM (Maybe ActorId)
+newActor :: NonEmpty ActorId -> SheepdogM (Maybe ActorId)
 newActor = generateWithAuthority . storeActor
 
-newSpace :: ActorId -> SheepdogM (Maybe SpaceId)
+newSpace :: NonEmpty ActorId -> SheepdogM (Maybe SpaceId)
 newSpace = generateWithAuthority . storeSpace
 
 newEntity
-  :: ActorId
+  :: NonEmpty ActorId
   -> SpaceId
   -> Maybe VersionId
   -> SheepdogM (Maybe (Either VersionId (EntityId, VersionId)))
@@ -46,7 +46,7 @@ newEntity creator sId mFork = do
 
 -- Adds a version to an existing entity
 newVersion
-  :: ActorId
+  :: NonEmpty ActorId
   -> EntityId
   -> SheepdogM (Maybe (Either VersionId VersionId))
 newVersion creator eId = do

@@ -1,18 +1,18 @@
 module Lib.Actions.Safe.Update where
 
-import Control.Lens (at, ix, (.~), (^.), (^?))
+import Control.Lens (at, ix, (.~), (^.), (?~))
 import Control.Monad.Extra (allM, andM)
 import Control.Monad.State (MonadState (get), modify)
+import Data.List.NonEmpty (NonEmpty)
 import Data.HashSet (HashSet)
 import qualified Data.HashSet as HS
 import Lib.Actions.Safe.Verify (
-  canCreateEntity,
-  canDeleteEntity,
-  canDeleteVersion,
-  canReadEntity,
-  canReadVersion,
-  canUpdateEntity,
-  canUpdateVersion,
+  anyCanCreateEntity,
+  anyCanDeleteEntity,
+  anyCanReadEntity,
+  anyCanReadVersion,
+  anyCanUpdateEntity,
+  anyCanUpdateVersion,
   conditionally,
  )
 import Lib.Actions.Unsafe.Update (
@@ -31,19 +31,17 @@ import Lib.Types.Id (ActorId, EntityId, SpaceId, VersionId)
 import Lib.Types.Store (
   Shared,
   store,
-  temp,
   toEntities,
-  toReferencesFrom,
   toSpaces,
   toVersions,
  )
 import Lib.Types.Store.Entity (space)
 import Lib.Types.Store.Space (entities)
-import Lib.Types.Store.Version (entity, references, subscriptions)
+import Lib.Types.Store.Version (entity)
 
 -- | Moving an entity between spaces requires delete authority on the current space, and create authority on the destination space
 updateEntitySpace
-  :: (MonadState Shared m) => ActorId -> EntityId -> SpaceId -> m Bool
+  :: (MonadState Shared m) => NonEmpty ActorId -> EntityId -> SpaceId -> m Bool
 updateEntitySpace updater eId newSId = do
   s <- get
   case s ^. store . toEntities . at eId of
@@ -51,25 +49,25 @@ updateEntitySpace updater eId newSId = do
     Just e -> do
       canAdjust <-
         andM
-          [ canDeleteEntity updater (e ^. space) eId
-          , canCreateEntity updater newSId
+          [ anyCanDeleteEntity updater eId
+          , anyCanCreateEntity updater newSId
           ]
       flip conditionally canAdjust $ do
         modify $ store . toEntities . ix eId . space .~ newSId
         modify $ store . toSpaces . ix (e ^. space) . entities . at eId .~ Nothing
-        modify $ store . toSpaces . ix newSId . entities . at eId .~ Just ()
+        modify $ store . toSpaces . ix newSId . entities . at eId ?~ ()
 
 updateVersionReferences
   :: (MonadState Shared m)
-  => ActorId
+  => NonEmpty ActorId
   -> VersionId
   -> HashSet VersionId
   -> m (Maybe (Either VersionId ()))
 updateVersionReferences updater vId refIds = do
   canAdjust <-
     andM
-      [ allM (canReadVersion updater) (HS.toList refIds)
-      , canUpdateVersion updater vId
+      [ allM (anyCanReadVersion updater) (HS.toList refIds)
+      , anyCanUpdateVersion updater vId
       ]
   if not canAdjust
     then pure Nothing
@@ -77,15 +75,15 @@ updateVersionReferences updater vId refIds = do
 
 addReference
   :: (MonadState Shared m)
-  => ActorId
+  => NonEmpty ActorId
   -> VersionId
   -> VersionId
   -> m (Maybe (Either VersionId ()))
 addReference updater vId refId = do
   canAdjust <-
     andM
-      [ canReadVersion updater refId
-      , canUpdateVersion updater vId
+      [ anyCanReadVersion updater refId
+      , anyCanUpdateVersion updater vId
       ]
   if not canAdjust
     then pure Nothing
@@ -93,15 +91,15 @@ addReference updater vId refId = do
 
 removeReference
   :: (MonadState Shared m)
-  => ActorId
+  => NonEmpty ActorId
   -> VersionId
   -> VersionId
   -> m (Maybe (Either VersionId ()))
 removeReference updater vId refId = do
   canAdjust <-
     andM
-      [ canReadVersion updater refId
-      , canUpdateVersion updater vId
+      [ anyCanReadVersion updater refId
+      , anyCanUpdateVersion updater vId
       ]
   if not canAdjust
     then pure Nothing
@@ -109,15 +107,15 @@ removeReference updater vId refId = do
 
 updateVersionSubscriptions
   :: (MonadState Shared m)
-  => ActorId
+  => NonEmpty ActorId
   -> VersionId
   -> HashSet EntityId
   -> m (Maybe (Either VersionId ()))
 updateVersionSubscriptions updater vId subIds = do
   canAdjust <-
     andM
-      [ allM (canReadEntity updater) (HS.toList subIds)
-      , canUpdateVersion updater vId
+      [ allM (anyCanReadEntity updater) (HS.toList subIds)
+      , anyCanUpdateVersion updater vId
       ]
   if not canAdjust
     then pure Nothing
@@ -125,15 +123,15 @@ updateVersionSubscriptions updater vId subIds = do
 
 addSubscription
   :: (MonadState Shared m)
-  => ActorId
+  => NonEmpty ActorId
   -> VersionId
   -> EntityId
   -> m (Maybe (Either VersionId ()))
 addSubscription updater vId subId = do
   canAdjust <-
     andM
-      [ canReadEntity updater subId
-      , canUpdateVersion updater vId
+      [ anyCanReadEntity updater subId
+      , anyCanUpdateVersion updater vId
       ]
   if not canAdjust
     then pure Nothing
@@ -141,53 +139,31 @@ addSubscription updater vId subId = do
 
 removeSubscription
   :: (MonadState Shared m)
-  => ActorId
+  => NonEmpty ActorId
   -> VersionId
   -> EntityId
   -> m (Maybe (Either VersionId ()))
 removeSubscription updater vId subId = do
   canAdjust <-
     andM
-      [ canReadEntity updater subId
-      , canUpdateVersion updater vId
+      [ anyCanReadEntity updater subId
+      , anyCanUpdateVersion updater vId
       ]
   if not canAdjust
     then pure Nothing
     else Just <$> unsafeRemoveSubscription vId subId
 
--- removeVersion
---   :: MonadState Shared m
---   => ActorId
---   -> VersionId
---   -> m (Maybe (Either VersionId ()))
--- removeVersion remover vId = do
---   s <- get
---   canAdjust <- andM
---     [ canDeleteVersion remover vId
---     , case s ^? temp . toReferencesFrom . ix vId of
---         Nothing -> pure True
---         Just refs -> andM
---           [ allM (canUpdateVersion remover) . HS.toList $ refs
---           -- NOTE we don't need to check for `canReadVersion` or `canReadEntity` for
---           -- this version's references and subscriptions, because we're essentially
---           -- making this version blind to them by deleting it
---           ]
---     ]
---   if not canAdjust then pure Nothing else
---     Just <$> unsafeRemoveVersion vId
-
 updateFork
   :: (MonadState Shared m)
-  => ActorId
+  => NonEmpty ActorId
   -> EntityId
   -> Maybe VersionId
   -> m (Maybe (Either EntityId ()))
 updateFork updater eId mFork = do
-  s <- get
   canAdjust <-
     andM
-      [ canUpdateEntity updater eId
-      , maybe (pure True) (canReadVersion updater) mFork
+      [ anyCanUpdateEntity updater eId
+      , maybe (pure True) (anyCanReadVersion updater) mFork
       ]
   if not canAdjust
     then pure Nothing
@@ -195,16 +171,15 @@ updateFork updater eId mFork = do
 
 moveEntity
   :: (MonadState Shared m)
-  => ActorId
+  => NonEmpty ActorId
   -> EntityId
   -> SpaceId
   -> m (Maybe (Either EntityId ()))
 moveEntity updater eId newSId = do
-  s <- get
   canAdjust <-
     andM
-      [ canUpdateEntity updater eId
-      , canCreateEntity updater newSId
+      [ anyCanUpdateEntity updater eId
+      , anyCanCreateEntity updater newSId
       ]
   if not canAdjust
     then pure Nothing
@@ -212,7 +187,7 @@ moveEntity updater eId newSId = do
 
 offsetVersionIndex
   :: (MonadState Shared m)
-  => ActorId
+  => NonEmpty ActorId
   -> VersionId
   -> Int
   -> m (Maybe (Either VersionId ()))
@@ -221,14 +196,14 @@ offsetVersionIndex updater vId offset = do
   case s ^. store . toVersions . at vId of
     Nothing -> pure . Just $ Left vId
     Just v -> do
-      canAdjust <- canUpdateEntity updater (v ^. entity)
+      canAdjust <- anyCanUpdateEntity updater (v ^. entity)
       if not canAdjust
         then pure Nothing
         else Just <$> unsafeOffsetVersionIndex vId offset
 
 setVersionIndex
   :: (MonadState Shared m)
-  => ActorId
+  => NonEmpty ActorId
   -> VersionId
   -> Int
   -> m (Maybe (Either VersionId ()))
@@ -237,7 +212,7 @@ setVersionIndex updater vId idx = do
   case s ^. store . toVersions . at vId of
     Nothing -> pure . Just $ Left vId
     Just v -> do
-      canAdjust <- canUpdateEntity updater (v ^. entity)
+      canAdjust <- anyCanUpdateEntity updater (v ^. entity)
       if not canAdjust
         then pure Nothing
         else Just <$> unsafeSetVersionIndex vId idx
