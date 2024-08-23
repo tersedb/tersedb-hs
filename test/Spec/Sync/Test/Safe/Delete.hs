@@ -60,7 +60,6 @@ import Lib.Sync.Types.Store (
  )
 import Lib.Sync.Types.Store.Entity (fork, versions)
 import Lib.Sync.Types.Store.Groups (edges, members, nodes)
-import Lib.Sync.Types.Store.Space (entities)
 import Lib.Sync.Types.Store.Tabulation.Group (hasLessOrEqualPermissionsTo)
 import Lib.Sync.Types.Store.Version (entity, references, subscriptions)
 import Spec.Sync.Sample.Store (
@@ -134,7 +133,7 @@ removeTests = describe "Remove" $ do
             not . null $ s ^. store . toSpaces
        in forAll gen $ \(s, adminActor, adminGroup) ->
             let genS = elements . HM.toList $ s ^. store . toSpaces
-             in forAll genS $ \(sId, sp) -> do
+             in forAll genS $ \(sId, es) -> do
                   let s' = flip execState s $ do
                         worked <- setEntityPermission (NE.singleton adminActor) Delete adminGroup sId
                         unless worked $
@@ -145,7 +144,7 @@ removeTests = describe "Remove" $ do
                           Just (Right ()) -> pure ()
                           _ -> error $ "Couldn't remove space " <> show (sId, eWorked)
                   (s' ^. store . toSpaces . at sId) `shouldBe` Nothing
-                  for_ (sp ^. entities) $ \eId -> do
+                  for_ es $ \eId -> do
                     (s' ^. store . toEntities . at eId) `shouldBe` Nothing
                     (s' ^? temp . toSubscriptionsFrom . ix eId) `shouldBe` Nothing
                     for_ (s ^?! store . toEntities . ix eId . versions) $ \vId ->

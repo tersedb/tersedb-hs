@@ -50,7 +50,6 @@ library
       Lib.Sync.Types.Store
       Lib.Sync.Types.Store.Entity
       Lib.Sync.Types.Store.Groups
-      Lib.Sync.Types.Store.Space
       Lib.Sync.Types.Store.Tabulation.Group
       Lib.Sync.Types.Store.Version
       Lib.Types.Id

@@ -56,7 +56,6 @@ import Lib.Sync.Types.Store (
   toVersions,
   toSpaceOf,
  )
-import Lib.Sync.Types.Store.Space (entities)
 import Lib.Sync.Types.Store.Version (entity)
 
 -- | Moving an entity between spaces requires delete authority on the current space, and create authority on the destination space
@@ -74,8 +73,8 @@ updateEntitySpace updater eId newSId = do
           ]
       flip conditionally canAdjust $ do
         modify $ temp . toSpaceOf . ix eId .~ newSId
-        modify $ store . toSpaces . ix oldSId . entities . at eId .~ Nothing
-        modify $ store . toSpaces . ix newSId . entities . at eId ?~ ()
+        modify $ store . toSpaces . ix oldSId . at eId .~ Nothing
+        modify $ store . toSpaces . ix newSId . at eId ?~ ()
 
 updateVersionReferences
   :: (MonadState Shared m)

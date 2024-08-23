@@ -55,7 +55,6 @@ import Lib.Sync.Types.Store.Groups (
   prev,
   roots,
  )
-import Lib.Sync.Types.Store.Space (entities)
 import Lib.Sync.Types.Store.Version (entity, references, subscriptions)
 
 -- | Deletes a version from an entity iff. there's another replacement version in it
@@ -148,7 +147,7 @@ unsafeRemoveSpace sId = do
   s <- get
   case s ^. store . toSpaces . at sId of
     Nothing -> pure . Left $ Right sId
-    Just sp -> case foldlM rmEntity s (sp ^. entities) of
+    Just es -> case foldlM rmEntity s es of
       Left e -> pure $ Left e
       Right s' -> do
         put s'

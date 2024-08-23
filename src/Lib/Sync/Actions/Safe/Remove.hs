@@ -52,7 +52,6 @@ import Lib.Sync.Types.Store (
   toSpaces,
   toSubscriptionsFrom,
  )
-import Lib.Sync.Types.Store.Space (entities)
 
 removeVersion
   :: (MonadState Shared m)
@@ -102,10 +101,10 @@ removeSpace remover sId = do
   s <- get
   canAdjust <- case s ^? store . toSpaces . ix sId of
     Nothing -> pure False
-    Just s ->
+    Just es ->
       andM
         [ anyCanDeleteSpace remover sId
-        , allM (anyCanDeleteEntity remover) (HS.toList (s ^. entities))
+        , allM (anyCanDeleteEntity remover) (HS.toList es)
         ]
   if not canAdjust
     then pure Nothing

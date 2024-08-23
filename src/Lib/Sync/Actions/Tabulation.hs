@@ -61,7 +61,6 @@ import Lib.Sync.Types.Store.Groups (
   universePermission,
   members,
  )
-import Lib.Sync.Types.Store.Space (entities)
 import Lib.Sync.Types.Store.Tabulation.Group (
   TabulatedPermissionsForGroup (..),
   forSpaces,
@@ -222,6 +221,6 @@ tempFromStore s = execState go emptyTemp
 
   loadSpaceOf :: State Temp ()
   loadSpaceOf =
-    for_ (HM.toList $ s ^. toSpaces) $ \(sId, s) ->
-      for_ (s ^. entities) $ \eId ->
+    for_ (HM.toList $ s ^. toSpaces) $ \(sId, es) ->
+      for_ es $ \eId ->
         modify $ toSpaceOf . at eId ?~ sId

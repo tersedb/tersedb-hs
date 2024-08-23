@@ -48,7 +48,6 @@ import Lib.Sync.Types.Store (
   store,
   toSpaces,
  )
-import Lib.Sync.Types.Store.Space (entities)
 import Spec.Sync.Sample.Store (
   arbitraryEmptyShared,
  )
@@ -152,9 +151,9 @@ jointTests = describe "Joint" $ do
                 error $
                   "Couldn't move entity " <> show eId
         context "Entity is in Space B" $
-          (s' ^? store . toSpaces . ix spaceB . entities . ix eId) `shouldBe` Just ()
+          (s' ^? store . toSpaces . ix spaceB . ix eId) `shouldBe` Just ()
         context "Entity is not in Space A" $
-          (s' ^? store . toSpaces . ix spaceA . entities . ix eId) `shouldBe` Nothing
+          (s' ^? store . toSpaces . ix spaceA . ix eId) `shouldBe` Nothing
   it "Move Request From Private Space To Public Spaces" $
     forAll arbitraryEmptyShared $
       \(s, adminActor, adminGroup) ->
@@ -254,6 +253,6 @@ jointTests = describe "Joint" $ do
                       error $
                         "Couldn't move entity " <> show eId
               context "Entity is in Space B" $
-                (s' ^? store . toSpaces . ix spaceB . entities . ix eId) `shouldBe` Just ()
+                (s' ^? store . toSpaces . ix spaceB . ix eId) `shouldBe` Just ()
               context "Entity is not in Space A" $
-                (s' ^? store . toSpaces . ix spaceA . entities . ix eId) `shouldBe` Nothing
+                (s' ^? store . toSpaces . ix spaceA . ix eId) `shouldBe` Nothing

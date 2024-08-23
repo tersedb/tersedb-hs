@@ -30,7 +30,6 @@ import Lib.Types.Permission (
  )
 import Lib.Sync.Types.Store.Entity (Entity)
 import Lib.Sync.Types.Store.Groups (Groups)
-import Lib.Sync.Types.Store.Space (Space)
 import Lib.Sync.Types.Store.Tabulation.Group (TabulatedPermissionsForGroup)
 import Lib.Sync.Types.Store.Version (Version)
 
@@ -81,7 +80,7 @@ emptyTemp =
 data Store = Store
   { storeGroups :: Groups
   , storeActors :: HashSet ActorId
-  , storeSpaces :: HashMap SpaceId Space
+  , storeSpaces :: HashMap SpaceId (HashSet EntityId)
   , storeEntities :: HashMap EntityId Entity
   , storeVersions :: HashMap VersionId Version
   , storeSpacePermissions :: HashMap GroupId (HashMap SpaceId SinglePermission)

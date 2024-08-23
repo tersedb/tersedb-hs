@@ -42,7 +42,6 @@ import Lib.Sync.Types.Store (
   toSpaceOf,
  )
 import Lib.Sync.Types.Store.Entity (fork, versions)
-import Lib.Sync.Types.Store.Space (entities)
 import Lib.Sync.Types.Store.Version (entity, references, subscriptions)
 
 unsafeUpdateVersionReferences
@@ -202,8 +201,8 @@ unsafeMoveEntity eId newSId = do
     Just oldSId
       | oldSId == newSId -> pure (Right ())
       | otherwise -> do
-          modify $ store . toSpaces . ix oldSId . entities . at eId .~ Nothing
-          modify $ store . toSpaces . ix newSId . entities . at eId ?~ ()
+          modify $ store . toSpaces . ix oldSId . at eId .~ Nothing
+          modify $ store . toSpaces . ix newSId . at eId ?~ ()
           modify $ temp . toSpaceOf . ix eId .~ newSId
           pure (Right ())
 

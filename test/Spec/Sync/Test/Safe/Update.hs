@@ -75,7 +75,6 @@ import Lib.Sync.Types.Store (
  )
 import Lib.Sync.Types.Store.Entity (fork, versions)
 import Lib.Sync.Types.Store.Groups (next, nodes, prev)
-import Lib.Sync.Types.Store.Space (entities)
 import Lib.Sync.Types.Store.Tabulation.Group (hasLessOrEqualPermissionsTo)
 import Lib.Sync.Types.Store.Version (references, subscriptions)
 import Spec.Sync.Sample.Store (
@@ -134,9 +133,9 @@ updateTests = describe "Update" $ do
                       unless worked $ error $ "Couldn't set entity permission " <> show sId
                       worked <- updateEntitySpace (NE.singleton aId) eId sId'
                       unless worked $ error $ "Couldn't move entity " <> show eId
-                (s' ^. store . toSpaces . at sId . non mempty . entities . at eId)
+                (s' ^? store . toSpaces . ix sId . ix eId)
                   `shouldBe` Nothing
-                (s' ^. store . toSpaces . at sId' . non mempty . entities . at eId)
+                (s' ^? store . toSpaces . ix sId' . ix eId)
                   `shouldBe` Just ()
                 (s' ^? temp . toSpaceOf . ix eId) `shouldBe` Just sId'
     describe "Should Fail" $ do
@@ -173,9 +172,9 @@ updateTests = describe "Update" $ do
                       updateEntitySpace (NE.singleton aId) eId sId'
                     s' = execState go s
                 evalState go s `shouldBe` False
-                (s' ^. store . toSpaces . at sId . non mempty . entities . at eId)
+                (s' ^? store . toSpaces . ix sId . ix eId)
                   `shouldBe` Just ()
-                (s' ^. store . toSpaces . at sId' . non mempty . entities . at eId)
+                (s' ^? store . toSpaces . ix sId' . ix eId)
                   `shouldBe` Nothing
                 (s' ^? temp . toSpaceOf . ix eId) `shouldBe` Just sId
       it "Move An Entity to different Space without create access" $
@@ -211,9 +210,9 @@ updateTests = describe "Update" $ do
                       updateEntitySpace (NE.singleton aId) eId sId'
                     s' = execState go s
                 evalState go s `shouldBe` False
-                (s' ^. store . toSpaces . at sId . non mempty . entities . at eId)
+                (s' ^. store . toSpaces . at sId . non mempty . at eId)
                   `shouldBe` Just ()
-                (s' ^. store . toSpaces . at sId' . non mempty . entities . at eId)
+                (s' ^. store . toSpaces . at sId' . non mempty . at eId)
                   `shouldBe` Nothing
                 (s' ^? temp . toSpaceOf . ix eId) `shouldBe` Just sId
   -- updating an entity occurs when you store a version or modify the set of an entity's versions
@@ -316,7 +315,7 @@ updateTests = describe "Update" $ do
                   ( elements
                       . HM.keys
                       . HM.filter
-                        (\s -> not $ eId `HS.member` (s ^. entities))
+                        (\es -> not $ eId `HS.member` es)
                       $ s ^. store . toSpaces
                   )
                   $ \newSId -> do
@@ -326,8 +325,8 @@ updateTests = describe "Update" $ do
                             Just (Right ()) -> pure ()
                             _ -> error $ "Couldn't move entity " <> show (eId, newSId, mE)
                     (s' ^? temp . toSpaceOf . ix eId) `shouldBe` Just newSId
-                    (s' ^? store . toSpaces . ix newSId . entities . ix eId) `shouldBe` Just ()
-                    (s' ^? store . toSpaces . ix (s ^?! temp . toSpaceOf . ix eId) . entities . ix eId)
+                    (s' ^? store . toSpaces . ix newSId . ix eId) `shouldBe` Just ()
+                    (s' ^? store . toSpaces . ix (s ^?! temp . toSpaceOf . ix eId) . ix eId)
                       `shouldBe` Nothing
       it "Offset a Version" $
         let gen = suchThat arbitraryShared $ \(s, _, _) ->

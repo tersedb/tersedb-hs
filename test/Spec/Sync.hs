@@ -35,7 +35,6 @@ import Lib.Sync.Types.Store (
   toSpaceOf,
  )
 import Lib.Sync.Types.Store.Groups (nodes)
-import Lib.Sync.Types.Store.Space (entities)
 import Spec.Sync.Sample.Store (
   SampleStore (..),
   loadSample,
@@ -74,7 +73,7 @@ syncTests = do
     it "all spaces are disjoint" $
       property $ \(xs :: SampleStore) ->
         let s = loadSample xs
-         in foldr (HS.intersection . (^. entities)) mempty (s ^. store . toSpaces)
+         in foldr HS.intersection mempty (s ^. store . toSpaces)
               `shouldBe` mempty
     it "all elements exist in their space" $
       property $ \(xs :: SampleStore) ->
@@ -84,7 +83,7 @@ syncTests = do
               else forAll (elements . HM.toList $ s ^. store . toEntities) $ \(eId, e) ->
                 (s, eId, HM.lookup (s ^?! temp . toSpaceOf . ix eId) (s ^. store . toSpaces))
                   `shouldSatisfy` ( \(_, _, mSpace) ->
-                                      maybe False (\space -> HS.member eId (space ^. entities)) mSpace
+                                      maybe False (eId `HS.member`) mSpace
                                   )
     describe "Safe" $ do
       it "should be identical to unsafe" $

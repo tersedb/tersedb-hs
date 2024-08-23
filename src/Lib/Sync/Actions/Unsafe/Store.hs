@@ -49,10 +49,8 @@ import Lib.Sync.Types.Store.Groups (
   prev,
   roots,
  )
-import Lib.Sync.Types.Store.Space (entities)
 import Lib.Sync.Types.Store.Tabulation.Group (forUniverse)
 import Lib.Sync.Types.Store.Version (initVersion)
-
 import Control.Lens (at, ix, non, (%~), (&), (.~), (^.), (?~))
 import Control.Monad.Extra (when)
 import Control.Monad.State (MonadState (get, put), modify)
@@ -108,7 +106,7 @@ unsafeStoreEntity eId sId vId mForkId = do
   let s' =
         s
           & store . toEntities . at eId ?~ (initEntity vId mForkId)
-          & store . toSpaces . ix sId . entities . at eId ?~ ()
+          & store . toSpaces . ix sId . at eId ?~ ()
           & store . toVersions . at vId ?~ (initVersion eId)
           & temp . toSpaceOf . at eId ?~ sId
   case do

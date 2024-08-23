@@ -75,7 +75,6 @@ import Lib.Sync.Types.Store (
   toSpaceOf,
  )
 import Lib.Sync.Types.Store.Entity (versions)
-import Lib.Sync.Types.Store.Space (entities)
 import Lib.Sync.Types.Store.Tabulation.Group (
   forEntities,
   forSpaces,
@@ -135,9 +134,8 @@ canDeleteSpace deleter sId = do
   s <- get
   case s ^. store . toSpaces . at sId of
     Nothing -> pure False
-    Just sp -> do
-      let es = sp ^. entities
-          vs :: HashSet VersionId =
+    Just es -> do
+      let vs :: HashSet VersionId =
             foldMap
               ( \eId ->
                   maybe mempty (HS.fromList . NE.toList) $
