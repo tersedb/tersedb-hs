@@ -20,7 +20,7 @@ You can reach me at athan.clark@gmail.com.
 
 module Lib.Sync.Actions.Unsafe.Remove where
 
-import Control.Lens (at, ix, non, (%~), (.~), (^.), _Left)
+import Control.Lens (at, ix, non, (%~), (.~), (^.), _Left, (^?!))
 import Control.Monad.State (MonadState (get, put), modify, runState)
 import Data.Foldable (foldlM, for_)
 import qualified Data.List.NonEmpty as NE
@@ -44,6 +44,7 @@ import Lib.Sync.Types.Store (
   toSpaces,
   toSubscriptionsFrom,
   toVersions,
+  toEntityOf,
  )
 import Lib.Sync.Types.Store.Entity (versions)
 import Lib.Sync.Types.Store.Groups (
@@ -55,7 +56,7 @@ import Lib.Sync.Types.Store.Groups (
   prev,
   roots,
  )
-import Lib.Sync.Types.Store.Version (entity, references, subscriptions)
+import Lib.Sync.Types.Store.Version (references, subscriptions)
 
 -- | Deletes a version from an entity iff. there's another replacement version in it
 unsafeRemoveVersion
@@ -67,7 +68,7 @@ unsafeRemoveVersion vId = do
   case s ^. store . toVersions . at vId of
     Nothing -> pure . Left $ Left vId
     Just v ->
-      let eId :: EntityId = v ^. entity
+      let eId :: EntityId = s ^?! temp . toEntityOf . ix vId
        in case foldlM removeRef s (v ^. references)
             >>= flip
               (foldlM removeReferred)

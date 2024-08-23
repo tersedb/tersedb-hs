@@ -55,8 +55,8 @@ import Lib.Sync.Types.Store (
   toSpaces,
   toVersions,
   toSpaceOf,
+  toEntityOf,
  )
-import Lib.Sync.Types.Store.Version (entity)
 
 -- | Moving an entity between spaces requires delete authority on the current space, and create authority on the destination space
 updateEntitySpace
@@ -212,10 +212,10 @@ offsetVersionIndex
   -> m (Maybe (Either VersionId ()))
 offsetVersionIndex updater vId offset = do
   s <- get
-  case s ^. store . toVersions . at vId of
+  case s ^. temp . toEntityOf . at vId of
     Nothing -> pure . Just $ Left vId
-    Just v -> do
-      canAdjust <- anyCanUpdateEntity updater (v ^. entity)
+    Just eId -> do
+      canAdjust <- anyCanUpdateEntity updater eId
       if not canAdjust
         then pure Nothing
         else Just <$> unsafeOffsetVersionIndex vId offset
@@ -228,10 +228,10 @@ setVersionIndex
   -> m (Maybe (Either VersionId ()))
 setVersionIndex updater vId idx = do
   s <- get
-  case s ^. store . toVersions . at vId of
+  case s ^. temp . toEntityOf . at vId of
     Nothing -> pure . Just $ Left vId
-    Just v -> do
-      canAdjust <- anyCanUpdateEntity updater (v ^. entity)
+    Just eId -> do
+      canAdjust <- anyCanUpdateEntity updater eId
       if not canAdjust
         then pure Nothing
         else Just <$> unsafeSetVersionIndex vId idx

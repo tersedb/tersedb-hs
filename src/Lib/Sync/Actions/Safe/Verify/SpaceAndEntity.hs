@@ -73,6 +73,7 @@ import Lib.Sync.Types.Store (
   toSubscriptionsFrom,
   toVersions,
   toSpaceOf,
+  toEntityOf,
  )
 import Lib.Sync.Types.Store.Entity (versions)
 import Lib.Sync.Types.Store.Tabulation.Group (
@@ -80,7 +81,6 @@ import Lib.Sync.Types.Store.Tabulation.Group (
   forSpaces,
   forUniverse,
  )
-import Lib.Sync.Types.Store.Version (entity)
 
 -- * Spaces
 
@@ -274,9 +274,9 @@ hasEntityPermission aId sId p =
 canReadVersion :: (MonadState Shared m) => ActorId -> VersionId -> m Bool
 canReadVersion updater vId = do
   s <- get
-  case s ^. store . toVersions . at vId of
+  case s ^. temp . toEntityOf . at vId of
     Nothing -> pure False
-    Just v -> canReadEntity updater (v ^. entity)
+    Just eId -> canReadEntity updater eId
 
 anyCanReadVersion
   :: (MonadState Shared m) => NonEmpty ActorId -> VersionId -> m Bool
@@ -294,9 +294,9 @@ anyCanCreateVersion creaters eId =
 canUpdateVersion :: (MonadState Shared m) => ActorId -> VersionId -> m Bool
 canUpdateVersion updater vId = do
   s <- get
-  case s ^. store . toVersions . at vId of
+  case s ^. temp . toEntityOf . at vId of
     Nothing -> pure False
-    Just v -> canUpdateEntity updater (v ^. entity)
+    Just eId -> canUpdateEntity updater eId
 
 anyCanUpdateVersion
   :: (MonadState Shared m) => NonEmpty ActorId -> VersionId -> m Bool
@@ -307,9 +307,9 @@ anyCanUpdateVersion updaters eId =
 canDeleteVersion :: (MonadState Shared m) => ActorId -> VersionId -> m Bool
 canDeleteVersion updater vId = do
   s <- get
-  case s ^. store . toVersions . at vId of
+  case s ^. temp . toEntityOf . at vId of
     Nothing -> pure False
-    Just v -> canUpdateEntity updater (v ^. entity)
+    Just eId -> canUpdateEntity updater eId
 
 anyCanDeleteVersion
   :: (MonadState Shared m) => NonEmpty ActorId -> VersionId -> m Bool
@@ -320,6 +320,6 @@ canDeleteVersionAndEntity
   :: (MonadState Shared m) => ActorId -> VersionId -> m Bool
 canDeleteVersionAndEntity updater vId = do
   s <- get
-  case s ^. store . toVersions . at vId of
+  case s ^. temp . toEntityOf . at vId of
     Nothing -> pure False
-    Just v -> canDeleteEntity updater (v ^. entity)
+    Just eId -> canDeleteEntity updater eId

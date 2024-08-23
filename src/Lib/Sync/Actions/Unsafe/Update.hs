@@ -40,9 +40,10 @@ import Lib.Sync.Types.Store (
   toSubscriptionsFrom,
   toVersions,
   toSpaceOf,
+  toEntityOf,
  )
 import Lib.Sync.Types.Store.Entity (fork, versions)
-import Lib.Sync.Types.Store.Version (entity, references, subscriptions)
+import Lib.Sync.Types.Store.Version (references, subscriptions)
 
 unsafeUpdateVersionReferences
   :: (MonadState Shared m)
@@ -215,10 +216,10 @@ unsafeOffsetVersionIndex
 unsafeOffsetVersionIndex _ 0 = pure (Right ())
 unsafeOffsetVersionIndex vId offset = do
   s <- get
-  case s ^. store . toVersions . at vId of
+  case s ^. temp . toEntityOf . at vId of
     Nothing -> pure $ Left vId
-    Just v -> do
-      modify $ store . toEntities . ix (v ^. entity) . versions %~ go
+    Just eId -> do
+      modify $ store . toEntities . ix eId . versions %~ go
       pure $ Right ()
  where
   go vs =
@@ -237,10 +238,10 @@ unsafeSetVersionIndex
   -> m (Either VersionId ())
 unsafeSetVersionIndex vId newIdx = do
   s <- get
-  case s ^. store . toVersions . at vId of
+  case s ^. temp . toEntityOf . at vId of
     Nothing -> pure $ Left vId
-    Just v -> do
-      modify $ store . toEntities . ix (v ^. entity) . versions %~ go
+    Just eId -> do
+      modify $ store . toEntities . ix eId . versions %~ go
       pure $ Right ()
  where
   go vs =

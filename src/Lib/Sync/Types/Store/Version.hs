@@ -17,19 +17,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 You can reach me at athan.clark@gmail.com.
 -}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE DerivingVia #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE TemplateHaskell #-}
 
 module Lib.Sync.Types.Store.Version (
   Version,
   initVersion,
-  entity,
   references,
   subscriptions,
 ) where
@@ -43,8 +34,7 @@ import qualified Data.HashSet as HS
 import Deriving.Aeson.Stock (CustomJSON (..), Generic, PrefixedSnake)
 
 data Version = Version
-  { versionEntity :: EntityId
-  , versionReferences :: HashSet VersionId
+  { versionReferences :: HashSet VersionId
   , versionSubscriptions :: HashSet EntityId
   }
   deriving (Eq, Generic, Show, Read)
@@ -52,16 +42,14 @@ data Version = Version
     (ToJSON, FromJSON)
     via PrefixedSnake "version" Version
 makeLensesFor
-  [ ("versionEntity", "entity")
-  , ("versionReferences", "references")
+  [ ("versionReferences", "references")
   , ("versionSubscriptions", "subscriptions")
   ]
   ''Version
 
-initVersion :: EntityId -> Version
-initVersion eId =
+initVersion :: Version
+initVersion =
   Version
-    { versionEntity = eId
-    , versionReferences = mempty
+    { versionReferences = mempty
     , versionSubscriptions = mempty
     }

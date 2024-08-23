@@ -61,7 +61,7 @@ import Lib.Sync.Types.Store (
 import Lib.Sync.Types.Store.Entity (fork, versions)
 import Lib.Sync.Types.Store.Groups (edges, members, nodes)
 import Lib.Sync.Types.Store.Tabulation.Group (hasLessOrEqualPermissionsTo)
-import Lib.Sync.Types.Store.Version (entity, references, subscriptions)
+import Lib.Sync.Types.Store.Version (references, subscriptions)
 import Spec.Sync.Sample.Store (
   arbitraryShared,
  )

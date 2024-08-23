@@ -49,8 +49,9 @@ import Lib.Sync.Types.Store (
   toSubscriptionsFrom,
   toTabulatedGroups,
   toVersions,
+  toEntityOf
  )
-import Lib.Sync.Types.Store.Entity (fork)
+import Lib.Sync.Types.Store.Entity (fork, versions)
 import Lib.Sync.Types.Store.Groups (
   next,
   nodes,
@@ -196,6 +197,7 @@ tempFromStore s = execState go emptyTemp
     loadForks'
     loadMembers
     loadSpaceOf
+    loadEntityOf
     t <- get
     put $ execState resetTabulation (Shared s t) ^. temp
 
@@ -224,3 +226,9 @@ tempFromStore s = execState go emptyTemp
     for_ (HM.toList $ s ^. toSpaces) $ \(sId, es) ->
       for_ es $ \eId ->
         modify $ toSpaceOf . at eId ?~ sId
+
+  loadEntityOf :: State Temp ()
+  loadEntityOf =
+    for_ (HM.toList $ s ^. toEntities) $ \(eId, e) ->
+      for_ (e ^. versions) $ \vId ->
+        modify $ toEntityOf . at vId ?~ eId

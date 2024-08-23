@@ -46,6 +46,7 @@ data Temp = Temp
   , tempSpacesHiddenTo :: HashMap SpaceId (HashSet GroupId)
   , tempMemberOf :: HashMap ActorId (HashSet GroupId)
   , tempSpaceOf :: HashMap EntityId SpaceId
+  , tempEntityOf :: HashMap VersionId EntityId
   -- FIXME track universe blind groups
   }
   deriving (Eq, Show, Read)
@@ -63,12 +64,14 @@ makeLensesFor
   , ("tempSpacesHiddenTo", "toSpacesHiddenTo")
   , ("tempMemberOf", "toMemberOf")
   , ("tempSpaceOf", "toSpaceOf")
+  , ("tempEntityOf", "toEntityOf")
   ]
   ''Temp
 
 emptyTemp :: Temp
 emptyTemp =
   Temp
+    mempty
     mempty
     mempty
     mempty

@@ -40,6 +40,7 @@ import Lib.Sync.Types.Store (
   toTabulatedGroups,
   toVersions,
   toSpaceOf,
+  toEntityOf,
  )
 import Lib.Sync.Types.Store.Entity (initEntity, versions)
 import Lib.Sync.Types.Store.Groups (
@@ -107,8 +108,9 @@ unsafeStoreEntity eId sId vId mForkId = do
         s
           & store . toEntities . at eId ?~ (initEntity vId mForkId)
           & store . toSpaces . ix sId . at eId ?~ ()
-          & store . toVersions . at vId ?~ (initVersion eId)
+          & store . toVersions . at vId ?~ initVersion
           & temp . toSpaceOf . at eId ?~ sId
+          & temp . toEntityOf . at vId ?~ eId
   case do
     t' <- loadRefsAndSubs vId (s' ^. store) (s' ^. temp)
     pure $ loadForks eId (s' ^. store) t' of
@@ -125,7 +127,8 @@ unsafeStoreVersion eId vId = do
   let s' =
         s
           & store . toEntities . ix eId . versions %~ (vId <|)
-          & store . toVersions . at vId ?~ (initVersion eId)
+          & store . toVersions . at vId ?~ initVersion
+          & temp . toEntityOf . at vId ?~ eId
   case loadRefsAndSubs vId (s' ^. store) (s' ^. temp) of -- don't need to check forks
     Left e -> pure (Left e)
     Right t -> Right () <$ put (s' & temp .~ t)
