@@ -18,9 +18,16 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 You can reach me at athan.clark@gmail.com.
 -}
 
-import Spec.Sync (syncTests)
-import Test.Syd (describe, sydTest)
+module Lib.Sync.Actions.Safe.Verify (
+  module Lib.Sync.Actions.Safe.Verify.SpaceAndEntity,
+  module Lib.Sync.Actions.Safe.Verify.Group,
+  module Lib.Sync.Actions.Safe.Verify.Member,
+  module Lib.Sync.Actions.Safe.Verify.Actor,
+  module Lib.Sync.Actions.Safe.Verify.Utils,
+) where
 
-main :: IO ()
-main = sydTest $ do
-  describe "Sync" syncTests
+import Lib.Sync.Actions.Safe.Verify.Actor
+import Lib.Sync.Actions.Safe.Verify.Group
+import Lib.Sync.Actions.Safe.Verify.Member
+import Lib.Sync.Actions.Safe.Verify.SpaceAndEntity
+import Lib.Sync.Actions.Safe.Verify.Utils (conditionally)

@@ -27,33 +27,33 @@ source-repository head
 
 library
   exposed-modules:
-      Lib.Actions.Gen
-      Lib.Actions.Safe
-      Lib.Actions.Safe.Remove
-      Lib.Actions.Safe.Store
-      Lib.Actions.Safe.Update
-      Lib.Actions.Safe.Update.Group
-      Lib.Actions.Safe.Verify
-      Lib.Actions.Safe.Verify.Actor
-      Lib.Actions.Safe.Verify.Group
-      Lib.Actions.Safe.Verify.Member
-      Lib.Actions.Safe.Verify.SpaceAndEntity
-      Lib.Actions.Safe.Verify.Utils
-      Lib.Actions.Tabulation
-      Lib.Actions.Unsafe
-      Lib.Actions.Unsafe.Remove
-      Lib.Actions.Unsafe.Store
-      Lib.Actions.Unsafe.Update
-      Lib.Actions.Unsafe.Update.Group
-      Lib.Types.Id
-      Lib.Types.Monad
-      Lib.Types.Permission
-      Lib.Types.Store
-      Lib.Types.Store.Entity
-      Lib.Types.Store.Groups
-      Lib.Types.Store.Space
-      Lib.Types.Store.Tabulation.Group
-      Lib.Types.Store.Version
+      Lib.Sync.Actions.Gen
+      Lib.Sync.Actions.Safe
+      Lib.Sync.Actions.Safe.Remove
+      Lib.Sync.Actions.Safe.Store
+      Lib.Sync.Actions.Safe.Update
+      Lib.Sync.Actions.Safe.Update.Group
+      Lib.Sync.Actions.Safe.Verify
+      Lib.Sync.Actions.Safe.Verify.Actor
+      Lib.Sync.Actions.Safe.Verify.Group
+      Lib.Sync.Actions.Safe.Verify.Member
+      Lib.Sync.Actions.Safe.Verify.SpaceAndEntity
+      Lib.Sync.Actions.Safe.Verify.Utils
+      Lib.Sync.Actions.Tabulation
+      Lib.Sync.Actions.Unsafe
+      Lib.Sync.Actions.Unsafe.Remove
+      Lib.Sync.Actions.Unsafe.Store
+      Lib.Sync.Actions.Unsafe.Update
+      Lib.Sync.Actions.Unsafe.Update.Group
+      Lib.Sync.Types.Id
+      Lib.Sync.Types.Monad
+      Lib.Sync.Types.Permission
+      Lib.Sync.Types.Store
+      Lib.Sync.Types.Store.Entity
+      Lib.Sync.Types.Store.Groups
+      Lib.Sync.Types.Store.Space
+      Lib.Sync.Types.Store.Tabulation.Group
+      Lib.Sync.Types.Store.Version
   other-modules:
       Paths_tersedb
   autogen-modules:
@@ -145,15 +145,16 @@ test-suite tersedb-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
-      Spec.Sample.Store
-      Spec.Sample.Tree
-      Spec.Test.Groups
-      Spec.Test.Joint
-      Spec.Test.Safe.Create
-      Spec.Test.Safe.Delete
-      Spec.Test.Safe.Read
-      Spec.Test.Safe.Update
-      Spec.Test.Simple
+      Spec.Sync
+      Spec.Sync.Sample.Store
+      Spec.Sync.Sample.Tree
+      Spec.Sync.Test.Groups
+      Spec.Sync.Test.Joint
+      Spec.Sync.Test.Safe.Create
+      Spec.Sync.Test.Safe.Delete
+      Spec.Sync.Test.Safe.Read
+      Spec.Sync.Test.Safe.Update
+      Spec.Sync.Test.Simple
       Paths_tersedb
   autogen-modules:
       Paths_tersedb
