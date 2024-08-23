@@ -20,8 +20,8 @@ You can reach me at athan.clark@gmail.com.
 
 module Lib.Sync.Actions.Tabulation where
 
-import Lib.Sync.Types.Id (EntityId, GroupId, VersionId)
-import Lib.Sync.Types.Permission (
+import Lib.Types.Id (EntityId, GroupId, VersionId)
+import Lib.Types.Permission (
   CollectionPermission (Blind),
   CollectionPermissionWithExemption (..),
   escalate,
@@ -42,6 +42,8 @@ import Lib.Sync.Types.Store (
   toReferencesFrom,
   toSpacePermissions,
   toSpaces,
+  toMemberOf,
+  toActors,
   toSpacesHiddenTo,
   toSubscriptionsFrom,
   toTabulatedGroups,
@@ -56,6 +58,7 @@ import Lib.Sync.Types.Store.Groups (
   recruiterPermission,
   roots,
   universePermission,
+  members,
  )
 import Lib.Sync.Types.Store.Tabulation.Group (
   TabulatedPermissionsForGroup (..),
@@ -68,15 +71,12 @@ import Lib.Sync.Types.Store.Version (
   references,
   subscriptions,
  )
-
-import Control.Lens (at, ix, non, (&), (.~), (^.))
-import Control.Monad (void)
+import Control.Lens (at, ix, non, (&), (.~), (^.), (?~))
 import Control.Monad.State (MonadState (get, put), State, execState, modify)
+import Control.Monad.Extra (when)
 import Data.Foldable (foldlM, for_, traverse_)
 import qualified Data.HashMap.Strict as HM
 import qualified Data.HashSet as HS
-import Data.List.NonEmpty (NonEmpty ((:|)))
-import qualified Data.List.NonEmpty as NE
 import Data.Maybe (fromMaybe)
 
 {- | Gets an initial tabulation for a specific group; assumes the group is a root
@@ -139,14 +139,14 @@ updateTabulationStartingAt gId = do
                 let notVisible = HM.keysSet (HM.filter (== Blind) (newTab ^. forSpaces))
                  in (notVisible, allSpaces `HS.difference` notVisible)
         for_ spacesHidden $ \sId ->
-          modify $ temp . toSpacesHiddenTo . at sId . non mempty . at gId .~ Just ()
+          modify $ temp . toSpacesHiddenTo . at sId . non mempty . at gId ?~ ()
         for_ spacesVisible $ \sId -> do
           s <- get
           if (s ^. temp . toSpacesHiddenTo . at sId) == Just (HS.singleton gId)
             then modify $ temp . toSpacesHiddenTo . at sId .~ Nothing
             else modify $ temp . toSpacesHiddenTo . ix sId . at gId .~ Nothing
 
-      modify $ temp . toTabulatedGroups . at gId .~ Just newTab
+      modify $ temp . toTabulatedGroups . at gId ?~ newTab
       traverse_ updateTabulationStartingAt (group ^. next)
 
 resetTabulation :: (MonadState Shared m) => m ()
@@ -195,6 +195,7 @@ tempFromStore s = execState go emptyTemp
   go = do
     loadVersions
     loadForks'
+    loadMembers
     t <- get
     put $ execState resetTabulation (Shared s t) ^. temp
 
@@ -210,3 +211,10 @@ tempFromStore s = execState go emptyTemp
   loadForks' =
     for_ (HM.keysSet $ s ^. toEntities) $ \eId ->
       modify (loadForks eId s)
+
+  loadMembers :: State Temp ()
+  loadMembers =
+    for_ (s ^. toActors) $ \aId ->
+      for_ (HM.toList $ s ^. toGroups . nodes) $ \(gId, g) ->
+        when (aId `HS.member` (g ^. members)) $
+          modify $ toMemberOf . at aId . non mempty . at gId ?~ ()

@@ -37,8 +37,8 @@ import Lib.Sync.Actions.Safe.Verify.Utils (
   canDoWithTab,
   withCollectionPermission,
  )
-import Lib.Sync.Types.Id (ActorId, GroupId)
-import Lib.Sync.Types.Permission (
+import Lib.Types.Id (ActorId, GroupId)
+import Lib.Types.Permission (
   CollectionPermission (..),
   SinglePermission,
   collectionPermission,

@@ -28,7 +28,7 @@ import Spec.Sync.Sample.Tree (
 
 import Lib.Sync.Actions.Tabulation (resetTabulation)
 import Lib.Sync.Actions.Unsafe.Update.Group (unsafeUnlinkGroups)
-import Lib.Sync.Types.Id (GroupId)
+import Lib.Types.Id (GroupId)
 import Lib.Sync.Types.Store (
   Shared,
   store,

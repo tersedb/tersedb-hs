@@ -40,8 +40,8 @@ import Lib.Sync.Actions.Unsafe.Update.Group (
   unsafeAdjustRecruiterPermission,
   unsafeAdjustUniversePermission,
  )
-import Lib.Sync.Types.Id (ActorId, GroupId)
-import Lib.Sync.Types.Permission (
+import Lib.Types.Id (ActorId, GroupId)
+import Lib.Types.Permission (
   CollectionPermission (..),
   CollectionPermissionWithExemption (..),
  )

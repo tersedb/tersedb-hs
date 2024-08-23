@@ -38,8 +38,8 @@ import Lib.Sync.Actions.Safe.Update.Group (
   setUniversePermission,
   setSpacePermission,
  )
-import Lib.Sync.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
-import Lib.Sync.Types.Permission (
+import Lib.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
+import Lib.Types.Permission (
   CollectionPermission (Create, Delete, Read),
   CollectionPermissionWithExemption (..),
   SinglePermission (NonExistent),

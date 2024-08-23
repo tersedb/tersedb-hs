@@ -20,8 +20,8 @@ You can reach me at athan.clark@gmail.com.
 
 module Lib.Sync.Actions.Safe.Verify.Utils where
 
-import Lib.Sync.Types.Id (ActorId)
-import Lib.Sync.Types.Permission (
+import Lib.Types.Id (ActorId)
+import Lib.Types.Permission (
   CollectionPermission,
   CollectionPermissionWithExemption,
   collectionPermission,
@@ -29,9 +29,8 @@ import Lib.Sync.Types.Permission (
  )
 import Lib.Sync.Types.Store (
   Shared,
-  store,
   temp,
-  toActors,
+  toMemberOf,
   toTabulatedGroups,
  )
 import Lib.Sync.Types.Store.Tabulation.Group (
@@ -42,7 +41,6 @@ import Control.Lens (Lens', at, non, (^.))
 import Control.Monad.Extra (when)
 import Control.Monad.State (MonadState (get))
 import Data.HashMap.Strict (HashMap)
-import qualified Data.HashSet as HS
 import Data.Hashable (Hashable)
 
 {- | Looks first for the groups the user is in, then sees if any of the groups
@@ -61,7 +59,7 @@ canDoWithTab
   -> m Bool
 canDoWithTab proj creator getP = do
   s <- get
-  pure $ case s ^. store . toActors . at creator of
+  pure $ case s ^. temp . toMemberOf . at creator of
     Just groups ->
       let perGroup gId =
             let tab = s ^. temp . toTabulatedGroups . at gId . non mempty

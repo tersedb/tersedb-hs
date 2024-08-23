@@ -34,7 +34,7 @@ module Lib.Sync.Types.Store.Version (
   subscriptions,
 ) where
 
-import Lib.Sync.Types.Id (EntityId, VersionId)
+import Lib.Types.Id (EntityId, VersionId)
 
 import Control.Lens.TH (makeLensesFor)
 import Data.Aeson (FromJSON, ToJSON)

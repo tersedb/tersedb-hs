@@ -47,6 +47,8 @@ dependencies:
   - hashable
   - lens
   - mtl
+  - stm
+  - stm-containers
   - random
   - text
   - QuickCheck

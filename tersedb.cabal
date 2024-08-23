@@ -27,6 +27,7 @@ source-repository head
 
 library
   exposed-modules:
+      Lib.Async.Types.Store
       Lib.Sync.Actions.Gen
       Lib.Sync.Actions.Safe
       Lib.Sync.Actions.Safe.Remove
@@ -45,15 +46,15 @@ library
       Lib.Sync.Actions.Unsafe.Store
       Lib.Sync.Actions.Unsafe.Update
       Lib.Sync.Actions.Unsafe.Update.Group
-      Lib.Sync.Types.Id
       Lib.Sync.Types.Monad
-      Lib.Sync.Types.Permission
       Lib.Sync.Types.Store
       Lib.Sync.Types.Store.Entity
       Lib.Sync.Types.Store.Groups
       Lib.Sync.Types.Store.Space
       Lib.Sync.Types.Store.Tabulation.Group
       Lib.Sync.Types.Store.Version
+      Lib.Types.Id
+      Lib.Types.Permission
   other-modules:
       Paths_tersedb
   autogen-modules:
@@ -91,6 +92,8 @@ library
     , mtl
     , quickcheck-instances
     , random
+    , stm
+    , stm-containers
     , text
     , unordered-containers
     , utility-ht
@@ -135,6 +138,8 @@ executable tersedb-hs
     , mtl
     , quickcheck-instances
     , random
+    , stm
+    , stm-containers
     , tersedb
     , text
     , unordered-containers
@@ -192,6 +197,8 @@ test-suite tersedb-test
     , pretty-simple
     , quickcheck-instances
     , random
+    , stm
+    , stm-containers
     , sydtest
     , tersedb
     , text

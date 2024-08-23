@@ -47,7 +47,7 @@ import Lib.Sync.Actions.Unsafe.Update (
   unsafeUpdateVersionReferences,
   unsafeUpdateVersionSubscriptions,
  )
-import Lib.Sync.Types.Id (ActorId, EntityId, SpaceId, VersionId)
+import Lib.Types.Id (ActorId, EntityId, SpaceId, VersionId)
 import Lib.Sync.Types.Store (
   Shared,
   store,

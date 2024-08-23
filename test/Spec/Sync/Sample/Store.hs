@@ -62,8 +62,8 @@ import Lib.Sync.Actions.Unsafe.Update.Group (
   unsafeAdjustEntityPermission,
   unsafeAdjustSpacePermission,
  )
-import Lib.Sync.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
-import Lib.Sync.Types.Permission (
+import Lib.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
+import Lib.Types.Permission (
   CollectionPermission (..),
   SinglePermission,
  )

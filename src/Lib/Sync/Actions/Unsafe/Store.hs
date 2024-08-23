@@ -25,13 +25,14 @@ import Lib.Sync.Actions.Tabulation (
   loadRefsAndSubs,
   updateTabulationStartingAt,
  )
-import Lib.Sync.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
-import Lib.Sync.Types.Permission (CollectionPermission (Blind), collectionPermission)
+import Lib.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
+import Lib.Types.Permission (CollectionPermission (Blind), collectionPermission)
 import Lib.Sync.Types.Store (
   Shared (..),
   store,
   temp,
   toActors,
+  toMemberOf,
   toEntities,
   toGroups,
   toSpaces,
@@ -71,11 +72,11 @@ unsafeStoreGroup gId = do
 
 unsafeStoreActor :: (MonadState Shared m) => ActorId -> m ()
 unsafeStoreActor aId = do
-  modify $ store . toActors . at aId .~ Just mempty
+  modify $ store . toActors . at aId .~ Just ()
 
 unsafeAddMember :: (MonadState Shared m) => GroupId -> ActorId -> m ()
 unsafeAddMember gId aId = do
-  modify $ store . toActors . at aId . non mempty . at gId .~ Just ()
+  modify $ temp . toMemberOf . at aId . non mempty . at gId .~ Just ()
   modify $
     store . toGroups . nodes . at gId . non emptyGroup . members . at aId .~ Just ()
 

@@ -41,7 +41,7 @@ import Lib.Sync.Actions.Unsafe.Store (
   unsafeStoreSpace,
   unsafeStoreVersion,
  )
-import Lib.Sync.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
+import Lib.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
 import Lib.Sync.Types.Store (
   Shared,
  )

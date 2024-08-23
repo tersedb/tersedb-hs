@@ -20,7 +20,7 @@ You can reach me at athan.clark@gmail.com.
 
 module Spec.Sync.Test.Safe.Delete where
 
-import Control.Lens (at, ix, (^.), (^?))
+import Control.Lens (at, ix, (^.), (^?), (^?!))
 import Control.Monad.Extra (unless)
 import Control.Monad.State (execState)
 import Data.Foldable (fold, for_)
@@ -40,14 +40,15 @@ import Lib.Sync.Actions.Safe.Update.Group (
   setEntityPermission,
   setMemberPermission,
  )
-import Lib.Sync.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
-import Lib.Sync.Types.Permission (
+import Lib.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
+import Lib.Types.Permission (
   CollectionPermission (..),
  )
 import Lib.Sync.Types.Store (
   store,
   temp,
   toActors,
+  toMemberOf,
   toEntities,
   toForksFrom,
   toGroups,
@@ -146,14 +147,14 @@ removeTests = describe "Remove" $ do
                   for_ (sp ^. entities) $ \eId -> do
                     (s' ^. store . toEntities . at eId) `shouldBe` Nothing
                     (s' ^? temp . toSubscriptionsFrom . ix eId) `shouldBe` Nothing
-                    for_ (fromJust (s ^? store . toEntities . ix eId . versions)) $ \vId ->
+                    for_ (s ^?! store . toEntities . ix eId . versions) $ \vId ->
                       (s' ^? temp . toReferencesFrom . ix vId) `shouldBe` Nothing
   describe "Member" $
     it "should remove member from group" $
       let gen = suchThat arbitraryShared $ \(s, _, _) ->
-            not . null . fold $ s ^. store . toActors
+            not . null . fold $ s ^. temp . toMemberOf
        in forAll gen $ \(s, adminActor, adminGroup) ->
-            let genG = elements . HM.toList . HM.filter (not . null) $ s ^. store . toActors
+            let genG = elements . HM.toList . HM.filter (not . null) $ s ^. temp . toMemberOf
              in forAll genG $ \(aId :: ActorId, gs) ->
                   forAll (elements $ HS.toList gs) $ \gId -> do
                     let s' = flip execState s $ do
@@ -168,20 +169,20 @@ removeTests = describe "Remove" $ do
                     context "Actor in Group" $
                       (s' ^? store . toGroups . nodes . ix gId . members . ix aId) `shouldBe` Nothing
                     context "Group in Actor" $
-                      (s' ^? store . toActors . ix aId . ix gId) `shouldBe` Nothing
+                      (s' ^? temp . toMemberOf . ix aId . ix gId) `shouldBe` Nothing
   describe "Actor" $
     it "should remove member from group" $
       let gen = suchThat arbitraryShared $ \(s, _, _) ->
             not . null $ s ^. store . toActors
        in forAll gen $ \(s, adminActor, adminGroup) ->
-            let genG = elements . HM.keys $ s ^. store . toActors
+            let genG = elements . HM.keys $ s ^. temp . toMemberOf
              in forAll genG $ \(aId :: ActorId) -> do
                   let s' = flip execState s $ do
                         worked <- removeActor (NE.singleton adminActor) aId
                         unless worked $
                           error $
                             "Couldn't remove actor " <> show aId
-                  (s' ^? store . toActors . ix aId) `shouldBe` Nothing
+                  (s' ^? temp . toMemberOf . ix aId) `shouldBe` Nothing
                   (foldMap (^. members) (s' ^. store . toGroups . nodes) ^. at aId)
                     `shouldBe` Nothing
   describe "Group" $

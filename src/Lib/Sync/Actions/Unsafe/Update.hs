@@ -30,7 +30,7 @@ import Data.List (elemIndex)
 import qualified Data.List.NonEmpty as NE
 import Data.Maybe (fromJust, isJust)
 import Lib.Sync.Actions.Tabulation (updateTabulationStartingAt)
-import Lib.Sync.Types.Id (EntityId, GroupId, SpaceId, VersionId)
+import Lib.Types.Id (EntityId, GroupId, SpaceId, VersionId)
 import Lib.Sync.Types.Store (
   Shared,
   Temp,

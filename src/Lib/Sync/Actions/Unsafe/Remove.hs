@@ -30,12 +30,13 @@ import Lib.Sync.Actions.Unsafe.Update (
   unsafeUpdateFork,
  )
 import Lib.Sync.Actions.Unsafe.Update.Group (unsafeUnlinkGroups)
-import Lib.Sync.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
+import Lib.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
 import Lib.Sync.Types.Store (
   Shared,
   store,
   temp,
   toActors,
+  toMemberOf,
   toEntities,
   toForksFrom,
   toGroups,
@@ -166,7 +167,7 @@ unsafeRemoveMember
   -> ActorId
   -> m ()
 unsafeRemoveMember gId aId = do
-  modify $ store . toActors . at aId . non mempty . at gId .~ Nothing
+  modify $ temp . toMemberOf . at aId . non mempty . at gId .~ Nothing
   modify $
     store . toGroups . nodes . at gId . non emptyGroup . members . at aId .~ Nothing
 
@@ -176,7 +177,7 @@ unsafeRemoveActor
   -> m ()
 unsafeRemoveActor aId = do
   s <- get
-  for_ (s ^. store . toActors . at aId . non mempty) $ \gId ->
+  for_ (s ^. temp . toMemberOf . at aId . non mempty) $ \gId ->
     unsafeRemoveMember gId aId
   modify $ store . toActors . at aId .~ Nothing
 

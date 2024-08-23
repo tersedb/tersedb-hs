@@ -20,8 +20,8 @@ You can reach me at athan.clark@gmail.com.
 
 module Lib.Sync.Types.Store.Tabulation.Group where
 
-import Lib.Sync.Types.Id (GroupId, SpaceId)
-import Lib.Sync.Types.Permission (
+import Lib.Types.Id (GroupId, SpaceId)
+import Lib.Types.Permission (
   CollectionPermission,
   CollectionPermissionWithExemption,
   hasMinimumPermission,

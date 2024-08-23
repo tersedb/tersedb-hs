@@ -53,8 +53,8 @@ import Lib.Sync.Actions.Safe.Verify.SpaceAndEntity (
   anyCanReadSpaceOld,
   anyCanReadVersion,
  )
-import Lib.Sync.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
-import Lib.Sync.Types.Permission (
+import Lib.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
+import Lib.Types.Permission (
   CollectionPermission (..),
   CollectionPermissionWithExemption (..),
   SinglePermission (NonExistent),
@@ -63,6 +63,7 @@ import Lib.Sync.Types.Store (
   Shared,
   store,
   temp,
+  toMemberOf,
   toActors,
   toSpaces,
   toGroups,
@@ -90,12 +91,12 @@ readTests = describe "Read" $ do
       let gen = suchThat arbitraryShared $ \(s, _, _) ->
             not (null (s ^. store . toActors)) && not (null (s ^. store . toSpaces))
        in forAll gen $ \(s, _, _) ->
-            let genAId = elements . HM.keys $ s ^. store . toActors
+            let genAId = elements . HS.toList $ s ^. store . toActors
                 genSId = elements . HM.keys $ s ^. store . toSpaces
              in forAll ((,) <$> genAId <*> genSId) $ \(aId, sId) ->
                   let resNew = evalState (anyCanReadSpace (NE.singleton aId) sId) s
                       resOld = evalState (anyCanReadSpaceOld (NE.singleton aId) sId) s
-                      gs = HS.toList $ s ^?! store . toActors . ix aId
+                      gs = HS.toList $ s ^?! temp . toMemberOf . ix aId
                    in shouldSatisfy
                         ( gs
                         , (\g -> (g, s ^?! store . toGroups . nodes . ix g)) <$> gs

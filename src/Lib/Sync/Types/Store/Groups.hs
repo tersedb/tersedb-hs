@@ -28,8 +28,8 @@ You can reach me at athan.clark@gmail.com.
 
 module Lib.Sync.Types.Store.Groups where
 
-import Lib.Sync.Types.Id (ActorId, GroupId)
-import Lib.Sync.Types.Permission (
+import Lib.Types.Id (ActorId, GroupId)
+import Lib.Types.Permission (
   CollectionPermission,
   CollectionPermissionWithExemption,
  )

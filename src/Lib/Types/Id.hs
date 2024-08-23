@@ -18,7 +18,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 You can reach me at athan.clark@gmail.com.
 -}
 
-module Lib.Sync.Types.Id (GroupId, ActorId, SpaceId, EntityId, VersionId) where
+module Lib.Types.Id (GroupId, ActorId, SpaceId, EntityId, VersionId) where
 
 import Data.Aeson (FromJSON, ToJSON)
 import Data.Hashable (Hashable)

@@ -28,7 +28,7 @@ You can reach me at athan.clark@gmail.com.
 
 module Lib.Sync.Types.Store.Space where
 
-import Lib.Sync.Types.Id (EntityId)
+import Lib.Types.Id (EntityId)
 
 import Control.Lens.TH (makeLensesFor)
 import Data.Aeson (FromJSON, ToJSON)

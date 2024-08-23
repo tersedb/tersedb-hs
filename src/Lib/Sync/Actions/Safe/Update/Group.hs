@@ -50,8 +50,8 @@ import Lib.Sync.Actions.Unsafe.Update.Group (
   unsafeUpdateGroupChildren,
   unsafeUpdateGroupParent,
  )
-import Lib.Sync.Types.Id (ActorId, GroupId, SpaceId)
-import Lib.Sync.Types.Permission (
+import Lib.Types.Id (ActorId, GroupId, SpaceId)
+import Lib.Types.Permission (
   CollectionPermission (..),
   CollectionPermissionWithExemption (..),
   SinglePermission (..),

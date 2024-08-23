@@ -52,8 +52,8 @@ import Lib.Sync.Actions.Safe.Verify.Utils (
   canDoWithTab,
   withCollectionPermission,
  )
-import Lib.Sync.Types.Id (ActorId, EntityId, SpaceId, VersionId)
-import Lib.Sync.Types.Permission (
+import Lib.Types.Id (ActorId, EntityId, SpaceId, VersionId)
+import Lib.Types.Permission (
   CollectionPermission (..),
   CollectionPermissionWithExemption (..),
   SinglePermission,
@@ -64,7 +64,7 @@ import Lib.Sync.Types.Store (
   Shared,
   store,
   temp,
-  toActors,
+  toMemberOf,
   toEntities,
   toForksFrom,
   toReferencesFrom,
@@ -87,7 +87,7 @@ import Lib.Sync.Types.Store.Version (entity)
 canReadSpace :: (MonadState Shared m) => ActorId -> SpaceId -> m Bool
 canReadSpace reader sId = do
   s <- get
-  case s ^. store . toActors . at reader of
+  case s ^. temp . toMemberOf . at reader of
     Nothing -> pure False
     Just gs -> flip anyM (HS.toList gs) $ \gId ->
       if isJust (s ^. temp . toSpacesHiddenTo . ix sId . at gId)

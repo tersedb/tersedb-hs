@@ -34,8 +34,8 @@ module Lib.Sync.Actions.Unsafe.Update.Group (
 ) where
 
 import Lib.Sync.Actions.Tabulation (updateTabulationStartingAt)
-import Lib.Sync.Types.Id (GroupId, SpaceId)
-import Lib.Sync.Types.Permission (
+import Lib.Types.Id (GroupId, SpaceId)
+import Lib.Types.Permission (
   CollectionPermission (..),
   CollectionPermissionWithExemption,
   SinglePermission,

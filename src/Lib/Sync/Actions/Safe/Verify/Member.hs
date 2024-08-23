@@ -33,8 +33,8 @@ import Data.List.NonEmpty (NonEmpty)
 import qualified Data.List.NonEmpty as NE
 import Lib.Sync.Actions.Safe.Verify.Group (canReadGroup)
 import Lib.Sync.Actions.Safe.Verify.Utils (canDo)
-import Lib.Sync.Types.Id (ActorId, GroupId)
-import Lib.Sync.Types.Permission (CollectionPermission (..), collectionPermission)
+import Lib.Types.Id (ActorId, GroupId)
+import Lib.Types.Permission (CollectionPermission (..), collectionPermission)
 import Lib.Sync.Types.Store (Shared)
 import Lib.Sync.Types.Store.Tabulation.Group (forMembers, forOrganization)
 

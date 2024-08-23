@@ -18,7 +18,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 You can reach me at athan.clark@gmail.com.
 -}
 
-module Lib.Sync.Types.Permission where
+module Lib.Types.Permission where
 
 import Control.Lens.TH (makeLensesFor)
 import Data.Aeson (FromJSON (parseJSON), ToJSON (toJSON), Value (String))

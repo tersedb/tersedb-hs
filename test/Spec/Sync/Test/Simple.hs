@@ -20,8 +20,8 @@ You can reach me at athan.clark@gmail.com.
 
 module Spec.Sync.Test.Simple where
 
-import Lib.Sync.Types.Id (GroupId)
-import Lib.Sync.Types.Permission (
+import Lib.Types.Id (GroupId)
+import Lib.Types.Permission (
   CollectionPermission (..),
   CollectionPermissionWithExemption (..),
   SinglePermission,

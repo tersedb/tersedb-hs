@@ -23,8 +23,8 @@ module Lib.Sync.Types.Store where
 import Control.Lens.TH (makeLensesFor)
 import Data.HashMap.Strict (HashMap)
 import Data.HashSet (HashSet)
-import Lib.Sync.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
-import Lib.Sync.Types.Permission (
+import Lib.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
+import Lib.Types.Permission (
   CollectionPermission,
   SinglePermission,
  )
@@ -45,6 +45,7 @@ data Temp = Temp
     -- , tempForksFromSpaces :: HashMap SpaceId (HashSet EntityId)
     tempTabulatedGroups :: HashMap GroupId TabulatedPermissionsForGroup
   , tempSpacesHiddenTo :: HashMap SpaceId (HashSet GroupId)
+  , tempMemberOf :: HashMap ActorId (HashSet GroupId)
   -- FIXME track universe blind groups
   }
   deriving (Eq, Show, Read)
@@ -60,6 +61,7 @@ makeLensesFor
     -- , ("tempForksFromSpaces", "toForksFromSpaces")
     ("tempTabulatedGroups", "toTabulatedGroups")
   , ("tempSpacesHiddenTo", "toSpacesHiddenTo")
+  , ("tempMemberOf", "toMemberOf")
   ]
   ''Temp
 
@@ -71,10 +73,11 @@ emptyTemp =
     mempty
     mempty
     mempty
+    mempty
 
 data Store = Store
   { storeGroups :: Groups
-  , storeActors :: HashMap ActorId (HashSet GroupId)
+  , storeActors :: HashSet ActorId
   , storeSpaces :: HashMap SpaceId Space
   , storeEntities :: HashMap EntityId Entity
   , storeVersions :: HashMap VersionId Version
