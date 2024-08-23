@@ -20,17 +20,14 @@ You can reach me at athan.clark@gmail.com.
 
 module Lib.Sync.Actions.Unsafe.Update where
 
-import Control.Lens (at, ix, non, (%~), (&), (.~), (^.), (^?), _Left)
-import Control.Monad.Extra (anyM, unless, when)
-import Control.Monad.State (MonadState (get, put), execState, modify, runState)
-import Data.Foldable (foldlM)
+import Control.Lens (at, ix, non, (%~), (&), (.~), (^.), (^?), (?~))
+import Control.Monad.State (MonadState (get, put), modify)
 import Data.HashSet (HashSet)
 import qualified Data.HashSet as HS
 import Data.List (elemIndex)
 import qualified Data.List.NonEmpty as NE
-import Data.Maybe (fromJust, isJust)
-import Lib.Sync.Actions.Tabulation (updateTabulationStartingAt)
-import Lib.Types.Id (EntityId, GroupId, SpaceId, VersionId)
+import Data.Maybe (fromJust)
+import Lib.Types.Id (EntityId, SpaceId, VersionId)
 import Lib.Sync.Types.Store (
   Shared,
   Temp,
@@ -38,14 +35,13 @@ import Lib.Sync.Types.Store (
   temp,
   toEntities,
   toForksFrom,
-  toGroups,
   toReferencesFrom,
   toSpaces,
   toSubscriptionsFrom,
   toVersions,
+  toSpaceOf,
  )
-import Lib.Sync.Types.Store.Entity (fork, space, versions)
-import Lib.Sync.Types.Store.Groups (next, nodes, prev)
+import Lib.Sync.Types.Store.Entity (fork, versions)
 import Lib.Sync.Types.Store.Space (entities)
 import Lib.Sync.Types.Store.Version (entity, references, subscriptions)
 
@@ -66,7 +62,7 @@ unsafeUpdateVersionReferences vId refIds = do
           addNewRefs :: VersionId -> Temp -> Temp
           addNewRefs refId t =
             t
-              & toReferencesFrom . at refId . non mempty . at vId .~ Just ()
+              & toReferencesFrom . at refId . non mempty . at vId ?~ ()
 
           removeRefs :: VersionId -> Temp -> Temp
           removeRefs refId t =
@@ -122,7 +118,7 @@ unsafeUpdateVersionSubscriptions vId subIds = do
           addNewSubs :: EntityId -> Temp -> Temp
           addNewSubs subId t =
             t
-              & toSubscriptionsFrom . at subId . non mempty . at vId .~ Just ()
+              & toSubscriptionsFrom . at subId . non mempty . at vId ?~ ()
 
           removeSubs :: EntityId -> Temp -> Temp
           removeSubs subId t =
@@ -190,7 +186,7 @@ unsafeUpdateFork eId mFork = do
           case mFork of
             Nothing -> pure ()
             Just newForkId ->
-              modify $ temp . toForksFrom . at newForkId . non mempty . at eId .~ Just ()
+              modify $ temp . toForksFrom . at newForkId . non mempty . at eId ?~ ()
           modify $ store . toEntities . ix eId . fork .~ mFork
           pure (Right ())
 
@@ -201,15 +197,14 @@ unsafeMoveEntity
   -> m (Either EntityId ())
 unsafeMoveEntity eId newSId = do
   s <- get
-  case s ^. store . toEntities . at eId of
+  case s ^. temp . toSpaceOf . at eId of
     Nothing -> pure $ Left eId
-    Just e
-      | e ^. space == newSId -> pure (Right ())
+    Just oldSId
+      | oldSId == newSId -> pure (Right ())
       | otherwise -> do
-          let oldSpaceId = e ^. space
-          modify $ store . toSpaces . ix oldSpaceId . entities . at eId .~ Nothing
-          modify $ store . toSpaces . ix newSId . entities . at eId .~ Just ()
-          modify $ store . toEntities . ix eId . space .~ newSId
+          modify $ store . toSpaces . ix oldSId . entities . at eId .~ Nothing
+          modify $ store . toSpaces . ix newSId . entities . at eId ?~ ()
+          modify $ temp . toSpaceOf . ix eId .~ newSId
           pure (Right ())
 
 unsafeOffsetVersionIndex

@@ -48,12 +48,10 @@ import Lib.Sync.Types.Store (
   Shared,
   store,
   temp,
-  toEntities,
   toReferencesFrom,
   toSpaces,
   toSubscriptionsFrom,
  )
-import Lib.Sync.Types.Store.Entity (space)
 import Lib.Sync.Types.Store.Space (entities)
 
 removeVersion

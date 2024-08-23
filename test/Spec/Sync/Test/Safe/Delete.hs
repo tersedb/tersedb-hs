@@ -56,8 +56,9 @@ import Lib.Sync.Types.Store (
   toSpaces,
   toSubscriptionsFrom,
   toVersions,
+  toSpaceOf,
  )
-import Lib.Sync.Types.Store.Entity (fork, space, versions)
+import Lib.Sync.Types.Store.Entity (fork, versions)
 import Lib.Sync.Types.Store.Groups (edges, members, nodes)
 import Lib.Sync.Types.Store.Space (entities)
 import Lib.Sync.Types.Store.Tabulation.Group (hasLessOrEqualPermissionsTo)
@@ -112,10 +113,10 @@ removeTests = describe "Remove" $ do
              in forAll genE $ \(eId, e) -> do
                   let s' = flip execState s $ do
                         worked <-
-                          setEntityPermission (NE.singleton adminActor) Delete adminGroup (e ^. space)
+                          setEntityPermission (NE.singleton adminActor) Delete adminGroup (s ^?! temp . toSpaceOf . ix eId)
                         unless worked $
                           error $
-                            "Couldn't set delete permission for entities " <> show (e ^. space)
+                            "Couldn't set delete permission for entities " <> show (s ^?! temp . toSpaceOf . ix eId)
                         eWorked <- removeEntity (NE.singleton adminActor) eId
                         case eWorked of
                           Just (Right ()) -> pure ()

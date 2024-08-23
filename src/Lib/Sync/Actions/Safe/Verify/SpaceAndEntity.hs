@@ -38,7 +38,7 @@ module Lib.Sync.Actions.Safe.Verify.SpaceAndEntity (
   anyCanReadSpaceOld,
 ) where
 
-import Control.Lens (at, ix, non, (^.), (^?))
+import Control.Lens (at, ix, non, (^.), (^?), (^?!))
 import Control.Monad.Extra (allM, andM, anyM, orM)
 import Control.Monad.State (MonadState, get)
 import qualified Data.HashMap.Strict as HM
@@ -72,8 +72,9 @@ import Lib.Sync.Types.Store (
   toSpacesHiddenTo,
   toSubscriptionsFrom,
   toVersions,
+  toSpaceOf,
  )
-import Lib.Sync.Types.Store.Entity (space, versions)
+import Lib.Sync.Types.Store.Entity (versions)
 import Lib.Sync.Types.Store.Space (entities)
 import Lib.Sync.Types.Store.Tabulation.Group (
   forEntities,
@@ -190,9 +191,9 @@ anyCanReadAllEntities readers sId =
 canReadEntity :: (MonadState Shared m) => ActorId -> EntityId -> m Bool
 canReadEntity reader eId = do
   s <- get
-  case s ^. store . toEntities . at eId of
+  case s ^. temp . toSpaceOf . at eId of
     Nothing -> pure False
-    Just e -> canReadAllEntities reader (e ^. space)
+    Just sId -> canReadAllEntities reader sId
 
 anyCanReadEntity
   :: (MonadState Shared m) => NonEmpty ActorId -> EntityId -> m Bool
@@ -226,9 +227,9 @@ anyCanUpdateAllEntities updaters sId =
 canUpdateEntity :: (MonadState Shared m) => ActorId -> EntityId -> m Bool
 canUpdateEntity reader eId = do
   s <- get
-  case s ^. store . toEntities . at eId of
+  case s ^. temp . toSpaceOf . at eId of
     Nothing -> pure False
-    Just e -> canUpdateAllEntities reader (e ^. space)
+    Just sId -> canUpdateAllEntities reader sId
 
 anyCanUpdateEntity
   :: (MonadState Shared m) => NonEmpty ActorId -> EntityId -> m Bool
@@ -247,9 +248,10 @@ canDeleteEntity deleter eId = do
             HM.filterWithKey (\vId _ -> vId `HS.member` vs) (s ^. temp . toReferencesFrom)
           subs = s ^. temp . toSubscriptionsFrom . at eId . non mempty
           forks = HM.filterWithKey (\vId _ -> vId `HS.member` vs) (s ^. temp . toForksFrom)
+          sId = s ^?! temp . toSpaceOf . ix eId
       andM
-        [ canDo (\t -> t ^. forEntities . at (e ^. space) . non Blind) deleter Delete
-        , canReadSpace deleter (e ^. space)
+        [ canDo (\t -> t ^. forEntities . at sId . non Blind) deleter Delete
+        , canReadSpace deleter sId
         , allM (canUpdateVersion deleter) . HS.toList . HS.unions $ HM.elems refs
         , allM (canUpdateVersion deleter) $ HS.toList subs
         , allM (canUpdateEntity deleter) . HS.toList . HS.unions $ HM.elems forks

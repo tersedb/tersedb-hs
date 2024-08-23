@@ -51,11 +51,11 @@ import Lib.Types.Id (ActorId, EntityId, SpaceId, VersionId)
 import Lib.Sync.Types.Store (
   Shared,
   store,
-  toEntities,
+  temp,
   toSpaces,
   toVersions,
+  toSpaceOf,
  )
-import Lib.Sync.Types.Store.Entity (space)
 import Lib.Sync.Types.Store.Space (entities)
 import Lib.Sync.Types.Store.Version (entity)
 
@@ -64,17 +64,17 @@ updateEntitySpace
   :: (MonadState Shared m) => NonEmpty ActorId -> EntityId -> SpaceId -> m Bool
 updateEntitySpace updater eId newSId = do
   s <- get
-  case s ^. store . toEntities . at eId of
+  case s ^. temp . toSpaceOf . at eId of
     Nothing -> pure False -- FIXME
-    Just e -> do
+    Just oldSId -> do
       canAdjust <-
         andM
           [ anyCanDeleteEntity updater eId
           , anyCanCreateEntity updater newSId
           ]
       flip conditionally canAdjust $ do
-        modify $ store . toEntities . ix eId . space .~ newSId
-        modify $ store . toSpaces . ix (e ^. space) . entities . at eId .~ Nothing
+        modify $ temp . toSpaceOf . ix eId .~ newSId
+        modify $ store . toSpaces . ix oldSId . entities . at eId .~ Nothing
         modify $ store . toSpaces . ix newSId . entities . at eId ?~ ()
 
 updateVersionReferences

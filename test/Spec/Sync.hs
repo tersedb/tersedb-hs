@@ -1,6 +1,6 @@
 module Spec.Sync where
 
-import Control.Lens ((^.))
+import Control.Lens ((^.), (^?!), ix)
 import Control.Monad.Extra (unless)
 import Control.Monad.State (execState, get)
 import Data.Foldable (for_)
@@ -32,8 +32,8 @@ import Lib.Sync.Types.Store (
   toEntities,
   toGroups,
   toSpaces,
+  toSpaceOf,
  )
-import Lib.Sync.Types.Store.Entity (space)
 import Lib.Sync.Types.Store.Groups (nodes)
 import Lib.Sync.Types.Store.Space (entities)
 import Spec.Sync.Sample.Store (
@@ -82,7 +82,7 @@ syncTests = do
          in if null (s ^. store . toEntities)
               then property True
               else forAll (elements . HM.toList $ s ^. store . toEntities) $ \(eId, e) ->
-                (s, eId, HM.lookup (e ^. space) (s ^. store . toSpaces))
+                (s, eId, HM.lookup (s ^?! temp . toSpaceOf . ix eId) (s ^. store . toSpaces))
                   `shouldSatisfy` ( \(_, _, mSpace) ->
                                       maybe False (\space -> HS.member eId (space ^. entities)) mSpace
                                   )

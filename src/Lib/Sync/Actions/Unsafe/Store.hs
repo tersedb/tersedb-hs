@@ -39,6 +39,7 @@ import Lib.Sync.Types.Store (
   toSpacesHiddenTo,
   toTabulatedGroups,
   toVersions,
+  toSpaceOf,
  )
 import Lib.Sync.Types.Store.Entity (initEntity, versions)
 import Lib.Sync.Types.Store.Groups (
@@ -52,7 +53,7 @@ import Lib.Sync.Types.Store.Space (entities)
 import Lib.Sync.Types.Store.Tabulation.Group (forUniverse)
 import Lib.Sync.Types.Store.Version (initVersion)
 
-import Control.Lens (at, ix, non, (%~), (&), (.~), (^.))
+import Control.Lens (at, ix, non, (%~), (&), (.~), (^.), (?~))
 import Control.Monad.Extra (when)
 import Control.Monad.State (MonadState (get, put), modify)
 import qualified Data.HashMap.Strict as HM
@@ -67,18 +68,18 @@ unsafeStoreGroup gId = do
   -- save this group as a root
   when (null (s ^. store . toGroups . nodes . at gId . non emptyGroup . prev)) $
     modify $
-      store . toGroups . roots . at gId .~ Just ()
+      store . toGroups . roots . at gId ?~ ()
   updateTabulationStartingAt gId
 
 unsafeStoreActor :: (MonadState Shared m) => ActorId -> m ()
 unsafeStoreActor aId = do
-  modify $ store . toActors . at aId .~ Just ()
+  modify $ store . toActors . at aId ?~ ()
 
 unsafeAddMember :: (MonadState Shared m) => GroupId -> ActorId -> m ()
 unsafeAddMember gId aId = do
-  modify $ temp . toMemberOf . at aId . non mempty . at gId .~ Just ()
+  modify $ temp . toMemberOf . at aId . non mempty . at gId ?~ ()
   modify $
-    store . toGroups . nodes . at gId . non emptyGroup . members . at aId .~ Just ()
+    store . toGroups . nodes . at gId . non emptyGroup . members . at aId ?~ ()
 
 -- | Sets the space to empty
 unsafeStoreSpace :: (MonadState Shared m) => SpaceId -> m ()
@@ -91,7 +92,7 @@ unsafeStoreSpace sId = do
             (s ^. temp . toTabulatedGroups) -- FIXME use some kind of non-universally blind tracker
   put $
     s
-      & store . toSpaces . at sId .~ Just mempty
+      & store . toSpaces . at sId ?~ mempty
       & temp . toSpacesHiddenTo . at sId
         .~ if null blindGroups then Nothing else Just blindGroups
 
@@ -106,9 +107,10 @@ unsafeStoreEntity eId sId vId mForkId = do
   s <- get
   let s' =
         s
-          & store . toEntities . at eId .~ Just (initEntity sId vId mForkId)
-          & store . toSpaces . ix sId . entities . at eId .~ Just ()
-          & store . toVersions . at vId .~ Just (initVersion eId)
+          & store . toEntities . at eId ?~ (initEntity vId mForkId)
+          & store . toSpaces . ix sId . entities . at eId ?~ ()
+          & store . toVersions . at vId ?~ (initVersion eId)
+          & temp . toSpaceOf . at eId ?~ sId
   case do
     t' <- loadRefsAndSubs vId (s' ^. store) (s' ^. temp)
     pure $ loadForks eId (s' ^. store) t' of
@@ -125,7 +127,7 @@ unsafeStoreVersion eId vId = do
   let s' =
         s
           & store . toEntities . ix eId . versions %~ (vId <|)
-          & store . toVersions . at vId .~ Just (initVersion eId)
+          & store . toVersions . at vId ?~ (initVersion eId)
   case loadRefsAndSubs vId (s' ^. store) (s' ^. temp) of -- don't need to check forks
     Left e -> pure (Left e)
     Right t -> Right () <$ put (s' & temp .~ t)

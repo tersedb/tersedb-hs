@@ -20,15 +20,14 @@ You can reach me at athan.clark@gmail.com.
 
 module Spec.Sync.Test.Safe.Update where
 
-import Control.Lens (at, ix, non, (^.), (^?), _Just)
+import Control.Lens (at, ix, non, (^.), (^?), _Just, (^?!))
 import Control.Monad.Extra (unless)
 import Control.Monad.State (MonadState, evalState, execState)
 import qualified Data.HashMap.Strict as HM
 import qualified Data.HashSet as HS
 import Data.List (elemIndex)
 import qualified Data.List.NonEmpty as NE
-import Data.Maybe (fromJust, fromMaybe, isJust, isNothing)
-import Lib.Sync.Actions.Safe (emptyShared)
+import Data.Maybe (fromJust, isJust)
 import Lib.Sync.Actions.Safe.Store (
   addMember,
   storeActor,
@@ -72,14 +71,14 @@ import Lib.Sync.Types.Store (
   toSubscriptionsFrom,
   toTabulatedGroups,
   toVersions,
+  toSpaceOf,
  )
-import Lib.Sync.Types.Store.Entity (fork, space, versions)
+import Lib.Sync.Types.Store.Entity (fork, versions)
 import Lib.Sync.Types.Store.Groups (next, nodes, prev)
 import Lib.Sync.Types.Store.Space (entities)
 import Lib.Sync.Types.Store.Tabulation.Group (hasLessOrEqualPermissionsTo)
-import Lib.Sync.Types.Store.Version (entity, references, subscriptions)
+import Lib.Sync.Types.Store.Version (references, subscriptions)
 import Spec.Sync.Sample.Store (
-  SampleStore,
   arbitraryEmptyShared,
   arbitraryShared,
   storeSample,
@@ -139,7 +138,7 @@ updateTests = describe "Update" $ do
                   `shouldBe` Nothing
                 (s' ^. store . toSpaces . at sId' . non mempty . entities . at eId)
                   `shouldBe` Just ()
-                (s' ^? store . toEntities . ix eId . space) `shouldBe` Just sId'
+                (s' ^? temp . toSpaceOf . ix eId) `shouldBe` Just sId'
     describe "Should Fail" $ do
       it "Move An Entity to different Space without delete access" $
         forAll arbitraryEmptyShared $ \(s, adminActor, adminGroup) ->
@@ -178,7 +177,7 @@ updateTests = describe "Update" $ do
                   `shouldBe` Just ()
                 (s' ^. store . toSpaces . at sId' . non mempty . entities . at eId)
                   `shouldBe` Nothing
-                (s' ^? store . toEntities . ix eId . space) `shouldBe` Just sId
+                (s' ^? temp . toSpaceOf . ix eId) `shouldBe` Just sId
       it "Move An Entity to different Space without create access" $
         forAll arbitraryEmptyShared $ \(s, adminActor, adminGroup) ->
           property $
@@ -216,7 +215,7 @@ updateTests = describe "Update" $ do
                   `shouldBe` Just ()
                 (s' ^. store . toSpaces . at sId' . non mempty . entities . at eId)
                   `shouldBe` Nothing
-                (s' ^? store . toEntities . ix eId . space) `shouldBe` Just sId
+                (s' ^? temp . toSpaceOf . ix eId) `shouldBe` Just sId
   -- updating an entity occurs when you store a version or modify the set of an entity's versions
   -- or changing what space it belongs to (requires create/entity rights on target space)
   describe "Version" $ do
@@ -326,9 +325,9 @@ updateTests = describe "Update" $ do
                           case mE of
                             Just (Right ()) -> pure ()
                             _ -> error $ "Couldn't move entity " <> show (eId, newSId, mE)
-                    (s' ^? store . toEntities . ix eId . space) `shouldBe` Just newSId
+                    (s' ^? temp . toSpaceOf . ix eId) `shouldBe` Just newSId
                     (s' ^? store . toSpaces . ix newSId . entities . ix eId) `shouldBe` Just ()
-                    (s' ^? store . toSpaces . ix (e ^. space) . entities . ix eId)
+                    (s' ^? store . toSpaces . ix (s ^?! temp . toSpaceOf . ix eId) . entities . ix eId)
                       `shouldBe` Nothing
       it "Offset a Version" $
         let gen = suchThat arbitraryShared $ \(s, _, _) ->

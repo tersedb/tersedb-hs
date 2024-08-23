@@ -17,27 +17,18 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 You can reach me at athan.clark@gmail.com.
 -}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE DerivingVia #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE TemplateHaskell #-}
 
-module Lib.Sync.Types.Store.Entity (Entity, space, versions, fork, initEntity) where
+module Lib.Sync.Types.Store.Entity (Entity, versions, fork, initEntity) where
 
-import Lib.Types.Id (SpaceId, VersionId)
+import Lib.Types.Id (VersionId)
 
 import Control.Lens.TH (makeLensesFor)
 import Data.Aeson (FromJSON, ToJSON)
-import Data.List.NonEmpty (NonEmpty (..), (<|))
+import Data.List.NonEmpty (NonEmpty (..))
 import Deriving.Aeson.Stock (CustomJSON (..), Generic, PrefixedSnake)
 
 data Entity = Entity
-  { entitySpace :: SpaceId
-  , entityVersions :: NonEmpty VersionId
+  { entityVersions :: NonEmpty VersionId
   , entityFork :: Maybe VersionId
   }
   deriving (Eq, Generic, Show, Read)
@@ -45,19 +36,14 @@ data Entity = Entity
     (ToJSON, FromJSON)
     via PrefixedSnake "entity" Entity
 makeLensesFor
-  [ ("entitySpace", "space")
-  , ("entityVersions", "versions")
+  [ ("entityVersions", "versions")
   , ("entityFork", "fork")
   ]
   ''Entity
 
-initEntity :: SpaceId -> VersionId -> Maybe VersionId -> Entity
-initEntity sId vId fork =
+initEntity :: VersionId -> Maybe VersionId -> Entity
+initEntity vId fork =
   Entity
-    { entitySpace = sId
-    , entityVersions = vId :| []
+    { entityVersions = vId :| []
     , entityFork = fork
     }
-
--- addVersion :: Entity -> VersionId -> Entity
--- addVersion x vId = x { entityVersions = vId <| entityVersions x }

@@ -44,12 +44,13 @@ import Lib.Sync.Types.Store (
   toSpaces,
   toMemberOf,
   toActors,
+  toSpaceOf,
   toSpacesHiddenTo,
   toSubscriptionsFrom,
   toTabulatedGroups,
   toVersions,
  )
-import Lib.Sync.Types.Store.Entity (fork, space, versions)
+import Lib.Sync.Types.Store.Entity (fork)
 import Lib.Sync.Types.Store.Groups (
   next,
   nodes,
@@ -60,14 +61,13 @@ import Lib.Sync.Types.Store.Groups (
   universePermission,
   members,
  )
+import Lib.Sync.Types.Store.Space (entities)
 import Lib.Sync.Types.Store.Tabulation.Group (
   TabulatedPermissionsForGroup (..),
   forSpaces,
   forUniverse,
  )
 import Lib.Sync.Types.Store.Version (
-  Version,
-  entity,
   references,
   subscriptions,
  )
@@ -196,6 +196,7 @@ tempFromStore s = execState go emptyTemp
     loadVersions
     loadForks'
     loadMembers
+    loadSpaceOf
     t <- get
     put $ execState resetTabulation (Shared s t) ^. temp
 
@@ -218,3 +219,9 @@ tempFromStore s = execState go emptyTemp
       for_ (HM.toList $ s ^. toGroups . nodes) $ \(gId, g) ->
         when (aId `HS.member` (g ^. members)) $
           modify $ toMemberOf . at aId . non mempty . at gId ?~ ()
+
+  loadSpaceOf :: State Temp ()
+  loadSpaceOf =
+    for_ (HM.toList $ s ^. toSpaces) $ \(sId, s) ->
+      for_ (s ^. entities) $ \eId ->
+        modify $ toSpaceOf . at eId ?~ sId
