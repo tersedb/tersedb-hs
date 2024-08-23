@@ -96,7 +96,7 @@ library
     , utility-ht
   default-language: Haskell2010
 
-executable sheepdogdb-exe
+executable tersedb-hs
   main-is: Main.hs
   other-modules:
       Paths_tersedb
@@ -141,7 +141,7 @@ executable sheepdogdb-exe
     , utility-ht
   default-language: Haskell2010
 
-test-suite sheepdogdb-test
+test-suite tersedb-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:

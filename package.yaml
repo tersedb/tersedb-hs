@@ -70,7 +70,7 @@ library:
   source-dirs: src
 
 executables:
-  sheepdogdb-exe:
+  tersedb-hs:
     main: Main.hs
     source-dirs: app
     ghc-options:
@@ -81,7 +81,7 @@ executables:
       - tersedb
 
 tests:
-  sheepdogdb-test:
+  tersedb-test:
     main: Spec.hs
     source-dirs: test
     ghc-options:

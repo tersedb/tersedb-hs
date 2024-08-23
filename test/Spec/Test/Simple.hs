@@ -115,4 +115,4 @@ simpleTests = do
         (x <> y) `shouldBe` (y <> x)
     it "union of two is superset of left" $
       property $ \(x :: TabulatedPermissionsForGroup) y ->
-        (x, x <> y) `shouldSatisfy` (uncurry hasLessOrEqualPermissionsTo)
+        (x, x <> y) `shouldSatisfy` uncurry hasLessOrEqualPermissionsTo

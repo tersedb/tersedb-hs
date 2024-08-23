@@ -20,14 +20,9 @@ You can reach me at athan.clark@gmail.com.
 
 module Lib.Types.Monad where
 
-import Lib.Types.Store (Shared, Store, store, temp)
-import qualified Lib.Types.Store as Shared
+import Lib.Types.Store (Shared)
 
-import Control.Lens (Lens', over, set, view)
-import Control.Monad.IO.Class (MonadIO)
-import Control.Monad.State (StateT, get, modify, put)
-import Data.Functor.Identity (Identity (..))
-import Data.Kind (Type)
+import Control.Monad.State (StateT)
 
 -- class MonadTerseTemp (m :: Type -> Type) where
 --   type TempResultM m :: Type -> Type
