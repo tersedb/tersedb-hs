@@ -28,10 +28,8 @@ import Data.Semigroup (Max (..))
 import Deriving.Aeson.Stock (CustomJSON (..), Generic, PrefixedSnake)
 import Test.QuickCheck (Arbitrary (arbitrary), elements)
 
-
 class HasMinimumPermission a where
   hasMinimumPermission :: a -> a -> Bool
-
 
 data CollectionPermission
   = Blind
@@ -78,9 +76,11 @@ data CollectionPermissionWithExemption = CollectionPermissionWithExemption
     (ToJSON, FromJSON)
     via PrefixedSnake "collectionPermission" CollectionPermissionWithExemption
 instance HasMinimumPermission CollectionPermissionWithExemption where
-  hasMinimumPermission (CollectionPermissionWithExemption xp _)
+  hasMinimumPermission
+    (CollectionPermissionWithExemption xp _)
     (CollectionPermissionWithExemption yp False) = xp >= yp
-  hasMinimumPermission (CollectionPermissionWithExemption xp xe)
+  hasMinimumPermission
+    (CollectionPermissionWithExemption xp xe)
     (CollectionPermissionWithExemption yp True) = xe && (xp >= yp)
 instance Hashable CollectionPermissionWithExemption
 instance Semigroup CollectionPermissionWithExemption where

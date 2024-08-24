@@ -40,28 +40,28 @@ import Lib.Sync.Actions.Safe.Update.Group (
   setEntityPermission,
   setMemberPermission,
  )
-import Lib.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
-import Lib.Types.Permission (
-  CollectionPermission (..),
- )
 import Lib.Sync.Types.Store (
   store,
   temp,
   toActors,
-  toMemberOf,
   toEntities,
   toForksFrom,
   toGroups,
+  toMemberOf,
   toReferencesFrom,
+  toSpaceOf,
   toSpaces,
   toSubscriptionsFrom,
   toVersions,
-  toSpaceOf,
  )
-import Lib.Types.Store.Entity (fork, versions)
 import Lib.Sync.Types.Store.Groups (edges, members, nodes)
 import Lib.Sync.Types.Store.Tabulation.Group (hasLessOrEqualPermissionsTo)
 import Lib.Sync.Types.Store.Version (references, subscriptions)
+import Lib.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
+import Lib.Types.Permission (
+  CollectionPermission (..),
+ )
+import Lib.Types.Store.Entity (fork, versions)
 import Spec.Sync.Sample.Store (
   arbitraryShared,
  )
@@ -112,10 +112,15 @@ removeTests = describe "Remove" $ do
              in forAll genE $ \(eId, e) -> do
                   let s' = flip execState s $ do
                         worked <-
-                          setEntityPermission (NE.singleton adminActor) Delete adminGroup (s ^?! temp . toSpaceOf . ix eId)
+                          setEntityPermission
+                            (NE.singleton adminActor)
+                            Delete
+                            adminGroup
+                            (s ^?! temp . toSpaceOf . ix eId)
                         unless worked $
                           error $
-                            "Couldn't set delete permission for entities " <> show (s ^?! temp . toSpaceOf . ix eId)
+                            "Couldn't set delete permission for entities "
+                              <> show (s ^?! temp . toSpaceOf . ix eId)
                         eWorked <- removeEntity (NE.singleton adminActor) eId
                         case eWorked of
                           Just (Right ()) -> pure ()

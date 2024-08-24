@@ -1,6 +1,6 @@
 module Spec.Sync where
 
-import Control.Lens ((^.), (^?!), ix)
+import Control.Lens (ix, (^.), (^?!))
 import Control.Monad.Extra (unless)
 import Control.Monad.State (execState, get)
 import Data.Foldable (for_)
@@ -20,21 +20,21 @@ import Lib.Sync.Actions.Unsafe.Update.Group (
   unsafeAdjustRecruiterPermission,
   unsafeAdjustUniversePermission,
  )
+import Lib.Sync.Types.Store (
+  store,
+  temp,
+  toEntities,
+  toGroups,
+  toSpaceOf,
+  toSpaces,
+ )
+import Lib.Sync.Types.Store.Groups (nodes)
 import Lib.Types.Id (ActorId, GroupId)
 import Lib.Types.Permission (
   CollectionPermission (..),
   CollectionPermissionWithExemption (..),
   SinglePermission (Adjust),
  )
-import Lib.Sync.Types.Store (
-  store,
-  temp,
-  toEntities,
-  toGroups,
-  toSpaces,
-  toSpaceOf,
- )
-import Lib.Sync.Types.Store.Groups (nodes)
 import Spec.Sync.Sample.Store (
   SampleStore (..),
   loadSample,
@@ -53,7 +53,7 @@ import Test.QuickCheck (
   forAll,
   property,
  )
-import Test.Syd (describe, it, shouldBe, shouldSatisfy, Spec)
+import Test.Syd (Spec, describe, it, shouldBe, shouldSatisfy)
 
 syncTests :: Spec
 syncTests = do

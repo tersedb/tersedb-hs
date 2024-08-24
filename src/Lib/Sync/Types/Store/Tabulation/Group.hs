@@ -20,15 +20,15 @@ You can reach me at athan.clark@gmail.com.
 
 module Lib.Sync.Types.Store.Tabulation.Group where
 
+import Control.Lens.TH (makeLensesFor)
+import Data.HashMap.Strict (HashMap)
+import qualified Data.HashMap.Strict as HM
 import Lib.Types.Id (GroupId, SpaceId)
 import Lib.Types.Permission (
   CollectionPermission,
   CollectionPermissionWithExemption,
   hasMinimumPermission,
  )
-import Control.Lens.TH (makeLensesFor)
-import Data.HashMap.Strict (HashMap)
-import qualified Data.HashMap.Strict as HM
 import Test.QuickCheck (Arbitrary (arbitrary))
 
 -- TODO tabulate groups that actors belong to, omitting redundant groups already inherited

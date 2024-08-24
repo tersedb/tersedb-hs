@@ -20,7 +20,7 @@ You can reach me at athan.clark@gmail.com.
 
 module Spec.Sync.Test.Safe.Update where
 
-import Control.Lens (at, ix, non, (^.), (^?), _Just, (^?!))
+import Control.Lens (at, ix, non, (^.), (^?), (^?!), _Just)
 import Control.Monad.Extra (unless)
 import Control.Monad.State (MonadState, evalState, execState)
 import qualified Data.HashMap.Strict as HM
@@ -54,11 +54,6 @@ import Lib.Sync.Actions.Safe.Update.Group (
   unlinkGroups,
   updateGroupParent,
  )
-import Lib.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
-import Lib.Types.Permission (
-  CollectionPermission (..),
-  CollectionPermissionWithExemption (..),
- )
 import Lib.Sync.Types.Store (
   Shared,
   store,
@@ -67,16 +62,21 @@ import Lib.Sync.Types.Store (
   toForksFrom,
   toGroups,
   toReferencesFrom,
+  toSpaceOf,
   toSpaces,
   toSubscriptionsFrom,
   toTabulatedGroups,
   toVersions,
-  toSpaceOf,
  )
-import Lib.Types.Store.Entity (fork, versions)
 import Lib.Sync.Types.Store.Groups (next, nodes, prev)
 import Lib.Sync.Types.Store.Tabulation.Group (hasLessOrEqualPermissionsTo)
 import Lib.Sync.Types.Store.Version (references, subscriptions)
+import Lib.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
+import Lib.Types.Permission (
+  CollectionPermission (..),
+  CollectionPermissionWithExemption (..),
+ )
+import Lib.Types.Store.Entity (fork, versions)
 import Spec.Sync.Sample.Store (
   arbitraryEmptyShared,
   arbitraryShared,

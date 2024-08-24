@@ -20,7 +20,7 @@ You can reach me at athan.clark@gmail.com.
 
 module Spec.Sync.Test.Safe.Read where
 
-import Control.Lens ((^.), at, (^?!), ix, (^?))
+import Control.Lens (at, ix, (^.), (^?), (^?!))
 import Control.Monad.Extra (unless)
 import Control.Monad.State (State, evalState, execState)
 import qualified Data.HashMap.Strict as HM
@@ -53,25 +53,25 @@ import Lib.Sync.Actions.Safe.Verify.SpaceAndEntity (
   anyCanReadSpaceOld,
   anyCanReadVersion,
  )
+import Lib.Sync.Types.Store (
+  Shared,
+  store,
+  temp,
+  toActors,
+  toGroups,
+  toMemberOf,
+  toSpacePermissions,
+  toSpaces,
+  toSpacesHiddenTo,
+  toTabulatedGroups,
+ )
+import Lib.Sync.Types.Store.Groups (nodes)
 import Lib.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
 import Lib.Types.Permission (
   CollectionPermission (..),
   CollectionPermissionWithExemption (..),
   SinglePermission (NonExistent),
  )
-import Lib.Sync.Types.Store (
-  Shared,
-  store,
-  temp,
-  toMemberOf,
-  toActors,
-  toSpaces,
-  toGroups,
-  toTabulatedGroups,
-  toSpacesHiddenTo,
-  toSpacePermissions,
- )
-import Lib.Sync.Types.Store.Groups (nodes)
 import Spec.Sync.Sample.Store (
   arbitraryEmptyShared,
   arbitraryShared,
@@ -103,7 +103,12 @@ readTests = describe "Read" $ do
                         , (\g -> (g, s ^?! temp . toTabulatedGroups . ix g)) <$> gs
                         , s ^? temp . toSpacesHiddenTo . ix sId
                         , (\g -> (g, s ^? store . toSpacePermissions . ix g)) <$> gs
-                        , resNew, resOld, aId, sId) $ \_ -> resNew == resOld
+                        , resNew
+                        , resOld
+                        , aId
+                        , sId
+                        )
+                        $ \_ -> resNew == resOld
   describe "Should Succeed" $ do
     it "Spaces" $
       forAll arbitraryEmptyShared $ \(s, adminActor, adminGroup) ->

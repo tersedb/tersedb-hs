@@ -28,7 +28,6 @@ import Spec.Sync.Sample.Tree (
 
 import Lib.Sync.Actions.Tabulation (resetTabulation)
 import Lib.Sync.Actions.Unsafe.Update.Group (unsafeUnlinkGroups)
-import Lib.Types.Id (GroupId)
 import Lib.Sync.Types.Store (
   Shared,
   store,
@@ -48,6 +47,7 @@ import Lib.Sync.Types.Store.Groups (
   roots,
  )
 import Lib.Sync.Types.Store.Tabulation.Group (hasLessOrEqualPermissionsTo)
+import Lib.Types.Id (GroupId)
 
 import Control.Lens (at, ix, (?~), (^.))
 import Control.Monad.State (State, execState, modify)

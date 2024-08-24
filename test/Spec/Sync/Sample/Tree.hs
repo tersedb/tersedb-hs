@@ -37,12 +37,6 @@ import Lib.Sync.Actions.Unsafe.Update.Group (
   unsafeAdjustUniversePermission,
   unsafeLinkGroups,
  )
-import Lib.Types.Id (ActorId, GroupId)
-import Lib.Types.Permission (
-  CollectionPermission (..),
-  CollectionPermissionWithExemption (..),
-  SinglePermission (Adjust),
- )
 import Lib.Sync.Types.Store (
   Shared,
   store,
@@ -58,6 +52,12 @@ import Lib.Sync.Types.Store.Groups (
   outs,
   prev,
   roots,
+ )
+import Lib.Types.Id (ActorId, GroupId)
+import Lib.Types.Permission (
+  CollectionPermission (..),
+  CollectionPermissionWithExemption (..),
+  SinglePermission (Adjust),
  )
 
 import Control.Lens (at, ix, (%~), (&), (.~), (?~))

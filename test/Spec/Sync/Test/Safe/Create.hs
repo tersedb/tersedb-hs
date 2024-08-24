@@ -41,11 +41,6 @@ import Lib.Sync.Actions.Safe.Update.Group (
   setRecruiterPermission,
   setUniversePermission,
  )
-import Lib.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
-import Lib.Types.Permission (
-  CollectionPermission (..),
-  CollectionPermissionWithExemption (..),
- )
 import Lib.Sync.Types.Store (
   Shared,
   store,
@@ -58,6 +53,11 @@ import Lib.Sync.Types.Store (
   toVersions,
  )
 import Lib.Sync.Types.Store.Groups (emptyGroup, members, nodes)
+import Lib.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
+import Lib.Types.Permission (
+  CollectionPermission (..),
+  CollectionPermissionWithExemption (..),
+ )
 import Spec.Sync.Sample.Store (arbitraryEmptyShared, arbitraryShared)
 import Test.QuickCheck (
   arbitrary,

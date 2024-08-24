@@ -35,18 +35,18 @@ import Lib.Sync.Actions.Safe.Update (updateEntitySpace)
 import Lib.Sync.Actions.Safe.Update.Group (
   setEntityPermission,
   setMemberPermission,
-  setUniversePermission,
   setSpacePermission,
+  setUniversePermission,
+ )
+import Lib.Sync.Types.Store (
+  store,
+  toSpaces,
  )
 import Lib.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
 import Lib.Types.Permission (
   CollectionPermission (Create, Delete, Read),
   CollectionPermissionWithExemption (..),
   SinglePermission (NonExistent),
- )
-import Lib.Sync.Types.Store (
-  store,
-  toSpaces,
  )
 import Spec.Sync.Sample.Store (
   arbitraryEmptyShared,
@@ -61,99 +61,100 @@ jointTests :: Spec
 jointTests = describe "Joint" $ do
   it "Move Request Between Public Spaces" $
     forAll arbitraryEmptyShared $ \(s, adminActor, adminGroup) ->
-      property $ \( actorA :: ActorId
-                    , groupA :: GroupId
-                    , actorB :: ActorId
-                    , groupB :: GroupId
-                    , spaceA :: SpaceId
-                    , spaceB :: SpaceId
-                    , eId :: EntityId
-                    , vId :: VersionId
-                    ) -> do
-        let s' = flip execState s $ do
-              worked <- storeActor (NE.singleton adminActor) actorA
-              unless worked $
-                error $
-                  "Couldn't store actor " <> show actorA
-              worked <- storeActor (NE.singleton adminActor) actorB
-              unless worked $
-                error $
-                  "Couldn't store actor " <> show actorB
-              worked <- storeGroup (NE.singleton adminActor) groupA
-              unless worked $
-                error $
-                  "Couldn't store group " <> show groupA
-              worked <- storeGroup (NE.singleton adminActor) groupB
-              unless worked $
-                error $
-                  "Couldn't store group " <> show groupB
+      property $
+        \( actorA :: ActorId
+          , groupA :: GroupId
+          , actorB :: ActorId
+          , groupB :: GroupId
+          , spaceA :: SpaceId
+          , spaceB :: SpaceId
+          , eId :: EntityId
+          , vId :: VersionId
+          ) -> do
+            let s' = flip execState s $ do
+                  worked <- storeActor (NE.singleton adminActor) actorA
+                  unless worked $
+                    error $
+                      "Couldn't store actor " <> show actorA
+                  worked <- storeActor (NE.singleton adminActor) actorB
+                  unless worked $
+                    error $
+                      "Couldn't store actor " <> show actorB
+                  worked <- storeGroup (NE.singleton adminActor) groupA
+                  unless worked $
+                    error $
+                      "Couldn't store group " <> show groupA
+                  worked <- storeGroup (NE.singleton adminActor) groupB
+                  unless worked $
+                    error $
+                      "Couldn't store group " <> show groupB
 
-              worked <- setMemberPermission (NE.singleton adminActor) Create adminGroup groupA
-              unless worked $
-                error $
-                  "Couldn't set member permission " <> show groupA
-              worked <- setMemberPermission (NE.singleton adminActor) Create adminGroup groupB
-              unless worked $
-                error $
-                  "Couldn't set member permission " <> show groupB
+                  worked <- setMemberPermission (NE.singleton adminActor) Create adminGroup groupA
+                  unless worked $
+                    error $
+                      "Couldn't set member permission " <> show groupA
+                  worked <- setMemberPermission (NE.singleton adminActor) Create adminGroup groupB
+                  unless worked $
+                    error $
+                      "Couldn't set member permission " <> show groupB
 
-              worked <- addMember (NE.singleton adminActor) groupA actorA
-              unless worked $
-                error $
-                  "Couldn't add member " <> show (groupA, actorA)
-              worked <- addMember (NE.singleton adminActor) groupB actorB
-              unless worked $
-                error $
-                  "Couldn't add member " <> show (groupB, actorB)
+                  worked <- addMember (NE.singleton adminActor) groupA actorA
+                  unless worked $
+                    error $
+                      "Couldn't add member " <> show (groupA, actorA)
+                  worked <- addMember (NE.singleton adminActor) groupB actorB
+                  unless worked $
+                    error $
+                      "Couldn't add member " <> show (groupB, actorB)
 
-              worked <- storeSpace (NE.singleton adminActor) spaceA
-              unless worked $
-                error $
-                  "Couldn't store space " <> show spaceA
-              worked <- storeSpace (NE.singleton adminActor) spaceB
-              unless worked $
-                error $
-                  "Couldn't store space " <> show spaceB
+                  worked <- storeSpace (NE.singleton adminActor) spaceA
+                  unless worked $
+                    error $
+                      "Couldn't store space " <> show spaceA
+                  worked <- storeSpace (NE.singleton adminActor) spaceB
+                  unless worked $
+                    error $
+                      "Couldn't store space " <> show spaceB
 
-              worked <-
-                setUniversePermission
-                  (NE.singleton adminActor)
-                  (CollectionPermissionWithExemption Read False)
-                  groupA
-              unless worked $
-                error $
-                  "Couldn't set universe permission " <> show groupA
-              worked <-
-                setUniversePermission
-                  (NE.singleton adminActor)
-                  (CollectionPermissionWithExemption Read False)
-                  groupB
-              unless worked $
-                error $
-                  "Couldn't set universe permission " <> show groupB
+                  worked <-
+                    setUniversePermission
+                      (NE.singleton adminActor)
+                      (CollectionPermissionWithExemption Read False)
+                      groupA
+                  unless worked $
+                    error $
+                      "Couldn't set universe permission " <> show groupA
+                  worked <-
+                    setUniversePermission
+                      (NE.singleton adminActor)
+                      (CollectionPermissionWithExemption Read False)
+                      groupB
+                  unless worked $
+                    error $
+                      "Couldn't set universe permission " <> show groupB
 
-              worked <- setEntityPermission (NE.singleton adminActor) Delete groupA spaceA
-              unless worked $
-                error $
-                  "Couldn't set space permission " <> show spaceA
-              worked <- setEntityPermission (NE.singleton adminActor) Delete groupB spaceB
-              unless worked $
-                error $
-                  "Couldn't set space permission " <> show spaceB
+                  worked <- setEntityPermission (NE.singleton adminActor) Delete groupA spaceA
+                  unless worked $
+                    error $
+                      "Couldn't set space permission " <> show spaceA
+                  worked <- setEntityPermission (NE.singleton adminActor) Delete groupB spaceB
+                  unless worked $
+                    error $
+                      "Couldn't set space permission " <> show spaceB
 
-              eWorked <- storeEntity (NE.singleton actorA) eId spaceA vId Nothing
-              case eWorked of
-                Just (Right ()) -> pure ()
-                _ -> error $ "Couldn't store entity " <> show eId
+                  eWorked <- storeEntity (NE.singleton actorA) eId spaceA vId Nothing
+                  case eWorked of
+                    Just (Right ()) -> pure ()
+                    _ -> error $ "Couldn't store entity " <> show eId
 
-              worked <- updateEntitySpace (NE.fromList [actorA, actorB]) eId spaceB
-              unless worked $
-                error $
-                  "Couldn't move entity " <> show eId
-        context "Entity is in Space B" $
-          (s' ^? store . toSpaces . ix spaceB . ix eId) `shouldBe` Just ()
-        context "Entity is not in Space A" $
-          (s' ^? store . toSpaces . ix spaceA . ix eId) `shouldBe` Nothing
+                  worked <- updateEntitySpace (NE.fromList [actorA, actorB]) eId spaceB
+                  unless worked $
+                    error $
+                      "Couldn't move entity " <> show eId
+            context "Entity is in Space B" $
+              (s' ^? store . toSpaces . ix spaceB . ix eId) `shouldBe` Just ()
+            context "Entity is not in Space A" $
+              (s' ^? store . toSpaces . ix spaceA . ix eId) `shouldBe` Nothing
   it "Move Request From Private Space To Public Spaces" $
     forAll arbitraryEmptyShared $
       \(s, adminActor, adminGroup) ->

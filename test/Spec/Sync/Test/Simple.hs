@@ -20,16 +20,16 @@ You can reach me at athan.clark@gmail.com.
 
 module Spec.Sync.Test.Simple where
 
+import Lib.Sync.Types.Store.Tabulation.Group (
+  TabulatedPermissionsForGroup,
+  hasLessOrEqualPermissionsTo,
+ )
 import Lib.Types.Id (GroupId)
 import Lib.Types.Permission (
   CollectionPermission (..),
   CollectionPermissionWithExemption (..),
   SinglePermission,
   hasMinimumPermission,
- )
-import Lib.Sync.Types.Store.Tabulation.Group (
-  TabulatedPermissionsForGroup,
-  hasLessOrEqualPermissionsTo,
  )
 
 import qualified Data.Aeson as Aeson

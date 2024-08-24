@@ -62,12 +62,12 @@ import Lib.Sync.Actions.Unsafe.Update.Group (
   unsafeAdjustEntityPermission,
   unsafeAdjustSpacePermission,
  )
+import Lib.Sync.Types.Store (Shared, store, temp)
 import Lib.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
 import Lib.Types.Permission (
   CollectionPermission (..),
   SinglePermission,
  )
-import Lib.Sync.Types.Store (Shared, store, temp)
 
 import Control.Lens (at, (%~), (.~), (^.), _1, _2)
 import Control.Monad (replicateM, void)

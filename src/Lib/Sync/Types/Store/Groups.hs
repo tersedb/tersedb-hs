@@ -20,11 +20,6 @@ You can reach me at athan.clark@gmail.com.
 
 module Lib.Sync.Types.Store.Groups where
 
-import Lib.Types.Id (ActorId, GroupId)
-import Lib.Types.Permission (
-  CollectionPermission,
-  CollectionPermissionWithExemption,
- )
 import Control.Lens ((^.))
 import Control.Lens.TH (makeLensesFor)
 import Control.Monad.Extra (mconcatMapM)
@@ -37,6 +32,11 @@ import qualified Data.HashSet as HS
 import Data.List (uncons)
 import Data.Monoid (First (..))
 import Deriving.Aeson.Stock (CustomJSON (..), Generic, PrefixedSnake)
+import Lib.Types.Id (ActorId, GroupId)
+import Lib.Types.Permission (
+  CollectionPermission,
+  CollectionPermissionWithExemption,
+ )
 
 data Group = Group
   { groupPrev :: Maybe GroupId
