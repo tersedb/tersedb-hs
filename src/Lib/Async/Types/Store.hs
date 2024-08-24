@@ -15,6 +15,7 @@ import qualified StmContainers.Map as Map
 import StmContainers.Multimap (Multimap)
 import qualified StmContainers.Multimap as Multimap
 import StmContainers.Set (Set)
+import qualified StmContainers.Set as Set
 import Data.List.NonEmpty (NonEmpty)
 
 data Temp = Temp
@@ -140,6 +141,47 @@ makeLensesFor
   ]
   ''Store
 
+newStore :: STM Store
+newStore = do
+  prev <- Map.new
+  next <- Multimap.new
+  members <- Multimap.new
+  roots <- Set.new
+  edges <- Set.new
+  outs <- Set.new
+  as <- Set.new
+  ss <- Set.new
+  se <- Multimap.new
+  es <- Map.new
+  fs <- Map.new
+  vs <- Set.new
+  refs <- Multimap.new
+  subs <- Multimap.new
+  us <- Map.new
+  os <- Map.new
+  rs <- Map.new
+  oths <- Map.new
+  pure Store
+    { storeGroupsPrev = prev
+    , storeGroupsNext = next
+    , storeGroupMembers = members
+    , storeGroupRoots = roots
+    , storeGroupEdges = edges
+    , storeGroupOuts = outs
+    , storeActors = as
+    , storeSpaces = ss
+    , storeSpaceEntities = se
+    , storeEntities = es
+    , storeForks = fs
+    , storeVersions = vs
+    , storeVersionReferences = refs
+    , storeVersionSubscriptions = subs
+    , storePermissionsPerGroupUniverse = us
+    , storePermissionsPerGroupOrganization = os
+    , storePermissionsPerGroupRecruiter = rs
+    , storePermissionsPerGroupOther = oths
+    }
+
 data Shared = Shared
   { sharedStore :: Store
   , sharedTemp :: Temp
@@ -150,3 +192,6 @@ makeLensesFor
   , ("sharedTemp", "temp")
   ]
   ''Shared
+
+newShared :: STM Shared
+newShared = Shared <$> newStore <*> newTemp

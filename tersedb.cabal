@@ -157,6 +157,7 @@ test-suite tersedb-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
+      Spec.Async
       Spec.Sync
       Spec.Sync.Sample.Store
       Spec.Sync.Sample.Tree

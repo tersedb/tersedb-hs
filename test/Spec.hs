@@ -20,7 +20,9 @@ You can reach me at athan.clark@gmail.com.
 
 import Spec.Sync (syncTests)
 import Test.Syd (describe, sydTest)
+import Spec.Async (asyncTests)
 
 main :: IO ()
 main = sydTest $ do
   describe "Sync" syncTests
+  describe "Async" asyncTests

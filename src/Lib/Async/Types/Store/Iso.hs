@@ -1,3 +1,148 @@
 module Lib.Async.Types.Store.Iso where
+import Control.Monad.Reader (MonadReader (ask))
+import Lib.Async.Types.Store (Shared, toActors, store, toSpaces, toSpaceEntities, toEntities, toForks, toVersions, toReferences, toSubscriptions, toPermOther, newPermissionsPerGroup, spacePermission, toOuts, toEdges, toRoots, toMembers, toPermRecruiter, toPermOrganization, toPermUniverse, toGroupsNext, toGroupsPrev, entityPermission, groupPermission, memberPermission)
+import qualified Lib.Sync.Types.Store as Sync
+import Control.Concurrent.STM (STM, newTVar, modifyTVar, readTVar)
+import Control.Lens ((^.), (?~), at, ix, (.~), (&), non)
+import Data.Foldable (for_)
+import qualified StmContainers.Set as Set
+import qualified StmContainers.Map as Map
+import qualified StmContainers.Multimap as Multimap
+import qualified Data.HashMap.Strict as HM
+import qualified Lib.Types.Store.Entity as Sync
+import qualified Lib.Sync.Types.Store.Version as Sync
+import qualified Lib.Sync.Types.Store.Groups as Sync
+import Data.Maybe (fromJust)
+import Lib.Sync.Actions.Unsafe (unsafeEmptyShared)
+import DeferredFolds.UnfoldlM (forM_)
+import qualified Data.List.NonEmpty as NE
 
 
+loadSyncStore :: MonadReader Shared m => Sync.Store -> m (STM ())
+loadSyncStore syncStore = do
+  s <- ask
+  pure $ do
+    for_ (HM.toList $ syncStore ^. Sync.toGroups . Sync.nodes) $ \(gId, g) -> do
+      case g ^. Sync.prev of
+        Nothing -> pure ()
+        Just prev -> Map.insert prev gId (s ^. store . toGroupsPrev)
+      for_ (g ^. Sync.next) $ \nextId ->
+        Multimap.insert nextId gId (s ^. store . toGroupsNext)
+      Map.insert (g ^. Sync.universePermission) gId (s ^. store . toPermUniverse)
+      Map.insert (g ^. Sync.organizationPermission) gId (s ^. store . toPermOrganization)
+      Map.insert (g ^. Sync.recruiterPermission) gId (s ^. store . toPermRecruiter)
+      permOther <- newPermissionsPerGroup
+      Map.insert permOther gId (s ^. store . toPermOther)
+      for_ (g ^. Sync.members) $ \aId ->
+        Multimap.insert aId gId (s ^. store . toMembers)
+
+    for_ (syncStore ^. Sync.toGroups . Sync.roots) $ \gId ->
+      Set.insert gId (s ^. store . toRoots)
+    for_ (syncStore ^. Sync.toGroups . Sync.edges) $ \edge ->
+      Set.insert edge (s ^. store . toEdges)
+    for_ (syncStore ^. Sync.toGroups . Sync.outs) $ \gId ->
+      Set.insert gId (s ^. store . toOuts)
+
+    for_ (syncStore ^. Sync.toActors) $ \aId ->
+      Set.insert aId (s ^. store . toActors)
+
+    for_ (HM.toList $ syncStore ^. Sync.toSpaces) $ \(sId, es) -> do
+      Set.insert sId (s ^. store . toSpaces)
+      for_ es $ \eId ->
+        Multimap.insert eId sId (s ^. store . toSpaceEntities)
+
+    for_ (HM.toList $ syncStore ^. Sync.toEntities) $ \(eId, e) -> do
+      Map.insert (e ^. Sync.versions) eId (s ^. store . toEntities)
+      case e ^. Sync.fork of
+        Nothing -> pure ()
+        Just fork -> Map.insert fork eId (s ^. store . toForks)
+
+    for_ (HM.toList $ syncStore ^. Sync.toVersions) $ \(vId, v) -> do
+      Set.insert vId (s ^. store . toVersions)
+      for_ (v ^. Sync.references) $ \refId ->
+        Multimap.insert refId vId (s ^. store . toReferences)
+      for_ (v ^. Sync.subscriptions) $ \subId ->
+        Multimap.insert subId vId (s ^. store . toSubscriptions)
+
+    for_ (HM.toList (syncStore ^. Sync.toSpacePermissions)) $ \(gId, ps) -> do
+      permOther <- fromJust <$> Map.lookup gId (s ^. store . toPermOther)
+      for_ (HM.toList ps) $ \(sId, p) ->
+        Map.insert p sId (permOther ^. spacePermission)
+    for_ (HM.toList (syncStore ^. Sync.toEntityPermissions)) $ \(gId, ps) -> do
+      permOther <- fromJust <$> Map.lookup gId (s ^. store . toPermOther)
+      for_ (HM.toList ps) $ \(sId, p) ->
+        Map.insert p sId (permOther ^. entityPermission)
+    for_ (HM.toList (syncStore ^. Sync.toGroupPermissions)) $ \(gId, ps) -> do
+      permOther <- fromJust <$> Map.lookup gId (s ^. store . toPermOther)
+      for_ (HM.toList ps) $ \(sId, p) ->
+        Map.insert p sId (permOther ^. groupPermission)
+    for_ (HM.toList (syncStore ^. Sync.toMemberPermissions)) $ \(gId, ps) -> do
+      permOther <- fromJust <$> Map.lookup gId (s ^. store . toPermOther)
+      for_ (HM.toList ps) $ \(sId, p) ->
+        Map.insert p sId (permOther ^. memberPermission)
+
+
+genSyncStore :: MonadReader Shared m => m (STM Sync.Store)
+genSyncStore = do
+  s <- ask
+  pure $ do
+    syncStore <- newTVar (unsafeEmptyShared ^. Sync.store)
+
+    forM_ (Set.unfoldlM (s ^. store . toRoots)) $ \gId -> do
+      modifyTVar syncStore (Sync.toGroups . Sync.nodes . at gId ?~ Sync.emptyGroup)
+      modifyTVar syncStore (Sync.toGroups . Sync.roots . at gId ?~ ())
+
+    forM_ (Set.unfoldlM (s ^. store . toOuts)) $ \gId -> do
+      modifyTVar syncStore (Sync.toGroups . Sync.nodes . at gId ?~ Sync.emptyGroup)
+      modifyTVar syncStore (Sync.toGroups . Sync.outs . at gId ?~ ())
+    
+    forM_ (Set.unfoldlM (s ^. store . toEdges)) $ \(fromId, toId) -> do
+      modifyTVar syncStore (Sync.toGroups . Sync.nodes . at fromId ?~ Sync.emptyGroup)
+      modifyTVar syncStore (Sync.toGroups . Sync.nodes . at toId ?~ Sync.emptyGroup)
+      modifyTVar syncStore (Sync.toGroups . Sync.edges . at (fromId,toId) ?~ ())
+
+    forM_ (Map.unfoldlM (s ^. store . toGroupsPrev)) $ \(gId, forkId) ->
+      modifyTVar syncStore (Sync.toGroups . Sync.nodes . ix gId . Sync.prev ?~ forkId)
+    forM_ (Multimap.unfoldlM (s ^. store . toGroupsNext)) $ \(gId, nextId) ->
+      modifyTVar syncStore (Sync.toGroups . Sync.nodes . ix gId . Sync.next . at nextId ?~ ())
+    forM_ (Multimap.unfoldlM (s ^. store . toMembers)) $ \(gId, aId) ->
+      modifyTVar syncStore (Sync.toGroups . Sync.nodes . ix gId . Sync.members . at aId ?~ ())
+
+    forM_ (Set.unfoldlM (s ^. store . toActors)) $ \aId ->
+      modifyTVar syncStore (Sync.toActors . at aId ?~ ())
+
+    forM_ (Set.unfoldlM (s ^. store . toSpaces)) $ \sId ->
+      modifyTVar syncStore (Sync.toSpaces . at sId ?~ mempty)
+    forM_ (Multimap.unfoldlM (s ^. store . toSpaceEntities)) $ \(sId, eId) ->
+      modifyTVar syncStore (Sync.toSpaces . ix sId . at eId ?~ ())
+
+    forM_ (Map.unfoldlM (s ^. store . toEntities)) $ \(eId, vs) ->
+      let e = Sync.initEntity (NE.head vs) Nothing & Sync.versions .~ vs
+      in  modifyTVar syncStore (Sync.toEntities . at eId ?~ e)
+    forM_ (Map.unfoldlM (s ^. store . toForks)) $ \(eId, forkId) ->
+      modifyTVar syncStore (Sync.toEntities . ix eId . Sync.fork ?~ forkId)
+
+    forM_ (Set.unfoldlM (s ^. store . toVersions)) $ \vId ->
+      modifyTVar syncStore (Sync.toVersions . at vId ?~ Sync.initVersion)
+    forM_ (Multimap.unfoldlM (s ^. store . toReferences)) $ \(vId, refId) ->
+      modifyTVar syncStore (Sync.toVersions . ix vId . Sync.references . at refId ?~ ())
+    forM_ (Multimap.unfoldlM (s ^. store . toSubscriptions)) $ \(vId, subId) ->
+      modifyTVar syncStore (Sync.toVersions . ix vId . Sync.subscriptions . at subId ?~ ())
+
+    forM_ (Map.unfoldlM (s ^. store . toPermUniverse)) $ \(gId, p) ->
+      modifyTVar syncStore (Sync.toGroups . Sync.nodes . ix gId . Sync.universePermission .~ p)
+    forM_ (Map.unfoldlM (s ^. store . toPermOrganization)) $ \(gId, p) ->
+      modifyTVar syncStore (Sync.toGroups . Sync.nodes . ix gId . Sync.organizationPermission .~ p)
+    forM_ (Map.unfoldlM (s ^. store . toPermRecruiter)) $ \(gId, p) ->
+      modifyTVar syncStore (Sync.toGroups . Sync.nodes . ix gId . Sync.recruiterPermission .~ p)
+    forM_ (Map.unfoldlM (s ^. store . toPermOther)) $ \(gId, permOther) -> do
+      forM_ (Map.unfoldlM (permOther ^. spacePermission)) $ \(sId, p) ->
+        modifyTVar syncStore (Sync.toSpacePermissions . at gId . non mempty . at sId ?~ p)
+      forM_ (Map.unfoldlM (permOther ^. entityPermission)) $ \(sId, p) ->
+        modifyTVar syncStore (Sync.toEntityPermissions . at gId . non mempty . at sId ?~ p)
+      forM_ (Map.unfoldlM (permOther ^. groupPermission)) $ \(gId', p) ->
+        modifyTVar syncStore (Sync.toGroupPermissions . at gId . non mempty . at gId' ?~ p)
+      forM_ (Map.unfoldlM (permOther ^. memberPermission)) $ \(gId', p) ->
+        modifyTVar syncStore (Sync.toMemberPermissions . at gId . non mempty . at gId' ?~ p)
+
+    readTVar syncStore
