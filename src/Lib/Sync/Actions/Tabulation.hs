@@ -203,7 +203,7 @@ tempFromStore s = execState go emptyTemp
 
   loadVersions :: State Temp ()
   loadVersions =
-    for_ (HM.toList (s ^. toVersions)) $ \(vId, v) -> do
+    for_ (HM.keysSet (s ^. toVersions)) $ \vId -> do
       t <- get
       case loadRefsAndSubs vId s t of
         Left e -> error (show e)

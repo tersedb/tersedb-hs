@@ -29,7 +29,15 @@ import Lib.Async.Types.Store (
   toTabRecruiter,
   toSpaces,
   toGroupsNext,
-  toTabUniverse, toSpacesHiddenTo, toRoots, toReferencesFrom, toSubscriptions, toSubscriptionsFrom, toReferences,
+  toSpaceOf,
+  toSpaceEntities,
+  toMemberOf,
+  toMembers,
+  toActors,
+  toEntities,
+  toVersions,
+  toEntityOf,
+  toTabUniverse, toSpacesHiddenTo, toRoots, toReferencesFrom, toSubscriptions, toSubscriptionsFrom, toReferences, toForks, toForksFrom,
  )
 import Lib.Async.Types.Tabulation (
   TabulatedPermissions,
@@ -39,12 +47,13 @@ import Lib.Async.Types.Tabulation (
   forSpaces,
  )
 import qualified Lib.Async.Types.Tabulation as Tab
-import Lib.Types.Id (GroupId, VersionId)
+import Lib.Types.Id (GroupId, VersionId, EntityId)
 import Lib.Types.Permission (CollectionPermission (Blind), escalate, CollectionPermissionWithExemption (CollectionPermissionWithExemption))
 import StmContainers.Map (Map)
 import qualified StmContainers.Set as Set
 import qualified StmContainers.Multimap as Multimap
 import qualified StmContainers.Map as Map
+import Data.Foldable (for_)
 
 mkSetInitTabulatedPermissions
   :: (MonadReader Shared m) => m (GroupId -> STM ())
@@ -140,3 +149,28 @@ mkRefsAndSubsLoader = do
       Multimap.insert vId refId (s ^. temp . toReferencesFrom)
     forM_ (Multimap.unfoldlMByKey vId (s ^. store. toSubscriptions)) $ \subId ->
       Multimap.insert vId subId (s ^. temp . toSubscriptionsFrom)
+
+mkForksLoader :: MonadReader Shared m => m (EntityId -> STM ())
+mkForksLoader = do
+  s <- ask
+  pure $ \eId -> do
+    mFork <- Map.lookup eId (s ^. store . toForks)
+    case mFork of
+      Nothing -> pure ()
+      Just forkId -> Multimap.insert eId forkId (s ^. temp . toForksFrom)
+
+mkTempFromStoreLoader :: MonadReader Shared m => m (STM ())
+mkTempFromStoreLoader = do
+  refsAndSubsLoader <- mkRefsAndSubsLoader
+  forksLoader <- mkForksLoader
+  s <- ask
+  pure $ do
+    forM_ (Set.unfoldlM (s ^. store . toVersions)) refsAndSubsLoader
+    forM_ (Map.unfoldlM (s ^. store . toEntities)) $ \(eId, vs) -> do
+      forksLoader eId
+      for_ vs $ \vId -> Map.insert eId vId (s ^. temp . toEntityOf)
+    forM_ (Set.unfoldlM (s ^. store . toActors)) $ \aId ->
+      forM_ (Multimap.unfoldlM (s ^. store . toMembers)) $ \(gId, aId') ->
+        when (aId == aId') $ Multimap.insert gId aId (s ^. temp . toMemberOf)
+    forM_ (Multimap.unfoldlM (s ^. store . toSpaceEntities)) $ \(sId, eId) ->
+      Map.insert sId eId (s ^. temp . toSpaceOf)

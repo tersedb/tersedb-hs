@@ -30,6 +30,7 @@ library
       Lib.Async.Actions.Tabulation
       Lib.Async.Actions.Unsafe.Store
       Lib.Async.Types.Store
+      Lib.Async.Types.Store.Iso
       Lib.Async.Types.Tabulation
       Lib.Sync.Actions.Gen
       Lib.Sync.Actions.Safe

@@ -10,12 +10,12 @@ import Lib.Types.Permission (
   CollectionPermissionWithExemption,
   SinglePermission,
  )
-import Lib.Types.Store.Entity (Entity)
 import StmContainers.Map (Map)
 import qualified StmContainers.Map as Map
 import StmContainers.Multimap (Multimap)
 import qualified StmContainers.Multimap as Multimap
 import StmContainers.Set (Set)
+import Data.List.NonEmpty (NonEmpty)
 
 data Temp = Temp
   { tempReferencesFrom :: Multimap VersionId VersionId
@@ -99,10 +99,15 @@ data Store = Store
   { storeGroupsPrev :: Map GroupId GroupId
   , storeGroupsNext :: Multimap GroupId GroupId
   , storeGroupMembers :: Multimap GroupId ActorId
+  , storeGroupRoots :: Set GroupId
+  , storeGroupEdges :: Set (GroupId, GroupId)
+  , storeGroupOuts :: Set GroupId
   , storeActors :: Set ActorId
   , storeSpaces :: Set SpaceId
   , storeSpaceEntities :: Multimap SpaceId EntityId
-  , storeEntities :: Map EntityId Entity
+  , storeEntities :: Map EntityId (NonEmpty VersionId)
+  , storeForks :: Map EntityId VersionId
+  , storeVersions :: Set VersionId
   , storeVersionReferences :: Multimap VersionId VersionId
   , storeVersionSubscriptions :: Multimap VersionId EntityId
   , storePermissionsPerGroupUniverse
@@ -111,28 +116,27 @@ data Store = Store
       :: Map GroupId CollectionPermissionWithExemption
   , storePermissionsPerGroupRecruiter :: Map GroupId CollectionPermission
   , storePermissionsPerGroupOther :: Map GroupId PermissionsPerGroup
-  , storeGroupRoots :: Set GroupId
-  , storeGroupEdges :: Set (GroupId, GroupId)
-  , storeGroupOuts :: Set GroupId
   }
   deriving (Generic)
 makeLensesFor
   [ ("storeGroupsPrev", "toGroupsPrev")
   , ("storeGroupsNext", "toGroupsNext")
   , ("storeGroupMembers", "toMembers")
+  , ("storeGroupRoots", "toRoots")
+  , ("storeGroupEdges", "toEdges")
+  , ("storeGroupOuts", "toOuts")
   , ("storeActors", "toActors")
   , ("storeSpaces", "toSpaces")
   , ("storeSpaceEntities", "toSpaceEntities")
   , ("storeEntities", "toEntities")
+  , ("storeForks", "toForks")
+  , ("storeVersions", "toVersions")
   , ("storeVersionReferences", "toReferences")
   , ("storeVersionSubscriptions", "toSubscriptions")
   , ("storePermissionsPerGroupUniverse", "toPermUniverse")
   , ("storePermissionsPerGroupOrganization", "toPermOrganization")
   , ("storePermissionsPerGroupRecruiter", "toPermRecruiter")
   , ("storePermissionsPerGroupOther", "toPermOther")
-  , ("storeGroupRoots", "toRoots")
-  , ("storeGroupEdges", "toEdges")
-  , ("storeGroupOuts", "toOuts")
   ]
   ''Store
 
