@@ -18,9 +18,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 You can reach me at athan.clark@gmail.com.
 -}
 
+import Spec.Async (asyncTests)
 import Spec.Sync (syncTests)
 import Test.Syd (describe, sydTest)
-import Spec.Async (asyncTests)
 
 main :: IO ()
 main = sydTest $ do

@@ -4,8 +4,9 @@ import Control.Concurrent.STM (STM)
 import Control.Lens (Lens', (^.))
 import Control.Monad (join, when)
 import Control.Monad.Reader (MonadReader (ask), MonadTrans (lift))
+import Data.Foldable (for_)
 import Data.Hashable (Hashable)
-import Data.Maybe (fromMaybe, fromJust)
+import Data.Maybe (fromJust, fromMaybe)
 import DeferredFolds.UnfoldlM (forM_)
 import Focus (Focus)
 import qualified Focus
@@ -19,25 +20,33 @@ import Lib.Async.Types.Store (
   spacePermission,
   store,
   temp,
+  toActors,
+  toEntities,
+  toEntityOf,
+  toForks,
+  toForksFrom,
+  toGroupsNext,
   toGroupsPrev,
+  toMemberOf,
+  toMembers,
   toPermOrganization,
   toPermOther,
   toPermRecruiter,
   toPermUniverse,
+  toReferences,
+  toReferencesFrom,
+  toRoots,
+  toSpaceEntities,
+  toSpaceOf,
+  toSpaces,
+  toSpacesHiddenTo,
+  toSubscriptions,
+  toSubscriptionsFrom,
   toTabOrganization,
   toTabOther,
   toTabRecruiter,
-  toSpaces,
-  toGroupsNext,
-  toSpaceOf,
-  toSpaceEntities,
-  toMemberOf,
-  toMembers,
-  toActors,
-  toEntities,
+  toTabUniverse,
   toVersions,
-  toEntityOf,
-  toTabUniverse, toSpacesHiddenTo, toRoots, toReferencesFrom, toSubscriptions, toSubscriptionsFrom, toReferences, toForks, toForksFrom,
  )
 import Lib.Async.Types.Tabulation (
   TabulatedPermissions,
@@ -47,13 +56,16 @@ import Lib.Async.Types.Tabulation (
   forSpaces,
  )
 import qualified Lib.Async.Types.Tabulation as Tab
-import Lib.Types.Id (GroupId, VersionId, EntityId)
-import Lib.Types.Permission (CollectionPermission (Blind), escalate, CollectionPermissionWithExemption (CollectionPermissionWithExemption))
+import Lib.Types.Id (EntityId, GroupId, VersionId)
+import Lib.Types.Permission (
+  CollectionPermission (Blind),
+  CollectionPermissionWithExemption (CollectionPermissionWithExemption),
+  escalate,
+ )
 import StmContainers.Map (Map)
-import qualified StmContainers.Set as Set
-import qualified StmContainers.Multimap as Multimap
 import qualified StmContainers.Map as Map
-import Data.Foldable (for_)
+import qualified StmContainers.Multimap as Multimap
+import qualified StmContainers.Set as Set
 
 mkSetInitTabulatedPermissions
   :: (MonadReader Shared m) => m (GroupId -> STM ())
@@ -90,15 +102,15 @@ mkUpdateTabulatedPermissionsStartingAt = do
         mParent <- Map.lookup gId (s ^. store . toGroupsPrev)
         let overProj :: (Bounded a, Semigroup a) => Lens' Temp (Map GroupId a) -> STM ()
             overProj proj = Map.focus go gId (s ^. temp . proj)
-              where
-                go = do
-                  init <- fromMaybe minBound <$> Focus.lookup
-                  new <- case mParent of
-                    Nothing -> pure init
-                    Just parent -> do
-                      parent <- fromMaybe minBound <$> lift (Map.lookup parent (s ^. temp . proj))
-                      pure (parent <> init)
-                  Focus.insert new
+             where
+              go = do
+                init <- fromMaybe minBound <$> Focus.lookup
+                new <- case mParent of
+                  Nothing -> pure init
+                  Just parent -> do
+                    parent <- fromMaybe minBound <$> lift (Map.lookup parent (s ^. temp . proj))
+                    pure (parent <> init)
+                Focus.insert new
         overProj toTabUniverse
         overProj toTabOrganization
         overProj toTabRecruiter
@@ -109,7 +121,9 @@ mkUpdateTabulatedPermissionsStartingAt = do
             parentTabOther <-
               maybe Tab.new pure =<< Map.lookup parent (s ^. temp . toTabOther)
             let overProjOther
-                  :: (Hashable k) => Lens' TabulatedPermissions (Map k CollectionPermission) -> STM ()
+                  :: (Hashable k)
+                  => Lens' TabulatedPermissions (Map k CollectionPermission)
+                  -> STM ()
                 overProjOther proj = do
                   forM_ (Map.unfoldlM (parentTabOther ^. proj)) $ \(sId, p) ->
                     Map.focus (Focus.alter (Just . maybe p (<> p))) sId (tabOther ^. proj)
@@ -134,23 +148,22 @@ mkUpdateTabulatedPermissionsStartingAt = do
         forM_ (Multimap.unfoldlMByKey gId (s ^. store . toGroupsNext)) updateTab
   pure updateTab
 
-
-resetTabulation :: MonadReader Shared m => m (STM ())
+resetTabulation :: (MonadReader Shared m) => m (STM ())
 resetTabulation = do
   updateTab <- mkUpdateTabulatedPermissionsStartingAt
   s <- ask
   pure $ forM_ (Set.unfoldlM (s ^. store . toRoots)) updateTab
 
-mkRefsAndSubsLoader :: MonadReader Shared m => m (VersionId -> STM ())
+mkRefsAndSubsLoader :: (MonadReader Shared m) => m (VersionId -> STM ())
 mkRefsAndSubsLoader = do
   s <- ask
   pure $ \vId -> do
     forM_ (Multimap.unfoldlMByKey vId (s ^. store . toReferences)) $ \refId ->
       Multimap.insert vId refId (s ^. temp . toReferencesFrom)
-    forM_ (Multimap.unfoldlMByKey vId (s ^. store. toSubscriptions)) $ \subId ->
+    forM_ (Multimap.unfoldlMByKey vId (s ^. store . toSubscriptions)) $ \subId ->
       Multimap.insert vId subId (s ^. temp . toSubscriptionsFrom)
 
-mkForksLoader :: MonadReader Shared m => m (EntityId -> STM ())
+mkForksLoader :: (MonadReader Shared m) => m (EntityId -> STM ())
 mkForksLoader = do
   s <- ask
   pure $ \eId -> do
@@ -159,7 +172,7 @@ mkForksLoader = do
       Nothing -> pure ()
       Just forkId -> Multimap.insert eId forkId (s ^. temp . toForksFrom)
 
-mkTempFromStoreLoader :: MonadReader Shared m => m (STM ())
+mkTempFromStoreLoader :: (MonadReader Shared m) => m (STM ())
 mkTempFromStoreLoader = do
   refsAndSubsLoader <- mkRefsAndSubsLoader
   forksLoader <- mkForksLoader

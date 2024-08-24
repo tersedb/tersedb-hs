@@ -2,6 +2,7 @@ module Lib.Async.Types.Store where
 
 import Control.Concurrent.STM (STM)
 import Control.Lens.TH (makeLensesFor)
+import Data.List.NonEmpty (NonEmpty)
 import GHC.Generics (Generic)
 import Lib.Async.Types.Tabulation (TabulatedPermissions)
 import Lib.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
@@ -16,7 +17,6 @@ import StmContainers.Multimap (Multimap)
 import qualified StmContainers.Multimap as Multimap
 import StmContainers.Set (Set)
 import qualified StmContainers.Set as Set
-import Data.List.NonEmpty (NonEmpty)
 
 data Temp = Temp
   { tempReferencesFrom :: Multimap VersionId VersionId
@@ -161,26 +161,27 @@ newStore = do
   os <- Map.new
   rs <- Map.new
   oths <- Map.new
-  pure Store
-    { storeGroupsPrev = prev
-    , storeGroupsNext = next
-    , storeGroupMembers = members
-    , storeGroupRoots = roots
-    , storeGroupEdges = edges
-    , storeGroupOuts = outs
-    , storeActors = as
-    , storeSpaces = ss
-    , storeSpaceEntities = se
-    , storeEntities = es
-    , storeForks = fs
-    , storeVersions = vs
-    , storeVersionReferences = refs
-    , storeVersionSubscriptions = subs
-    , storePermissionsPerGroupUniverse = us
-    , storePermissionsPerGroupOrganization = os
-    , storePermissionsPerGroupRecruiter = rs
-    , storePermissionsPerGroupOther = oths
-    }
+  pure
+    Store
+      { storeGroupsPrev = prev
+      , storeGroupsNext = next
+      , storeGroupMembers = members
+      , storeGroupRoots = roots
+      , storeGroupEdges = edges
+      , storeGroupOuts = outs
+      , storeActors = as
+      , storeSpaces = ss
+      , storeSpaceEntities = se
+      , storeEntities = es
+      , storeForks = fs
+      , storeVersions = vs
+      , storeVersionReferences = refs
+      , storeVersionSubscriptions = subs
+      , storePermissionsPerGroupUniverse = us
+      , storePermissionsPerGroupOrganization = os
+      , storePermissionsPerGroupRecruiter = rs
+      , storePermissionsPerGroupOther = oths
+      }
 
 data Shared = Shared
   { sharedStore :: Store
