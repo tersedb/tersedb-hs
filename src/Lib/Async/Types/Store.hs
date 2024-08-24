@@ -100,7 +100,8 @@ data Store = Store
   , storeGroupsNext :: Multimap GroupId GroupId
   , storeGroupMembers :: Multimap GroupId ActorId
   , storeActors :: Set ActorId
-  , storeSpaces :: Multimap SpaceId EntityId
+  , storeSpaces :: Set SpaceId
+  , storeSpaceEntities :: Multimap SpaceId EntityId
   , storeEntities :: Map EntityId Entity
   , storeVersionReferences :: Multimap VersionId VersionId
   , storeVersionSubscriptions :: Multimap VersionId EntityId
@@ -121,6 +122,7 @@ makeLensesFor
   , ("storeGroupMembers", "toMembers")
   , ("storeActors", "toActors")
   , ("storeSpaces", "toSpaces")
+  , ("storeSpaceEntities", "toSpaceEntities")
   , ("storeEntities", "toEntities")
   , ("storeVersionReferences", "toReferences")
   , ("storeVersionSubscriptions", "toSubscriptions")

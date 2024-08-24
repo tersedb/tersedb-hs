@@ -171,11 +171,11 @@ loadRefsAndSubs vId s t =
  where
   storeRefs refId t =
     t
-      & toReferencesFrom . at refId . non mempty . at vId .~ Just ()
+      & toReferencesFrom . at refId . non mempty . at vId ?~ ()
 
   storeSubs subId t =
     t
-      & toSubscriptionsFrom . at subId . non mempty . at vId .~ Just ()
+      & toSubscriptionsFrom . at subId . non mempty . at vId ?~ ()
 
 loadForks
   :: EntityId
@@ -183,10 +183,10 @@ loadForks
   -> Temp
   -> Temp
 loadForks eId s t =
-  let go (eId, e) t = case e ^. fork of
+  let go e t = case e ^. fork of
         Nothing -> t
-        Just refId -> t & toForksFrom . at refId . non mempty . at eId .~ Just ()
-   in foldr go t (HM.toList (s ^. toEntities))
+        Just refId -> t & toForksFrom . at refId . non mempty . at eId ?~ ()
+   in foldr go t (HM.lookup eId (s ^. toEntities))
 
 tempFromStore :: Store -> Temp
 tempFromStore s = execState go emptyTemp

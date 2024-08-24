@@ -2,10 +2,10 @@ module Lib.Async.Actions.Tabulation where
 
 import Control.Concurrent.STM (STM)
 import Control.Lens (Lens', (^.))
-import Control.Monad (join)
+import Control.Monad (join, when)
 import Control.Monad.Reader (MonadReader (ask), MonadTrans (lift))
 import Data.Hashable (Hashable)
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, fromJust)
 import DeferredFolds.UnfoldlM (forM_)
 import Focus (Focus)
 import qualified Focus
@@ -27,7 +27,9 @@ import Lib.Async.Types.Store (
   toTabOrganization,
   toTabOther,
   toTabRecruiter,
-  toTabUniverse,
+  toSpaces,
+  toGroupsNext,
+  toTabUniverse, toSpacesHiddenTo, toRoots, toReferencesFrom, toSubscriptions, toSubscriptionsFrom, toReferences,
  )
 import Lib.Async.Types.Tabulation (
   TabulatedPermissions,
@@ -37,9 +39,11 @@ import Lib.Async.Types.Tabulation (
   forSpaces,
  )
 import qualified Lib.Async.Types.Tabulation as Tab
-import Lib.Types.Id (GroupId)
-import Lib.Types.Permission (CollectionPermission, escalate)
+import Lib.Types.Id (GroupId, VersionId)
+import Lib.Types.Permission (CollectionPermission (Blind), escalate, CollectionPermissionWithExemption (CollectionPermissionWithExemption))
 import StmContainers.Map (Map)
+import qualified StmContainers.Set as Set
+import qualified StmContainers.Multimap as Multimap
 import qualified StmContainers.Map as Map
 
 mkSetInitTabulatedPermissions
@@ -71,35 +75,68 @@ mkUpdateTabulatedPermissionsStartingAt
 mkUpdateTabulatedPermissionsStartingAt = do
   setInitTab <- mkSetInitTabulatedPermissions
   s <- ask
-  pure $ \gId -> do
-    setInitTab gId
-    mParent <- Map.lookup gId (s ^. store . toGroupsPrev)
-    let overProj :: (Bounded a, Semigroup a) => Lens' Temp (Map GroupId a) -> STM ()
-        overProj proj = Map.focus go gId (s ^. temp . proj)
-         where
-          go = do
-            initUniv <- fromMaybe minBound <$> Focus.lookup
-            newUniv <- case mParent of
-              Nothing -> pure initUniv
-              Just parent -> do
-                parentUniv <- fromMaybe minBound <$> lift (Map.lookup parent (s ^. temp . proj))
-                pure (parentUniv <> initUniv)
-            Focus.insert newUniv
-    overProj toTabUniverse
-    overProj toTabOrganization
-    overProj toTabRecruiter
-    tabOther <- maybe Tab.new pure =<< Map.lookup gId (s ^. temp . toTabOther)
-    case mParent of
-      Nothing -> pure ()
-      Just parent -> do
-        parentTabOther <-
-          maybe Tab.new pure =<< Map.lookup parent (s ^. temp . toTabOther)
-        let overProjOther
-              :: (Hashable k) => Lens' TabulatedPermissions (Map k CollectionPermission) -> STM ()
-            overProjOther proj = do
-              forM_ (Map.unfoldlM (parentTabOther ^. proj)) $ \(sId, p) ->
-                Map.focus (Focus.alter (Just . maybe p (<> p))) sId (tabOther ^. proj)
-        overProjOther forSpaces
-        overProjOther forEntities
-        overProjOther forGroups
-        overProjOther forMembers
+  let updateTab :: GroupId -> STM ()
+      updateTab gId = do
+        setInitTab gId
+        mParent <- Map.lookup gId (s ^. store . toGroupsPrev)
+        let overProj :: (Bounded a, Semigroup a) => Lens' Temp (Map GroupId a) -> STM ()
+            overProj proj = Map.focus go gId (s ^. temp . proj)
+              where
+                go = do
+                  init <- fromMaybe minBound <$> Focus.lookup
+                  new <- case mParent of
+                    Nothing -> pure init
+                    Just parent -> do
+                      parent <- fromMaybe minBound <$> lift (Map.lookup parent (s ^. temp . proj))
+                      pure (parent <> init)
+                  Focus.insert new
+        overProj toTabUniverse
+        overProj toTabOrganization
+        overProj toTabRecruiter
+        tabOther <- fromJust <$> Map.lookup gId (s ^. temp . toTabOther)
+        case mParent of
+          Nothing -> pure ()
+          Just parent -> do
+            parentTabOther <-
+              maybe Tab.new pure =<< Map.lookup parent (s ^. temp . toTabOther)
+            let overProjOther
+                  :: (Hashable k) => Lens' TabulatedPermissions (Map k CollectionPermission) -> STM ()
+                overProjOther proj = do
+                  forM_ (Map.unfoldlM (parentTabOther ^. proj)) $ \(sId, p) ->
+                    Map.focus (Focus.alter (Just . maybe p (<> p))) sId (tabOther ^. proj)
+            overProjOther forSpaces
+            overProjOther forEntities
+            overProjOther forGroups
+            overProjOther forMembers
+        univPerm <- fromJust <$> Map.lookup gId (s ^. temp . toTabUniverse)
+        let hideSpace sId =
+              Multimap.insert gId sId (s ^. temp . toSpacesHiddenTo)
+            makeSpaceVisible sId =
+              Multimap.delete gId sId (s ^. temp . toSpacesHiddenTo)
+        case univPerm of
+          CollectionPermissionWithExemption Blind _ ->
+            forM_ (Set.unfoldlM (s ^. store . toSpaces)) hideSpace
+          CollectionPermissionWithExemption _ True ->
+            forM_ (Set.unfoldlM (s ^. store . toSpaces)) makeSpaceVisible
+          CollectionPermissionWithExemption _ False ->
+            -- FIXME what if the space hasn't been listed? Like how I want to make entries spotty if they rely on universe setting
+            forM_ (Map.unfoldlM (tabOther ^. forSpaces)) $ \(sId, p) ->
+              if p == Blind then hideSpace sId else makeSpaceVisible sId
+        forM_ (Multimap.unfoldlMByKey gId (s ^. store . toGroupsNext)) updateTab
+  pure updateTab
+
+
+resetTabulation :: MonadReader Shared m => m (STM ())
+resetTabulation = do
+  updateTab <- mkUpdateTabulatedPermissionsStartingAt
+  s <- ask
+  pure $ forM_ (Set.unfoldlM (s ^. store . toRoots)) updateTab
+
+mkRefsAndSubsLoader :: MonadReader Shared m => m (VersionId -> STM ())
+mkRefsAndSubsLoader = do
+  s <- ask
+  pure $ \vId -> do
+    forM_ (Multimap.unfoldlMByKey vId (s ^. store . toReferences)) $ \refId ->
+      Multimap.insert vId refId (s ^. temp . toReferencesFrom)
+    forM_ (Multimap.unfoldlMByKey vId (s ^. store. toSubscriptions)) $ \subId ->
+      Multimap.insert vId subId (s ^. temp . toSubscriptionsFrom)
