@@ -43,7 +43,6 @@ import Lib.Sync.Actions.Unsafe.Remove (
   unsafeRemoveSpace,
   unsafeRemoveVersion,
  )
-import Lib.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
 import Lib.Sync.Types.Store (
   Shared,
   store,
@@ -52,6 +51,7 @@ import Lib.Sync.Types.Store (
   toSpaces,
   toSubscriptionsFrom,
  )
+import Lib.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
 
 removeVersion
   :: (MonadState Shared m)

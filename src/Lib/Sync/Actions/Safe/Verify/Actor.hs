@@ -26,12 +26,12 @@ import Control.Monad.State (MonadState)
 import Data.List.NonEmpty (NonEmpty)
 import qualified Data.List.NonEmpty as NE
 import Lib.Sync.Actions.Safe.Verify.Utils (canDo)
+import Lib.Sync.Types.Store (Shared)
+import Lib.Sync.Types.Store.Tabulation.Group (forRecruiter)
 import Lib.Types.Id (ActorId)
 import Lib.Types.Permission (
   CollectionPermission (..),
  )
-import Lib.Sync.Types.Store (Shared)
-import Lib.Sync.Types.Store.Tabulation.Group (forRecruiter)
 
 canReadActor :: (MonadState Shared m) => ActorId -> m Bool
 canReadActor reader =

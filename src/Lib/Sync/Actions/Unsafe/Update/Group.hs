@@ -33,13 +33,13 @@ module Lib.Sync.Actions.Unsafe.Update.Group (
   unsafeAdjustMemberPermission,
 ) where
 
+import Control.Lens (Lens', at, ix, non, (%~), (&), (.~), (^.), (^?), _Just)
+import Control.Monad.State (MonadState (get, put), modify, runState)
+import Data.Foldable (foldlM, for_)
+import Data.HashSet (HashSet)
+import qualified Data.HashSet as HS
+import Data.Maybe (fromJust)
 import Lib.Sync.Actions.Tabulation (updateTabulationStartingAt)
-import Lib.Types.Id (GroupId, SpaceId)
-import Lib.Types.Permission (
-  CollectionPermission (..),
-  CollectionPermissionWithExemption,
-  SinglePermission,
- )
 import Lib.Sync.Types.Store (
   Shared (..),
   store,
@@ -62,13 +62,12 @@ import Lib.Sync.Types.Store.Groups (
   roots,
   universePermission,
  )
-
-import Control.Lens (Lens', at, ix, non, (%~), (&), (.~), (^.), (^?), _Just)
-import Control.Monad.State (MonadState (get, put), modify, runState)
-import Data.Foldable (foldlM, for_)
-import Data.HashSet (HashSet)
-import qualified Data.HashSet as HS
-import Data.Maybe (fromJust)
+import Lib.Types.Id (GroupId, SpaceId)
+import Lib.Types.Permission (
+  CollectionPermission (..),
+  CollectionPermissionWithExemption,
+  SinglePermission,
+ )
 
 data LinkGroupError
   = CycleDetected [GroupId]

@@ -58,7 +58,7 @@ import Lib.Sync.Types.Store (
   toVersions,
   toSpaceOf,
  )
-import Lib.Sync.Types.Store.Entity (fork, versions)
+import Lib.Types.Store.Entity (fork, versions)
 import Lib.Sync.Types.Store.Groups (edges, members, nodes)
 import Lib.Sync.Types.Store.Tabulation.Group (hasLessOrEqualPermissionsTo)
 import Lib.Sync.Types.Store.Version (references, subscriptions)

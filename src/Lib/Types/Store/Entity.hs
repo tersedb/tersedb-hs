@@ -18,7 +18,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 You can reach me at athan.clark@gmail.com.
 -}
 
-module Lib.Sync.Types.Store.Entity (Entity, versions, fork, initEntity) where
+module Lib.Types.Store.Entity (Entity, versions, fork, initEntity) where
 
 import Lib.Types.Id (VersionId)
 

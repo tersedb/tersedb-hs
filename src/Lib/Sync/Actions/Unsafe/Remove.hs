@@ -20,7 +20,7 @@ You can reach me at athan.clark@gmail.com.
 
 module Lib.Sync.Actions.Unsafe.Remove where
 
-import Control.Lens (at, ix, non, (%~), (.~), (^.), _Left, (^?!))
+import Control.Lens (at, ix, non, (%~), (.~), (^.), (^?!), _Left)
 import Control.Monad.State (MonadState (get, put), modify, runState)
 import Data.Foldable (foldlM, for_)
 import qualified Data.List.NonEmpty as NE
@@ -30,23 +30,21 @@ import Lib.Sync.Actions.Unsafe.Update (
   unsafeUpdateFork,
  )
 import Lib.Sync.Actions.Unsafe.Update.Group (unsafeUnlinkGroups)
-import Lib.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
 import Lib.Sync.Types.Store (
   Shared,
   store,
   temp,
   toActors,
-  toMemberOf,
   toEntities,
+  toEntityOf,
   toForksFrom,
   toGroups,
+  toMemberOf,
   toReferencesFrom,
   toSpaces,
   toSubscriptionsFrom,
   toVersions,
-  toEntityOf,
  )
-import Lib.Sync.Types.Store.Entity (versions)
 import Lib.Sync.Types.Store.Groups (
   emptyGroup,
   members,
@@ -57,6 +55,8 @@ import Lib.Sync.Types.Store.Groups (
   roots,
  )
 import Lib.Sync.Types.Store.Version (references, subscriptions)
+import Lib.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
+import Lib.Types.Store.Entity (versions)
 
 -- | Deletes a version from an entity iff. there's another replacement version in it
 unsafeRemoveVersion

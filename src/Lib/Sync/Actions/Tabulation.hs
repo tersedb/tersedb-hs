@@ -20,12 +20,13 @@ You can reach me at athan.clark@gmail.com.
 
 module Lib.Sync.Actions.Tabulation where
 
-import Lib.Types.Id (EntityId, GroupId, VersionId)
-import Lib.Types.Permission (
-  CollectionPermission (Blind),
-  CollectionPermissionWithExemption (..),
-  escalate,
- )
+import Control.Lens (at, ix, non, (&), (.~), (?~), (^.))
+import Control.Monad.Extra (when)
+import Control.Monad.State (MonadState (get, put), State, execState, modify)
+import Data.Foldable (foldlM, for_, traverse_)
+import qualified Data.HashMap.Strict as HM
+import qualified Data.HashSet as HS
+import Data.Maybe (fromMaybe)
 import Lib.Sync.Types.Store (
   Shared (..),
   Store,
@@ -33,26 +34,26 @@ import Lib.Sync.Types.Store (
   emptyTemp,
   store,
   temp,
+  toActors,
   toEntities,
+  toEntityOf,
   toEntityPermissions,
   toForksFrom,
   toGroupPermissions,
   toGroups,
+  toMemberOf,
   toMemberPermissions,
   toReferencesFrom,
+  toSpaceOf,
   toSpacePermissions,
   toSpaces,
-  toMemberOf,
-  toActors,
-  toSpaceOf,
   toSpacesHiddenTo,
   toSubscriptionsFrom,
   toTabulatedGroups,
   toVersions,
-  toEntityOf
  )
-import Lib.Sync.Types.Store.Entity (fork, versions)
 import Lib.Sync.Types.Store.Groups (
+  members,
   next,
   nodes,
   organizationPermission,
@@ -60,7 +61,6 @@ import Lib.Sync.Types.Store.Groups (
   recruiterPermission,
   roots,
   universePermission,
-  members,
  )
 import Lib.Sync.Types.Store.Tabulation.Group (
   TabulatedPermissionsForGroup (..),
@@ -71,13 +71,13 @@ import Lib.Sync.Types.Store.Version (
   references,
   subscriptions,
  )
-import Control.Lens (at, ix, non, (&), (.~), (^.), (?~))
-import Control.Monad.State (MonadState (get, put), State, execState, modify)
-import Control.Monad.Extra (when)
-import Data.Foldable (foldlM, for_, traverse_)
-import qualified Data.HashMap.Strict as HM
-import qualified Data.HashSet as HS
-import Data.Maybe (fromMaybe)
+import Lib.Types.Id (EntityId, GroupId, VersionId)
+import Lib.Types.Permission (
+  CollectionPermission (Blind),
+  CollectionPermissionWithExemption (..),
+  escalate,
+ )
+import Lib.Types.Store.Entity (fork, versions)
 
 {- | Gets an initial tabulation for a specific group; assumes the group is a root
 node, and isn't inheriting any other groups.
@@ -219,7 +219,8 @@ tempFromStore s = execState go emptyTemp
     for_ (s ^. toActors) $ \aId ->
       for_ (HM.toList $ s ^. toGroups . nodes) $ \(gId, g) ->
         when (aId `HS.member` (g ^. members)) $
-          modify $ toMemberOf . at aId . non mempty . at gId ?~ ()
+          modify $
+            toMemberOf . at aId . non mempty . at gId ?~ ()
 
   loadSpaceOf :: State Temp ()
   loadSpaceOf =

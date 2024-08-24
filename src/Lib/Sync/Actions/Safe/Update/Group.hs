@@ -50,18 +50,18 @@ import Lib.Sync.Actions.Unsafe.Update.Group (
   unsafeUpdateGroupChildren,
   unsafeUpdateGroupParent,
  )
-import Lib.Types.Id (ActorId, GroupId, SpaceId)
-import Lib.Types.Permission (
-  CollectionPermission (..),
-  CollectionPermissionWithExemption (..),
-  SinglePermission (..),
- )
 import Lib.Sync.Types.Store (Shared, store, toGroups)
 import Lib.Sync.Types.Store.Groups (next, nodes, prev)
 import Lib.Sync.Types.Store.Tabulation.Group (
   forOrganization,
   forRecruiter,
   forUniverse,
+ )
+import Lib.Types.Id (ActorId, GroupId, SpaceId)
+import Lib.Types.Permission (
+  CollectionPermission (..),
+  CollectionPermissionWithExemption (..),
+  SinglePermission (..),
  )
 
 linkGroups

@@ -41,10 +41,10 @@ import Lib.Sync.Actions.Unsafe.Store (
   unsafeStoreSpace,
   unsafeStoreVersion,
  )
-import Lib.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
 import Lib.Sync.Types.Store (
   Shared,
  )
+import Lib.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
 
 storeGroup
   :: (MonadState Shared m)

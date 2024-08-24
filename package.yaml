@@ -42,8 +42,10 @@ dependencies:
   - aeson
   - base16-bytestring
   - bytestring
+  - deferred-folds
   - deriving-aeson
   - extra
+  - focus
   - hashable
   - lens
   - mtl

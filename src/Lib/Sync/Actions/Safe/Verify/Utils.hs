@@ -20,13 +20,6 @@ You can reach me at athan.clark@gmail.com.
 
 module Lib.Sync.Actions.Safe.Verify.Utils where
 
-import Lib.Types.Id (ActorId)
-import Lib.Types.Permission (
-  CollectionPermission,
-  CollectionPermissionWithExemption,
-  collectionPermission,
-  HasMinimumPermission (..),
- )
 import Lib.Sync.Types.Store (
   Shared,
   temp,
@@ -35,6 +28,13 @@ import Lib.Sync.Types.Store (
  )
 import Lib.Sync.Types.Store.Tabulation.Group (
   TabulatedPermissionsForGroup (..),
+ )
+import Lib.Types.Id (ActorId)
+import Lib.Types.Permission (
+  CollectionPermission,
+  CollectionPermissionWithExemption,
+  HasMinimumPermission (..),
+  collectionPermission,
  )
 
 import Control.Lens (Lens', at, non, (^.))

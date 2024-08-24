@@ -47,16 +47,16 @@ import Lib.Sync.Actions.Unsafe.Update (
   unsafeUpdateVersionReferences,
   unsafeUpdateVersionSubscriptions,
  )
-import Lib.Types.Id (ActorId, EntityId, SpaceId, VersionId)
 import Lib.Sync.Types.Store (
   Shared,
   store,
   temp,
+  toEntityOf,
+  toSpaceOf,
   toSpaces,
   toVersions,
-  toSpaceOf,
-  toEntityOf,
  )
+import Lib.Types.Id (ActorId, EntityId, SpaceId, VersionId)
 
 -- | Moving an entity between spaces requires delete authority on the current space, and create authority on the destination space
 updateEntitySpace

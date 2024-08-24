@@ -40,12 +40,12 @@ import Lib.Sync.Actions.Unsafe.Update.Group (
   unsafeAdjustRecruiterPermission,
   unsafeAdjustUniversePermission,
  )
+import Lib.Sync.Types.Store (Shared)
 import Lib.Types.Id (ActorId, GroupId)
 import Lib.Types.Permission (
   CollectionPermission (..),
   CollectionPermissionWithExemption (..),
  )
-import Lib.Sync.Types.Store (Shared)
 
 import Control.Monad.State (execState)
 

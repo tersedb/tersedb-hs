@@ -52,6 +52,26 @@ import Lib.Sync.Actions.Safe.Verify.Utils (
   canDoWithTab,
   withCollectionPermission,
  )
+import Lib.Sync.Types.Store (
+  Shared,
+  store,
+  temp,
+  toEntities,
+  toEntityOf,
+  toForksFrom,
+  toMemberOf,
+  toReferencesFrom,
+  toSpaceOf,
+  toSpaces,
+  toSpacesHiddenTo,
+  toSubscriptionsFrom,
+  toVersions,
+ )
+import Lib.Sync.Types.Store.Tabulation.Group (
+  forEntities,
+  forSpaces,
+  forUniverse,
+ )
 import Lib.Types.Id (ActorId, EntityId, SpaceId, VersionId)
 import Lib.Types.Permission (
   CollectionPermission (..),
@@ -60,27 +80,7 @@ import Lib.Types.Permission (
   collectionPermission,
   escalate,
  )
-import Lib.Sync.Types.Store (
-  Shared,
-  store,
-  temp,
-  toMemberOf,
-  toEntities,
-  toForksFrom,
-  toReferencesFrom,
-  toSpaces,
-  toSpacesHiddenTo,
-  toSubscriptionsFrom,
-  toVersions,
-  toSpaceOf,
-  toEntityOf,
- )
-import Lib.Sync.Types.Store.Entity (versions)
-import Lib.Sync.Types.Store.Tabulation.Group (
-  forEntities,
-  forSpaces,
-  forUniverse,
- )
+import Lib.Types.Store.Entity (versions)
 
 -- * Spaces
 

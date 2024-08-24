@@ -37,6 +37,8 @@ import Lib.Sync.Actions.Safe.Verify.Utils (
   canDoWithTab,
   withCollectionPermission,
  )
+import Lib.Sync.Types.Store (Shared)
+import Lib.Sync.Types.Store.Tabulation.Group (forGroups, forOrganization)
 import Lib.Types.Id (ActorId, GroupId)
 import Lib.Types.Permission (
   CollectionPermission (..),
@@ -44,8 +46,6 @@ import Lib.Types.Permission (
   collectionPermission,
   escalate,
  )
-import Lib.Sync.Types.Store (Shared)
-import Lib.Sync.Types.Store.Tabulation.Group (forGroups, forOrganization)
 
 canReadGroup :: (MonadState Shared m) => ActorId -> GroupId -> m Bool
 canReadGroup reader gId = do

@@ -27,7 +27,10 @@ source-repository head
 
 library
   exposed-modules:
+      Lib.Async.Actions.Tabulation
+      Lib.Async.Actions.Unsafe.Store
       Lib.Async.Types.Store
+      Lib.Async.Types.Tabulation
       Lib.Sync.Actions.Gen
       Lib.Sync.Actions.Safe
       Lib.Sync.Actions.Safe.Remove
@@ -48,12 +51,12 @@ library
       Lib.Sync.Actions.Unsafe.Update.Group
       Lib.Sync.Types.Monad
       Lib.Sync.Types.Store
-      Lib.Sync.Types.Store.Entity
       Lib.Sync.Types.Store.Groups
       Lib.Sync.Types.Store.Tabulation.Group
       Lib.Sync.Types.Store.Version
       Lib.Types.Id
       Lib.Types.Permission
+      Lib.Types.Store.Entity
   other-modules:
       Paths_tersedb
   autogen-modules:
@@ -84,8 +87,10 @@ library
     , base >=4.7 && <5
     , base16-bytestring
     , bytestring
+    , deferred-folds
     , deriving-aeson
     , extra
+    , focus
     , hashable
     , lens
     , mtl
@@ -130,8 +135,10 @@ executable tersedb-hs
     , base >=4.7 && <5
     , base16-bytestring
     , bytestring
+    , deferred-folds
     , deriving-aeson
     , extra
+    , focus
     , hashable
     , lens
     , mtl
@@ -188,8 +195,10 @@ test-suite tersedb-test
     , base >=4.7 && <5
     , base16-bytestring
     , bytestring
+    , deferred-folds
     , deriving-aeson
     , extra
+    , focus
     , hashable
     , lens
     , mtl

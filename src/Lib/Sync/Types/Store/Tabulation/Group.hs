@@ -32,6 +32,12 @@ import qualified Data.HashMap.Strict as HM
 import Test.QuickCheck (Arbitrary (arbitrary))
 
 -- TODO tabulate groups that actors belong to, omitting redundant groups already inherited
+-- FIXME invariants:
+--  - Spaces - values present should not equal universe value if not exempt
+--  - Groups - values present should not equal organization value if not exempt
+--  - Spaces - values present should not be less than or equal to universe if exempt
+--  - Groups - values present should not be less than or equal to universe if exempt
+--  - Entities & Members - always have to be declared explicitly
 
 data TabulatedPermissionsForGroup = TabulatedPermissionsForGroup
   { tabulatedPermissionsForGroupUniverse :: CollectionPermissionWithExemption

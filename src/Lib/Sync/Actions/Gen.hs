@@ -30,8 +30,8 @@ import Lib.Sync.Actions.Safe.Store (
   storeNextVersion,
   storeSpace,
  )
-import Lib.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
 import Lib.Sync.Types.Monad (SheepdogM)
+import Lib.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
 import System.Random.Stateful (Uniform (uniformM), globalStdGen)
 
 generateWithAuthority

@@ -23,15 +23,15 @@ module Lib.Sync.Types.Store where
 import Control.Lens.TH (makeLensesFor)
 import Data.HashMap.Strict (HashMap)
 import Data.HashSet (HashSet)
+import Lib.Sync.Types.Store.Groups (Groups)
+import Lib.Sync.Types.Store.Tabulation.Group (TabulatedPermissionsForGroup)
+import Lib.Sync.Types.Store.Version (Version)
 import Lib.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
 import Lib.Types.Permission (
   CollectionPermission,
   SinglePermission,
  )
-import Lib.Sync.Types.Store.Entity (Entity)
-import Lib.Sync.Types.Store.Groups (Groups)
-import Lib.Sync.Types.Store.Tabulation.Group (TabulatedPermissionsForGroup)
-import Lib.Sync.Types.Store.Version (Version)
+import Lib.Types.Store.Entity (Entity)
 
 data Temp = Temp
   { tempReferencesFrom :: HashMap VersionId (HashSet VersionId)

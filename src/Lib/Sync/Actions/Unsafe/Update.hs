@@ -20,30 +20,30 @@ You can reach me at athan.clark@gmail.com.
 
 module Lib.Sync.Actions.Unsafe.Update where
 
-import Control.Lens (at, ix, non, (%~), (&), (.~), (^.), (^?), (?~))
+import Control.Lens (at, ix, non, (%~), (&), (.~), (?~), (^.), (^?))
 import Control.Monad.State (MonadState (get, put), modify)
 import Data.HashSet (HashSet)
 import qualified Data.HashSet as HS
 import Data.List (elemIndex)
 import qualified Data.List.NonEmpty as NE
 import Data.Maybe (fromJust)
-import Lib.Types.Id (EntityId, SpaceId, VersionId)
 import Lib.Sync.Types.Store (
   Shared,
   Temp,
   store,
   temp,
   toEntities,
+  toEntityOf,
   toForksFrom,
   toReferencesFrom,
+  toSpaceOf,
   toSpaces,
   toSubscriptionsFrom,
   toVersions,
-  toSpaceOf,
-  toEntityOf,
  )
-import Lib.Sync.Types.Store.Entity (fork, versions)
 import Lib.Sync.Types.Store.Version (references, subscriptions)
+import Lib.Types.Id (EntityId, SpaceId, VersionId)
+import Lib.Types.Store.Entity (fork, versions)
 
 unsafeUpdateVersionReferences
   :: (MonadState Shared m)
