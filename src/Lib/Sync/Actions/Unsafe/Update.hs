@@ -41,9 +41,9 @@ import Lib.Sync.Types.Store (
   toSubscriptionsFrom,
   toVersions,
  )
+import Lib.Sync.Types.Store.Entity (fork, versions)
 import Lib.Sync.Types.Store.Version (references, subscriptions)
 import Lib.Types.Id (EntityId, SpaceId, VersionId)
-import Lib.Sync.Types.Store.Entity (fork, versions)
 
 unsafeUpdateVersionReferences
   :: (MonadState Shared m)

@@ -68,6 +68,7 @@ import Lib.Sync.Types.Store (
   toTabulatedGroups,
   toVersions,
  )
+import Lib.Sync.Types.Store.Entity (fork, versions)
 import Lib.Sync.Types.Store.Groups (next, nodes, prev)
 import Lib.Sync.Types.Store.Tabulation.Group (hasLessOrEqualPermissionsTo)
 import Lib.Sync.Types.Store.Version (references, subscriptions)
@@ -76,7 +77,6 @@ import Lib.Types.Permission (
   CollectionPermission (..),
   CollectionPermissionWithExemption (..),
  )
-import Lib.Sync.Types.Store.Entity (fork, versions)
 import Spec.Sync.Sample.Store (
   arbitraryEmptyShared,
   arbitraryShared,

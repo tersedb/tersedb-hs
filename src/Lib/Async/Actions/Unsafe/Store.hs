@@ -2,16 +2,30 @@ module Lib.Async.Actions.Unsafe.Store where
 
 import Control.Concurrent.STM (STM)
 import Control.Lens ((^.))
+import Control.Monad.Base (MonadBase (liftBase))
 import Control.Monad.Extra (when)
 import Control.Monad.Reader (MonadReader (ask))
+import Control.Monad.Trans.Control (MonadBaseControl)
+import Data.List.NonEmpty ((<|))
+import qualified Data.List.NonEmpty as NE
 import Data.Maybe (isNothing)
 import DeferredFolds.UnfoldlM (forM_)
+import qualified Focus
+import Lib.Async.Actions.Tabulation (
+  loadForks,
+  loadRefsAndSubs,
+  updateTabulatedPermissionsStartingAt,
+ )
+import Lib.Async.Types.Monad (TerseM)
 import Lib.Async.Types.Store (
   Shared,
   newPermissionsPerGroup,
   store,
   temp,
   toActors,
+  toEntities,
+  toEntityOf,
+  toForks,
   toGroupsPrev,
   toMemberOf,
   toMembers,
@@ -20,20 +34,17 @@ import Lib.Async.Types.Store (
   toPermRecruiter,
   toPermUniverse,
   toRoots,
-  toSpacesHiddenTo, toSpaces, toEntities, toSpaceEntities, toForks, toVersions, toSpaceOf, toEntityOf,
+  toSpaceEntities,
+  toSpaceOf,
+  toSpaces,
+  toSpacesHiddenTo,
+  toVersions,
  )
-import Lib.Types.Id (ActorId, GroupId, SpaceId, EntityId, VersionId)
+import Lib.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
 import Lib.Types.Permission (CollectionPermission (Blind), collectionPermission)
 import qualified StmContainers.Map as Map
 import qualified StmContainers.Multimap as Multimap
 import qualified StmContainers.Set as Set
-import Control.Monad.Base (MonadBase (liftBase))
-import Lib.Async.Actions.Tabulation (updateTabulatedPermissionsStartingAt, loadRefsAndSubs, loadForks)
-import Control.Monad.Trans.Control (MonadBaseControl)
-import qualified Data.List.NonEmpty as NE
-import Data.List.NonEmpty ((<|))
-import qualified Focus
-import Lib.Async.Types.Monad (TerseM)
 
 unsafeStoreGroup :: GroupId -> TerseM STM ()
 unsafeStoreGroup gId = do
@@ -48,7 +59,6 @@ unsafeStoreGroup gId = do
     when (isNothing mPrev) $
       Set.insert gId (s ^. store . toRoots)
   updateTabulatedPermissionsStartingAt gId
-
 
 unsafeStoreActor :: ActorId -> TerseM STM ()
 unsafeStoreActor aId = do

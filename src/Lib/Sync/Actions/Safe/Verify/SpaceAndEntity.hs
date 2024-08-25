@@ -67,6 +67,7 @@ import Lib.Sync.Types.Store (
   toSubscriptionsFrom,
   toVersions,
  )
+import Lib.Sync.Types.Store.Entity (versions)
 import Lib.Sync.Types.Store.Tabulation.Group (
   forEntities,
   forSpaces,
@@ -80,7 +81,6 @@ import Lib.Types.Permission (
   collectionPermission,
   escalate,
  )
-import Lib.Sync.Types.Store.Entity (versions)
 
 -- * Spaces
 

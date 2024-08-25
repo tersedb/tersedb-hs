@@ -32,8 +32,9 @@ asyncTests = do
           Async.genSyncTemp
         syncTemp `shouldBe` generatedSyncTemp
     it
-      "Sync.Store -> Async.Store -> Async.Temp -> Sync.Temp = Sync.Store -> Sync.Temp" $
-      forAll arbitraryShared $ \(syncShared, _, _) -> do
+      "Sync.Store -> Async.Store -> Async.Temp -> Sync.Temp = Sync.Store -> Sync.Temp"
+      $ forAll arbitraryShared
+      $ \(syncShared, _, _) -> do
         let syncStore = syncShared ^. Sync.store
         asyncShared <- atomically Async.newShared
         generatedSyncTemp <- atomically $ flip runReaderT asyncShared $ do

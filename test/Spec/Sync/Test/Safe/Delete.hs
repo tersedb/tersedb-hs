@@ -54,6 +54,7 @@ import Lib.Sync.Types.Store (
   toSubscriptionsFrom,
   toVersions,
  )
+import Lib.Sync.Types.Store.Entity (fork, versions)
 import Lib.Sync.Types.Store.Groups (edges, members, nodes)
 import Lib.Sync.Types.Store.Tabulation.Group (hasLessOrEqualPermissionsTo)
 import Lib.Sync.Types.Store.Version (references, subscriptions)
@@ -61,7 +62,6 @@ import Lib.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
 import Lib.Types.Permission (
   CollectionPermission (..),
  )
-import Lib.Sync.Types.Store.Entity (fork, versions)
 import Spec.Sync.Sample.Store (
   arbitraryShared,
  )

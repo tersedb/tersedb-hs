@@ -18,12 +18,12 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 You can reach me at athan.clark@gmail.com.
 -}
 
-module Lib.Sync.Actions.Safe.Verify.Utils
-  ( canDoWithTab
-  , canDo
-  , conditionally
-  , withCollectionPermission
-  ) where
+module Lib.Sync.Actions.Safe.Verify.Utils (
+  canDoWithTab,
+  canDo,
+  conditionally,
+  withCollectionPermission,
+) where
 
 import Lib.Sync.Types.Store (
   Shared,
@@ -45,7 +45,7 @@ import Control.Lens (Lens', at, non, (^.))
 import Control.Monad.State (MonadState (get))
 import Data.HashMap.Strict (HashMap)
 import Data.Hashable (Hashable)
-import Lib.Actions.Safe.Utils (deriveCollectionPermission, conditionally)
+import Lib.Actions.Safe.Utils (conditionally, deriveCollectionPermission)
 
 {- | Looks first for the groups the user is in, then sees if any of the groups
 can do the action, depicted by the Lens
