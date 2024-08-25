@@ -2,13 +2,14 @@ module Lib.Async.Types.Store.Iso where
 
 import Control.Concurrent.STM (STM, modifyTVar, newTVar, readTVar)
 import Control.Lens (at, ix, non, (&), (.~), (?~), (^.))
+import Control.Monad.Base (MonadBase (liftBase))
 import Control.Monad.Reader (MonadReader (ask))
+import Control.Monad.Trans.Control (MonadBaseControl (liftBaseWith))
 import Data.Foldable (for_)
 import qualified Data.HashMap.Strict as HM
 import qualified Data.List.NonEmpty as NE
 import Data.Maybe (fromJust)
 import DeferredFolds.UnfoldlM (forM_)
-import qualified Lib.Sync.Types.Store.Tabulation.Group as Sync
 import Lib.Async.Types.Store (
   Shared,
   entityPermission,
@@ -17,12 +18,16 @@ import Lib.Async.Types.Store (
   newPermissionsPerGroup,
   spacePermission,
   store,
+  temp,
   toActors,
   toEdges,
   toEntities,
+  toEntityOf,
   toForks,
+  toForksFrom,
   toGroupsNext,
   toGroupsPrev,
+  toMemberOf,
   toMembers,
   toOuts,
   toPermOrganization,
@@ -30,24 +35,36 @@ import Lib.Async.Types.Store (
   toPermRecruiter,
   toPermUniverse,
   toReferences,
+  toReferencesFrom,
   toRoots,
   toSpaceEntities,
+  toSpaceOf,
   toSpaces,
+  toSpacesHiddenTo,
   toSubscriptions,
-  toVersions, temp, toReferencesFrom, toSubscriptionsFrom, toForksFrom, toSpacesHiddenTo, toMemberOf, toSpaceOf, toEntityOf, toTabUniverse, toTabOrganization, toTabRecruiter, toTabOther,
+  toSubscriptionsFrom,
+  toTabOrganization,
+  toTabOther,
+  toTabRecruiter,
+  toTabUniverse,
+  toVersions,
  )
+import Lib.Async.Types.Tabulation (
+  forEntities,
+  forGroups,
+  forMembers,
+  forSpaces,
+ )
+import qualified Lib.Async.Types.Tabulation as Tab
 import Lib.Sync.Actions.Unsafe (unsafeEmptyShared)
 import qualified Lib.Sync.Types.Store as Sync
 import qualified Lib.Sync.Types.Store.Groups as Sync
+import qualified Lib.Sync.Types.Store.Tabulation.Group as Sync
 import qualified Lib.Sync.Types.Store.Version as Sync
 import qualified Lib.Types.Store.Entity as Sync
 import qualified StmContainers.Map as Map
 import qualified StmContainers.Multimap as Multimap
 import qualified StmContainers.Set as Set
-import qualified Lib.Async.Types.Tabulation as Tab
-import Lib.Async.Types.Tabulation (forSpaces, forEntities, forGroups, forMembers)
-import Control.Monad.Trans.Control (MonadBaseControl (liftBaseWith))
-import Control.Monad.Base (MonadBase (liftBase))
 
 loadSyncStore :: (MonadReader Shared m, MonadBase STM m) => Sync.Store -> m ()
 loadSyncStore syncStore = do
@@ -202,7 +219,6 @@ genSyncStore = do
 
     readTVar syncStore
 
-
 loadSyncTemp :: (MonadReader Shared m, MonadBase STM m) => Sync.Temp -> m ()
 loadSyncTemp syncTemp = do
   s <- ask
@@ -243,7 +259,6 @@ loadSyncTemp syncTemp = do
     for_ (HM.toList $ syncTemp ^. Sync.toEntityOf) $ \(vId, eId) ->
       Map.insert eId vId (s ^. temp . toEntityOf)
 
-
 genSyncTemp :: (MonadReader Shared m, MonadBase STM m) => m Sync.Temp
 genSyncTemp = do
   s <- ask
@@ -251,13 +266,16 @@ genSyncTemp = do
     syncTemp <- newTVar (unsafeEmptyShared ^. Sync.temp)
 
     forM_ (Multimap.unfoldlM (s ^. temp . toReferencesFrom)) $ \(refId, vId) ->
-      modifyTVar syncTemp $ Sync.toReferencesFrom . at refId . non mempty . at vId ?~ ()
+      modifyTVar syncTemp $
+        Sync.toReferencesFrom . at refId . non mempty . at vId ?~ ()
     forM_ (Multimap.unfoldlM (s ^. temp . toSubscriptionsFrom)) $ \(subId, vId) ->
-      modifyTVar syncTemp $ Sync.toSubscriptionsFrom . at subId . non mempty . at vId ?~ ()
+      modifyTVar syncTemp $
+        Sync.toSubscriptionsFrom . at subId . non mempty . at vId ?~ ()
     forM_ (Multimap.unfoldlM (s ^. temp . toForksFrom)) $ \(forkId, eId) ->
       modifyTVar syncTemp $ Sync.toForksFrom . at forkId . non mempty . at eId ?~ ()
     forM_ (Multimap.unfoldlM (s ^. temp . toSpacesHiddenTo)) $ \(spaceId, gId) ->
-      modifyTVar syncTemp $ Sync.toSpacesHiddenTo . at spaceId . non mempty . at gId ?~ ()
+      modifyTVar syncTemp $
+        Sync.toSpacesHiddenTo . at spaceId . non mempty . at gId ?~ ()
     forM_ (Multimap.unfoldlM (s ^. temp . toMemberOf)) $ \(aId, gId) ->
       modifyTVar syncTemp $ Sync.toMemberOf . at aId . non mempty . at gId ?~ ()
     forM_ (Map.unfoldlM (s ^. temp . toSpaceOf)) $ \(eId, sId) ->
@@ -266,19 +284,26 @@ genSyncTemp = do
       modifyTVar syncTemp $ Sync.toEntityOf . at vId ?~ eId
 
     forM_ (Map.unfoldlM (s ^. temp . toTabUniverse)) $ \(gId, p) ->
-      modifyTVar syncTemp $ Sync.toTabulatedGroups . at gId . non mempty . Sync.forUniverse .~ p
+      modifyTVar syncTemp $
+        Sync.toTabulatedGroups . at gId . non mempty . Sync.forUniverse .~ p
     forM_ (Map.unfoldlM (s ^. temp . toTabOrganization)) $ \(gId, p) ->
-      modifyTVar syncTemp $ Sync.toTabulatedGroups . at gId . non mempty . Sync.forOrganization .~ p
+      modifyTVar syncTemp $
+        Sync.toTabulatedGroups . at gId . non mempty . Sync.forOrganization .~ p
     forM_ (Map.unfoldlM (s ^. temp . toTabRecruiter)) $ \(gId, p) ->
-      modifyTVar syncTemp $ Sync.toTabulatedGroups . at gId . non mempty . Sync.forRecruiter .~ p
+      modifyTVar syncTemp $
+        Sync.toTabulatedGroups . at gId . non mempty . Sync.forRecruiter .~ p
     forM_ (Map.unfoldlM (s ^. temp . toTabOther)) $ \(gId, tabOther) -> do
       forM_ (Map.unfoldlM (tabOther ^. forSpaces)) $ \(sId, p) ->
-        modifyTVar syncTemp $ Sync.toTabulatedGroups . at gId . non mempty . Sync.forSpaces . at sId ?~ p
+        modifyTVar syncTemp $
+          Sync.toTabulatedGroups . at gId . non mempty . Sync.forSpaces . at sId ?~ p
       forM_ (Map.unfoldlM (tabOther ^. forEntities)) $ \(sId, p) ->
-        modifyTVar syncTemp $ Sync.toTabulatedGroups . at gId . non mempty . Sync.forEntities . at sId ?~ p
+        modifyTVar syncTemp $
+          Sync.toTabulatedGroups . at gId . non mempty . Sync.forEntities . at sId ?~ p
       forM_ (Map.unfoldlM (tabOther ^. forGroups)) $ \(gId', p) ->
-        modifyTVar syncTemp $ Sync.toTabulatedGroups . at gId . non mempty . Sync.forGroups . at gId' ?~ p
+        modifyTVar syncTemp $
+          Sync.toTabulatedGroups . at gId . non mempty . Sync.forGroups . at gId' ?~ p
       forM_ (Map.unfoldlM (tabOther ^. forMembers)) $ \(gId', p) ->
-        modifyTVar syncTemp $ Sync.toTabulatedGroups . at gId . non mempty . Sync.forMembers . at gId' ?~ p
+        modifyTVar syncTemp $
+          Sync.toTabulatedGroups . at gId . non mempty . Sync.forMembers . at gId' ?~ p
 
     readTVar syncTemp

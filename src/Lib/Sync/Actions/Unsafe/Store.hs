@@ -106,7 +106,7 @@ unsafeStoreEntity eId sId vId mForkId = do
   s <- get
   let s' =
         s
-          & store . toEntities . at eId ?~ (initEntity vId mForkId)
+          & store . toEntities . at eId ?~ initEntity vId mForkId
           & store . toSpaces . ix sId . at eId ?~ ()
           & store . toVersions . at vId ?~ initVersion
           & temp . toSpaceOf . at eId ?~ sId

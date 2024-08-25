@@ -2,8 +2,10 @@ module Lib.Async.Actions.Tabulation where
 
 import Control.Concurrent.STM (STM)
 import Control.Lens (Lens', (^.))
-import Control.Monad (join, when, void)
+import Control.Monad (join, void, when)
+import Control.Monad.Base (MonadBase (liftBase))
 import Control.Monad.Reader (MonadReader (ask), MonadTrans (lift))
+import Control.Monad.Trans.Control (MonadBaseControl (liftBaseWith))
 import Data.Foldable (for_)
 import Data.Hashable (Hashable)
 import Data.Maybe (fromJust, fromMaybe)
@@ -66,8 +68,6 @@ import StmContainers.Map (Map)
 import qualified StmContainers.Map as Map
 import qualified StmContainers.Multimap as Multimap
 import qualified StmContainers.Set as Set
-import Control.Monad.Base (MonadBase (liftBase))
-import Control.Monad.Trans.Control (MonadBaseControl (liftBaseWith))
 
 setInitTabulatedPermissions
   :: (MonadReader Shared m, MonadBase STM m) => GroupId -> m ()
@@ -102,15 +102,15 @@ updateTabulatedPermissionsStartingAt gId = do
     mParent <- Map.lookup gId (s ^. store . toGroupsPrev)
     let overProj :: (Bounded a, Semigroup a) => Lens' Temp (Map GroupId a) -> STM ()
         overProj proj = Map.focus go gId (s ^. temp . proj)
-          where
-            go = do
-              init <- fromMaybe minBound <$> Focus.lookup
-              new <- case mParent of
-                Nothing -> pure init
-                Just parent -> do
-                  parent <- fromMaybe minBound <$> lift (Map.lookup parent (s ^. temp . proj))
-                  pure (parent <> init)
-              Focus.insert new
+         where
+          go = do
+            init <- fromMaybe minBound <$> Focus.lookup
+            new <- case mParent of
+              Nothing -> pure init
+              Just parent -> do
+                parent <- fromMaybe minBound <$> lift (Map.lookup parent (s ^. temp . proj))
+                pure (parent <> init)
+            Focus.insert new
     overProj toTabUniverse
     overProj toTabOrganization
     overProj toTabRecruiter
@@ -146,14 +146,16 @@ updateTabulatedPermissionsStartingAt gId = do
         forM_ (Map.unfoldlM (tabOther ^. forSpaces)) $ \(sId, p) ->
           if p == Blind then hideSpace sId else makeSpaceVisible sId
   liftBaseWith $ \runInBase ->
-    forM_ (Multimap.unfoldlMByKey gId (s ^. store . toGroupsNext))
+    forM_
+      (Multimap.unfoldlMByKey gId (s ^. store . toGroupsNext))
       (void . runInBase . updateTabulatedPermissionsStartingAt)
 
 resetTabulation :: (MonadReader Shared m, MonadBaseControl STM m) => m ()
 resetTabulation = do
   s <- ask
   liftBaseWith $ \runInBase ->
-    forM_ (Set.unfoldlM (s ^. store . toRoots))
+    forM_
+      (Set.unfoldlM (s ^. store . toRoots))
       (void . runInBase . updateTabulatedPermissionsStartingAt)
 
 loadRefsAndSubs :: (MonadReader Shared m, MonadBase STM m) => VersionId -> m ()
@@ -178,7 +180,9 @@ loadTempFromStore :: (MonadReader Shared m, MonadBaseControl STM m) => m ()
 loadTempFromStore = do
   s <- ask
   liftBaseWith $ \runInBase -> do
-    forM_ (Set.unfoldlM (s ^. store . toVersions)) (void . runInBase . loadRefsAndSubs)
+    forM_
+      (Set.unfoldlM (s ^. store . toVersions))
+      (void . runInBase . loadRefsAndSubs)
     forM_ (Map.unfoldlM (s ^. store . toEntities)) $ \(eId, vs) -> do
       runInBase $ loadForks eId
       for_ vs $ \vId -> Map.insert eId vId (s ^. temp . toEntityOf)
@@ -188,4 +192,3 @@ loadTempFromStore = do
     forM_ (Multimap.unfoldlM (s ^. store . toSpaceEntities)) $ \(sId, eId) ->
       Map.insert sId eId (s ^. temp . toSpaceOf)
   resetTabulation
-
