@@ -176,6 +176,7 @@ mkTempFromStoreLoader :: (MonadReader Shared m) => m (STM ())
 mkTempFromStoreLoader = do
   refsAndSubsLoader <- mkRefsAndSubsLoader
   forksLoader <- mkForksLoader
+  reset <- resetTabulation
   s <- ask
   pure $ do
     forM_ (Set.unfoldlM (s ^. store . toVersions)) refsAndSubsLoader
@@ -187,3 +188,5 @@ mkTempFromStoreLoader = do
         when (aId == aId') $ Multimap.insert gId aId (s ^. temp . toMemberOf)
     forM_ (Multimap.unfoldlM (s ^. store . toSpaceEntities)) $ \(sId, eId) ->
       Map.insert sId eId (s ^. temp . toSpaceOf)
+    reset
+
