@@ -2,7 +2,7 @@ module Lib.Async.Actions.Tabulation where
 
 import Control.Concurrent.STM (STM)
 import Control.Lens (Lens', (^.))
-import Control.Monad (join, when)
+import Control.Monad (join, when, void)
 import Control.Monad.Reader (MonadReader (ask), MonadTrans (lift))
 import Data.Foldable (for_)
 import Data.Hashable (Hashable)
@@ -66,12 +66,14 @@ import StmContainers.Map (Map)
 import qualified StmContainers.Map as Map
 import qualified StmContainers.Multimap as Multimap
 import qualified StmContainers.Set as Set
+import Control.Monad.Base (MonadBase (liftBase))
+import Control.Monad.Trans.Control (MonadBaseControl (liftBaseWith))
 
-mkSetInitTabulatedPermissions
-  :: (MonadReader Shared m) => m (GroupId -> STM ())
-mkSetInitTabulatedPermissions = do
+setInitTabulatedPermissions
+  :: (MonadReader Shared m, MonadBase STM m) => GroupId -> m ()
+setInitTabulatedPermissions gId = do
   s <- ask
-  pure $ \gId -> do
+  liftBase $ do
     univ <- fromMaybe minBound <$> Map.lookup gId (s ^. store . toPermUniverse)
     Map.insert univ gId (s ^. temp . toTabUniverse)
     org <- fromMaybe minBound <$> Map.lookup gId (s ^. store . toPermOrganization)
@@ -91,102 +93,99 @@ mkSetInitTabulatedPermissions = do
       Map.insert p gId (tabOther ^. forMembers)
     Map.insert tabOther gId (s ^. temp . toTabOther)
 
-mkUpdateTabulatedPermissionsStartingAt
-  :: (MonadReader Shared m) => m (GroupId -> STM ())
-mkUpdateTabulatedPermissionsStartingAt = do
-  setInitTab <- mkSetInitTabulatedPermissions
+updateTabulatedPermissionsStartingAt
+  :: (MonadReader Shared m, MonadBaseControl STM m) => GroupId -> m ()
+updateTabulatedPermissionsStartingAt gId = do
   s <- ask
-  let updateTab :: GroupId -> STM ()
-      updateTab gId = do
-        setInitTab gId
-        mParent <- Map.lookup gId (s ^. store . toGroupsPrev)
-        let overProj :: (Bounded a, Semigroup a) => Lens' Temp (Map GroupId a) -> STM ()
-            overProj proj = Map.focus go gId (s ^. temp . proj)
-             where
-              go = do
-                init <- fromMaybe minBound <$> Focus.lookup
-                new <- case mParent of
-                  Nothing -> pure init
-                  Just parent -> do
-                    parent <- fromMaybe minBound <$> lift (Map.lookup parent (s ^. temp . proj))
-                    pure (parent <> init)
-                Focus.insert new
-        overProj toTabUniverse
-        overProj toTabOrganization
-        overProj toTabRecruiter
-        tabOther <- fromJust <$> Map.lookup gId (s ^. temp . toTabOther)
-        case mParent of
-          Nothing -> pure ()
-          Just parent -> do
-            parentTabOther <-
-              maybe Tab.new pure =<< Map.lookup parent (s ^. temp . toTabOther)
-            let overProjOther
-                  :: (Hashable k)
-                  => Lens' TabulatedPermissions (Map k CollectionPermission)
-                  -> STM ()
-                overProjOther proj = do
-                  forM_ (Map.unfoldlM (parentTabOther ^. proj)) $ \(sId, p) ->
-                    Map.focus (Focus.alter (Just . maybe p (<> p))) sId (tabOther ^. proj)
-            overProjOther forSpaces
-            overProjOther forEntities
-            overProjOther forGroups
-            overProjOther forMembers
-        univPerm <- fromJust <$> Map.lookup gId (s ^. temp . toTabUniverse)
-        let hideSpace sId =
-              Multimap.insert gId sId (s ^. temp . toSpacesHiddenTo)
-            makeSpaceVisible sId =
-              Multimap.delete gId sId (s ^. temp . toSpacesHiddenTo)
-        case univPerm of
-          CollectionPermissionWithExemption Blind _ ->
-            forM_ (Set.unfoldlM (s ^. store . toSpaces)) hideSpace
-          CollectionPermissionWithExemption _ True ->
-            forM_ (Set.unfoldlM (s ^. store . toSpaces)) makeSpaceVisible
-          CollectionPermissionWithExemption _ False ->
-            -- FIXME what if the space hasn't been listed? Like how I want to make entries spotty if they rely on universe setting
-            forM_ (Map.unfoldlM (tabOther ^. forSpaces)) $ \(sId, p) ->
-              if p == Blind then hideSpace sId else makeSpaceVisible sId
-        forM_ (Multimap.unfoldlMByKey gId (s ^. store . toGroupsNext)) updateTab
-  pure updateTab
+  setInitTabulatedPermissions gId
+  liftBase $ do
+    mParent <- Map.lookup gId (s ^. store . toGroupsPrev)
+    let overProj :: (Bounded a, Semigroup a) => Lens' Temp (Map GroupId a) -> STM ()
+        overProj proj = Map.focus go gId (s ^. temp . proj)
+          where
+            go = do
+              init <- fromMaybe minBound <$> Focus.lookup
+              new <- case mParent of
+                Nothing -> pure init
+                Just parent -> do
+                  parent <- fromMaybe minBound <$> lift (Map.lookup parent (s ^. temp . proj))
+                  pure (parent <> init)
+              Focus.insert new
+    overProj toTabUniverse
+    overProj toTabOrganization
+    overProj toTabRecruiter
+    tabOther <- fromJust <$> Map.lookup gId (s ^. temp . toTabOther)
+    case mParent of
+      Nothing -> pure ()
+      Just parent -> do
+        parentTabOther <-
+          maybe Tab.new pure =<< Map.lookup parent (s ^. temp . toTabOther)
+        let overProjOther
+              :: (Hashable k)
+              => Lens' TabulatedPermissions (Map k CollectionPermission)
+              -> STM ()
+            overProjOther proj = do
+              forM_ (Map.unfoldlM (parentTabOther ^. proj)) $ \(sId, p) ->
+                Map.focus (Focus.alter (Just . maybe p (<> p))) sId (tabOther ^. proj)
+        overProjOther forSpaces
+        overProjOther forEntities
+        overProjOther forGroups
+        overProjOther forMembers
+    univPerm <- fromJust <$> Map.lookup gId (s ^. temp . toTabUniverse)
+    let hideSpace sId =
+          Multimap.insert gId sId (s ^. temp . toSpacesHiddenTo)
+        makeSpaceVisible sId =
+          Multimap.delete gId sId (s ^. temp . toSpacesHiddenTo)
+    case univPerm of
+      CollectionPermissionWithExemption Blind _ ->
+        forM_ (Set.unfoldlM (s ^. store . toSpaces)) hideSpace
+      CollectionPermissionWithExemption _ True ->
+        forM_ (Set.unfoldlM (s ^. store . toSpaces)) makeSpaceVisible
+      CollectionPermissionWithExemption _ False ->
+        -- FIXME what if the space hasn't been listed? Like how I want to make entries spotty if they rely on universe setting
+        forM_ (Map.unfoldlM (tabOther ^. forSpaces)) $ \(sId, p) ->
+          if p == Blind then hideSpace sId else makeSpaceVisible sId
+  liftBaseWith $ \runInBase ->
+    forM_ (Multimap.unfoldlMByKey gId (s ^. store . toGroupsNext))
+      (void . runInBase . updateTabulatedPermissionsStartingAt)
 
-resetTabulation :: (MonadReader Shared m) => m (STM ())
+resetTabulation :: (MonadReader Shared m, MonadBaseControl STM m) => m ()
 resetTabulation = do
-  updateTab <- mkUpdateTabulatedPermissionsStartingAt
   s <- ask
-  pure $ forM_ (Set.unfoldlM (s ^. store . toRoots)) updateTab
+  liftBaseWith $ \runInBase ->
+    forM_ (Set.unfoldlM (s ^. store . toRoots))
+      (void . runInBase . updateTabulatedPermissionsStartingAt)
 
-mkRefsAndSubsLoader :: (MonadReader Shared m) => m (VersionId -> STM ())
-mkRefsAndSubsLoader = do
+loadRefsAndSubs :: (MonadReader Shared m, MonadBase STM m) => VersionId -> m ()
+loadRefsAndSubs vId = do
   s <- ask
-  pure $ \vId -> do
+  liftBase $ do
     forM_ (Multimap.unfoldlMByKey vId (s ^. store . toReferences)) $ \refId ->
       Multimap.insert vId refId (s ^. temp . toReferencesFrom)
     forM_ (Multimap.unfoldlMByKey vId (s ^. store . toSubscriptions)) $ \subId ->
       Multimap.insert vId subId (s ^. temp . toSubscriptionsFrom)
 
-mkForksLoader :: (MonadReader Shared m) => m (EntityId -> STM ())
-mkForksLoader = do
+loadForks :: (MonadReader Shared m, MonadBase STM m) => EntityId -> m ()
+loadForks eId = do
   s <- ask
-  pure $ \eId -> do
+  liftBase $ do
     mFork <- Map.lookup eId (s ^. store . toForks)
     case mFork of
       Nothing -> pure ()
       Just forkId -> Multimap.insert eId forkId (s ^. temp . toForksFrom)
 
-mkTempFromStoreLoader :: (MonadReader Shared m) => m (STM ())
-mkTempFromStoreLoader = do
-  refsAndSubsLoader <- mkRefsAndSubsLoader
-  forksLoader <- mkForksLoader
-  reset <- resetTabulation
+loadTempFromStore :: (MonadReader Shared m, MonadBaseControl STM m) => m ()
+loadTempFromStore = do
   s <- ask
-  pure $ do
-    forM_ (Set.unfoldlM (s ^. store . toVersions)) refsAndSubsLoader
+  liftBaseWith $ \runInBase -> do
+    forM_ (Set.unfoldlM (s ^. store . toVersions)) (void . runInBase . loadRefsAndSubs)
     forM_ (Map.unfoldlM (s ^. store . toEntities)) $ \(eId, vs) -> do
-      forksLoader eId
+      runInBase $ loadForks eId
       for_ vs $ \vId -> Map.insert eId vId (s ^. temp . toEntityOf)
     forM_ (Set.unfoldlM (s ^. store . toActors)) $ \aId ->
       forM_ (Multimap.unfoldlM (s ^. store . toMembers)) $ \(gId, aId') ->
         when (aId == aId') $ Multimap.insert gId aId (s ^. temp . toMemberOf)
     forM_ (Multimap.unfoldlM (s ^. store . toSpaceEntities)) $ \(sId, eId) ->
       Map.insert sId eId (s ^. temp . toSpaceOf)
-    reset
+  resetTabulation
 

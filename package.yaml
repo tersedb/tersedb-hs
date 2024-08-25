@@ -48,7 +48,9 @@ dependencies:
   - focus
   - hashable
   - lens
+  - monad-control
   - mtl
+  - transformers-base
   - stm
   - stm-containers
   - random

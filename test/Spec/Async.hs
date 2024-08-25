@@ -1,8 +1,8 @@
 module Spec.Async where
 
-import Control.Concurrent.STM (atomically)
+import Control.Concurrent.STM (STM, atomically)
 import Control.Lens ((^.))
-import Control.Monad.Reader (runReader)
+import Control.Monad.Reader (runReaderT, ReaderT)
 import qualified Lib.Async.Types.Store as Async
 import qualified Lib.Async.Types.Store.Iso as Async
 import qualified Lib.Async.Actions.Tabulation as Async
@@ -19,24 +19,24 @@ asyncTests = do
       forAll arbitraryShared $ \(syncShared, _, _) -> do
         let syncStore = syncShared ^. Sync.store
         asyncShared <- atomically Async.newShared
-        let load = runReader (Async.loadSyncStore syncStore) asyncShared
-            gen = runReader Async.genSyncStore asyncShared
-        generatedSyncStore <- atomically (load >> gen)
+        generatedSyncStore <- atomically $ flip runReaderT asyncShared $ do
+          Async.loadSyncStore syncStore
+          Async.genSyncStore
         syncStore `shouldBe` generatedSyncStore
     it "Sync.Temp -> Async.Temp -> Sync.Temp = Sync.Temp" $
       forAll arbitraryShared $ \(syncShared, _, _) -> do
         let syncTemp = syncShared ^. Sync.temp
         asyncShared <- atomically Async.newShared
-        let load = runReader (Async.loadSyncTemp syncTemp) asyncShared
-            gen = runReader Async.genSyncTemp asyncShared
-        generatedSyncTemp <- atomically (load >> gen)
+        generatedSyncTemp <- atomically $ flip runReaderT asyncShared $ do
+          Async.loadSyncTemp syncTemp
+          Async.genSyncTemp
         syncTemp `shouldBe` generatedSyncTemp
     it "Sync.Store -> Async.Store -> Async.Temp -> Sync.Temp = Sync.Store -> Sync.Temp" $
       forAll arbitraryShared $ \(syncShared, _, _) -> do
         let syncStore = syncShared ^. Sync.store
         asyncShared <- atomically Async.newShared
-        let load = runReader (Async.loadSyncStore syncStore) asyncShared
-            tempFromStore = runReader Async.mkTempFromStoreLoader asyncShared
-            gen = runReader Async.genSyncTemp asyncShared
-        generatedSyncTemp <- atomically (load >> tempFromStore >> gen)
+        generatedSyncTemp <- atomically $ flip runReaderT asyncShared $ do
+          Async.loadSyncStore syncStore
+          Async.loadTempFromStore
+          Async.genSyncTemp
         Sync.tempFromStore syncStore `shouldBe` generatedSyncTemp

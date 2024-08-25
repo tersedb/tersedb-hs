@@ -46,11 +46,13 @@ import qualified StmContainers.Multimap as Multimap
 import qualified StmContainers.Set as Set
 import qualified Lib.Async.Types.Tabulation as Tab
 import Lib.Async.Types.Tabulation (forSpaces, forEntities, forGroups, forMembers)
+import Control.Monad.Trans.Control (MonadBaseControl (liftBaseWith))
+import Control.Monad.Base (MonadBase (liftBase))
 
-loadSyncStore :: (MonadReader Shared m) => Sync.Store -> m (STM ())
+loadSyncStore :: (MonadReader Shared m, MonadBase STM m) => Sync.Store -> m ()
 loadSyncStore syncStore = do
   s <- ask
-  pure $ do
+  liftBase $ do
     for_ (HM.toList $ syncStore ^. Sync.toGroups . Sync.nodes) $ \(gId, g) -> do
       case g ^. Sync.prev of
         Nothing -> pure ()
@@ -113,10 +115,10 @@ loadSyncStore syncStore = do
       for_ (HM.toList ps) $ \(sId, p) ->
         Map.insert p sId (permOther ^. memberPermission)
 
-genSyncStore :: (MonadReader Shared m) => m (STM Sync.Store)
+genSyncStore :: (MonadReader Shared m, MonadBase STM m) => m Sync.Store
 genSyncStore = do
   s <- ask
-  pure $ do
+  liftBase $ do
     syncStore <- newTVar (unsafeEmptyShared ^. Sync.store)
 
     forM_ (Set.unfoldlM (s ^. store . toRoots)) $ \gId -> do
@@ -201,10 +203,10 @@ genSyncStore = do
     readTVar syncStore
 
 
-loadSyncTemp :: MonadReader Shared m => Sync.Temp -> m (STM ())
+loadSyncTemp :: (MonadReader Shared m, MonadBase STM m) => Sync.Temp -> m ()
 loadSyncTemp syncTemp = do
   s <- ask
-  pure $ do
+  liftBase $ do
     for_ (HM.toList $ syncTemp ^. Sync.toReferencesFrom) $ \(refId, referrers) ->
       for_ referrers $ \vId ->
         Multimap.insert vId refId (s ^. temp . toReferencesFrom)
@@ -242,10 +244,10 @@ loadSyncTemp syncTemp = do
       Map.insert eId vId (s ^. temp . toEntityOf)
 
 
-genSyncTemp :: MonadReader Shared m => m (STM Sync.Temp)
+genSyncTemp :: (MonadReader Shared m, MonadBase STM m) => m Sync.Temp
 genSyncTemp = do
   s <- ask
-  pure $ do
+  liftBase $ do
     syncTemp <- newTVar (unsafeEmptyShared ^. Sync.temp)
 
     forM_ (Multimap.unfoldlM (s ^. temp . toReferencesFrom)) $ \(refId, vId) ->

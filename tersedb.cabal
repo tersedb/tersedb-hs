@@ -94,12 +94,14 @@ library
     , focus
     , hashable
     , lens
+    , monad-control
     , mtl
     , quickcheck-instances
     , random
     , stm
     , stm-containers
     , text
+    , transformers-base
     , unordered-containers
     , utility-ht
   default-language: Haskell2010
@@ -142,6 +144,7 @@ executable tersedb-hs
     , focus
     , hashable
     , lens
+    , monad-control
     , mtl
     , quickcheck-instances
     , random
@@ -149,6 +152,7 @@ executable tersedb-hs
     , stm-containers
     , tersedb
     , text
+    , transformers-base
     , unordered-containers
     , utility-ht
   default-language: Haskell2010
@@ -203,6 +207,7 @@ test-suite tersedb-test
     , focus
     , hashable
     , lens
+    , monad-control
     , mtl
     , pretty-simple
     , quickcheck-instances
@@ -213,6 +218,7 @@ test-suite tersedb-test
     , tersedb
     , text
     , topograph
+    , transformers-base
     , unordered-containers
     , utility-ht
   default-language: Haskell2010
