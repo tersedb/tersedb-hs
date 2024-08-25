@@ -31,10 +31,10 @@ import Lib.Sync.Types.Store.Tabulation.Group (
  )
 import Lib.Types.Id (ActorId)
 import Lib.Types.Permission (
-  CollectionPermission,
+  CollectionPermission (Blind),
   CollectionPermissionWithExemption,
   HasMinimumPermission (..),
-  collectionPermission,
+  collectionPermission, exemption,
  )
 
 import Control.Lens (Lens', at, non, (^.))
@@ -91,5 +91,12 @@ withCollectionPermission
   -> TabulatedPermissionsForGroup
   -> CollectionPermission
 withCollectionPermission xId projMajor projMinor t =
-  let maj = t ^. projMajor . collectionPermission
-   in maybe maj (\p -> p `min` maj) (t ^. projMinor . at xId)
+  let maj = t ^. projMajor
+      majPerm = maj ^. collectionPermission
+      withP p =
+        if p `min` majPerm == Blind
+        then if not (maj ^. exemption)
+        then Blind
+        else majPerm
+        else p `min` majPerm
+   in maybe majPerm withP (t ^. projMinor . at xId)

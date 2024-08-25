@@ -61,7 +61,7 @@ import Lib.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
 import Lib.Types.Permission (
   CollectionPermission (..),
  )
-import Lib.Types.Store.Entity (fork, versions)
+import Lib.Sync.Types.Store.Entity (fork, versions)
 import Spec.Sync.Sample.Store (
   arbitraryShared,
  )

@@ -27,8 +27,11 @@ source-repository head
 
 library
   exposed-modules:
+      Lib.Async.Actions.Safe.Verify.Actor
+      Lib.Async.Actions.Safe.Verify.Utils
       Lib.Async.Actions.Tabulation
       Lib.Async.Actions.Unsafe.Store
+      Lib.Async.Types.Monad
       Lib.Async.Types.Store
       Lib.Async.Types.Store.Iso
       Lib.Async.Types.Tabulation
@@ -52,12 +55,12 @@ library
       Lib.Sync.Actions.Unsafe.Update.Group
       Lib.Sync.Types.Monad
       Lib.Sync.Types.Store
+      Lib.Sync.Types.Store.Entity
       Lib.Sync.Types.Store.Groups
       Lib.Sync.Types.Store.Tabulation.Group
       Lib.Sync.Types.Store.Version
       Lib.Types.Id
       Lib.Types.Permission
-      Lib.Types.Store.Entity
   other-modules:
       Paths_tersedb
   autogen-modules:
@@ -94,6 +97,7 @@ library
     , focus
     , hashable
     , lens
+    , list-t
     , monad-control
     , mtl
     , quickcheck-instances
@@ -144,6 +148,7 @@ executable tersedb-hs
     , focus
     , hashable
     , lens
+    , list-t
     , monad-control
     , mtl
     , quickcheck-instances
@@ -207,6 +212,7 @@ test-suite tersedb-test
     , focus
     , hashable
     , lens
+    , list-t
     , monad-control
     , mtl
     , pretty-simple

@@ -76,7 +76,7 @@ import Lib.Types.Permission (
   CollectionPermission (..),
   CollectionPermissionWithExemption (..),
  )
-import Lib.Types.Store.Entity (fork, versions)
+import Lib.Sync.Types.Store.Entity (fork, versions)
 import Spec.Sync.Sample.Store (
   arbitraryEmptyShared,
   arbitraryShared,

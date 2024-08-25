@@ -68,9 +68,10 @@ import StmContainers.Map (Map)
 import qualified StmContainers.Map as Map
 import qualified StmContainers.Multimap as Multimap
 import qualified StmContainers.Set as Set
+import Lib.Async.Types.Monad (TerseM)
 
 setInitTabulatedPermissions
-  :: (MonadReader Shared m, MonadBase STM m) => GroupId -> m ()
+  :: GroupId -> TerseM STM ()
 setInitTabulatedPermissions gId = do
   s <- ask
   liftBase $ do
@@ -94,7 +95,7 @@ setInitTabulatedPermissions gId = do
     Map.insert tabOther gId (s ^. temp . toTabOther)
 
 updateTabulatedPermissionsStartingAt
-  :: (MonadReader Shared m, MonadBaseControl STM m) => GroupId -> m ()
+  :: GroupId -> TerseM STM ()
 updateTabulatedPermissionsStartingAt gId = do
   s <- ask
   setInitTabulatedPermissions gId
@@ -150,7 +151,7 @@ updateTabulatedPermissionsStartingAt gId = do
       (Multimap.unfoldlMByKey gId (s ^. store . toGroupsNext))
       (void . runInBase . updateTabulatedPermissionsStartingAt)
 
-resetTabulation :: (MonadReader Shared m, MonadBaseControl STM m) => m ()
+resetTabulation :: TerseM STM ()
 resetTabulation = do
   s <- ask
   liftBaseWith $ \runInBase ->
@@ -158,7 +159,7 @@ resetTabulation = do
       (Set.unfoldlM (s ^. store . toRoots))
       (void . runInBase . updateTabulatedPermissionsStartingAt)
 
-loadRefsAndSubs :: (MonadReader Shared m, MonadBase STM m) => VersionId -> m ()
+loadRefsAndSubs :: VersionId -> TerseM STM ()
 loadRefsAndSubs vId = do
   s <- ask
   liftBase $ do
@@ -167,7 +168,7 @@ loadRefsAndSubs vId = do
     forM_ (Multimap.unfoldlMByKey vId (s ^. store . toSubscriptions)) $ \subId ->
       Multimap.insert vId subId (s ^. temp . toSubscriptionsFrom)
 
-loadForks :: (MonadReader Shared m, MonadBase STM m) => EntityId -> m ()
+loadForks :: EntityId -> TerseM STM ()
 loadForks eId = do
   s <- ask
   liftBase $ do
@@ -176,7 +177,7 @@ loadForks eId = do
       Nothing -> pure ()
       Just forkId -> Multimap.insert eId forkId (s ^. temp . toForksFrom)
 
-loadTempFromStore :: (MonadReader Shared m, MonadBaseControl STM m) => m ()
+loadTempFromStore :: TerseM STM ()
 loadTempFromStore = do
   s <- ask
   liftBaseWith $ \runInBase -> do

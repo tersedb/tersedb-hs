@@ -43,7 +43,7 @@ import Lib.Sync.Types.Store (
  )
 import Lib.Sync.Types.Store.Version (references, subscriptions)
 import Lib.Types.Id (EntityId, SpaceId, VersionId)
-import Lib.Types.Store.Entity (fork, versions)
+import Lib.Sync.Types.Store.Entity (fork, versions)
 
 unsafeUpdateVersionReferences
   :: (MonadState Shared m)

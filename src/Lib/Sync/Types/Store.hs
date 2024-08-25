@@ -31,7 +31,7 @@ import Lib.Types.Permission (
   CollectionPermission,
   SinglePermission,
  )
-import Lib.Types.Store.Entity (Entity)
+import Lib.Sync.Types.Store.Entity (Entity)
 
 data Temp = Temp
   { tempReferencesFrom :: HashMap VersionId (HashSet VersionId)

@@ -48,6 +48,7 @@ dependencies:
   - focus
   - hashable
   - lens
+  - list-t
   - monad-control
   - mtl
   - transformers-base

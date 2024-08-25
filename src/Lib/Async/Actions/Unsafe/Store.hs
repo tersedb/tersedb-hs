@@ -33,8 +33,9 @@ import Control.Monad.Trans.Control (MonadBaseControl)
 import qualified Data.List.NonEmpty as NE
 import Data.List.NonEmpty ((<|))
 import qualified Focus
+import Lib.Async.Types.Monad (TerseM)
 
-unsafeStoreGroup :: (MonadReader Shared m, MonadBaseControl STM m) => GroupId -> m ()
+unsafeStoreGroup :: GroupId -> TerseM STM ()
 unsafeStoreGroup gId = do
   s <- ask
   liftBase $ do
@@ -49,20 +50,20 @@ unsafeStoreGroup gId = do
   updateTabulatedPermissionsStartingAt gId
 
 
-unsafeStoreActor :: (MonadReader Shared m, MonadBase STM m) => ActorId -> m ()
+unsafeStoreActor :: ActorId -> TerseM STM ()
 unsafeStoreActor aId = do
   s <- ask
   liftBase $
     Set.insert aId (s ^. store . toActors)
 
-unsafeAddMember :: (MonadReader Shared m, MonadBase STM m) => GroupId -> ActorId -> m ()
+unsafeAddMember :: GroupId -> ActorId -> TerseM STM ()
 unsafeAddMember gId aId = do
   s <- ask
   liftBase $ do
     Multimap.insert gId aId (s ^. temp . toMemberOf)
     Multimap.insert aId gId (s ^. store . toMembers)
 
-unsafeStoreSpace :: (MonadReader Shared m, MonadBase STM m) => SpaceId -> m ()
+unsafeStoreSpace :: SpaceId -> TerseM STM ()
 unsafeStoreSpace sId = do
   s <- ask
   liftBase $ do
@@ -73,12 +74,11 @@ unsafeStoreSpace sId = do
         Multimap.insert gId sId (s ^. temp . toSpacesHiddenTo)
 
 unsafeStoreEntity
-  :: (MonadReader Shared m, MonadBase STM m)
-  => EntityId
+  :: EntityId
   -> SpaceId
   -> VersionId
   -> Maybe VersionId
-  -> m ()
+  -> TerseM STM ()
 unsafeStoreEntity eId sId vId mForkId = do
   s <- ask
   liftBase $ do
@@ -94,10 +94,9 @@ unsafeStoreEntity eId sId vId mForkId = do
   loadForks eId
 
 unsafeStoreVersion
-  :: (MonadReader Shared m, MonadBase STM m)
-  => EntityId
+  :: EntityId
   -> VersionId
-  -> m ()
+  -> TerseM STM ()
 unsafeStoreVersion eId vId = do
   s <- ask
   liftBase $ do

@@ -57,7 +57,7 @@ import Lib.Sync.Types.Store.Tabulation.Group (forUniverse)
 import Lib.Sync.Types.Store.Version (initVersion)
 import Lib.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
 import Lib.Types.Permission (CollectionPermission (Blind), collectionPermission)
-import Lib.Types.Store.Entity (initEntity, versions)
+import Lib.Sync.Types.Store.Entity (initEntity, versions)
 
 -- | Sets the group to empty
 unsafeStoreGroup :: (MonadState Shared m) => GroupId -> m ()

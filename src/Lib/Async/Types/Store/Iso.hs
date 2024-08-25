@@ -61,7 +61,7 @@ import qualified Lib.Sync.Types.Store as Sync
 import qualified Lib.Sync.Types.Store.Groups as Sync
 import qualified Lib.Sync.Types.Store.Tabulation.Group as Sync
 import qualified Lib.Sync.Types.Store.Version as Sync
-import qualified Lib.Types.Store.Entity as Sync
+import qualified Lib.Sync.Types.Store.Entity as Sync
 import qualified StmContainers.Map as Map
 import qualified StmContainers.Multimap as Multimap
 import qualified StmContainers.Set as Set

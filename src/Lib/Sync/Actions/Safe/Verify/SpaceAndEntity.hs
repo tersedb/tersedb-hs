@@ -80,7 +80,7 @@ import Lib.Types.Permission (
   collectionPermission,
   escalate,
  )
-import Lib.Types.Store.Entity (versions)
+import Lib.Sync.Types.Store.Entity (versions)
 
 -- * Spaces
 

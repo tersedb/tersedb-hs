@@ -56,7 +56,7 @@ import Lib.Sync.Types.Store.Groups (
  )
 import Lib.Sync.Types.Store.Version (references, subscriptions)
 import Lib.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
-import Lib.Types.Store.Entity (versions)
+import Lib.Sync.Types.Store.Entity (versions)
 
 -- | Deletes a version from an entity iff. there's another replacement version in it
 unsafeRemoveVersion

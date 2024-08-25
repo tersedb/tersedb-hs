@@ -77,7 +77,7 @@ import Lib.Types.Permission (
   CollectionPermissionWithExemption (..),
   escalate,
  )
-import Lib.Types.Store.Entity (fork, versions)
+import Lib.Sync.Types.Store.Entity (fork, versions)
 
 {- | Gets an initial tabulation for a specific group; assumes the group is a root
 node, and isn't inheriting any other groups.
