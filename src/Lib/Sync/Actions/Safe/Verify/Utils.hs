@@ -18,7 +18,12 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 You can reach me at athan.clark@gmail.com.
 -}
 
-module Lib.Sync.Actions.Safe.Verify.Utils where
+module Lib.Sync.Actions.Safe.Verify.Utils
+  ( canDoWithTab
+  , canDo
+  , conditionally
+  , withCollectionPermission
+  ) where
 
 import Lib.Sync.Types.Store (
   Shared,
@@ -31,17 +36,16 @@ import Lib.Sync.Types.Store.Tabulation.Group (
  )
 import Lib.Types.Id (ActorId)
 import Lib.Types.Permission (
-  CollectionPermission (Blind),
+  CollectionPermission,
   CollectionPermissionWithExemption,
   HasMinimumPermission (..),
-  collectionPermission, exemption,
  )
 
 import Control.Lens (Lens', at, non, (^.))
-import Control.Monad.Extra (when)
 import Control.Monad.State (MonadState (get))
 import Data.HashMap.Strict (HashMap)
 import Data.Hashable (Hashable)
+import Lib.Actions.Safe.Utils (deriveCollectionPermission, conditionally)
 
 {- | Looks first for the groups the user is in, then sees if any of the groups
 can do the action, depicted by the Lens
@@ -80,9 +84,6 @@ canDo
   -> m Bool
 canDo a b c = canDoWithTab a b (const c)
 
-conditionally :: (Applicative m) => m () -> Bool -> m Bool
-conditionally f t = t <$ when t f
-
 withCollectionPermission
   :: (Hashable a)
   => a
@@ -91,12 +92,4 @@ withCollectionPermission
   -> TabulatedPermissionsForGroup
   -> CollectionPermission
 withCollectionPermission xId projMajor projMinor t =
-  let maj = t ^. projMajor
-      majPerm = maj ^. collectionPermission
-      withP p =
-        if p `min` majPerm == Blind
-        then if not (maj ^. exemption)
-        then Blind
-        else majPerm
-        else p `min` majPerm
-   in maybe majPerm withP (t ^. projMinor . at xId)
+  deriveCollectionPermission (t ^. projMajor) (t ^. projMinor . at xId)

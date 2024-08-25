@@ -27,6 +27,7 @@ source-repository head
 
 library
   exposed-modules:
+      Lib.Actions.Safe.Utils
       Lib.Async.Actions.Safe.Verify.Actor
       Lib.Async.Actions.Safe.Verify.Utils
       Lib.Async.Actions.Tabulation
