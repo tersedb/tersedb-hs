@@ -12,7 +12,7 @@ import Test.Syd (Spec, describe, it, shouldBe)
 
 asyncTests :: Spec
 asyncTests = do
-  describe "Commutes" $ do
+  describe "Isomorphisms" $ do
     it "Sync.Store -> Async.Store -> Sync.Store = Sync.Store" $
       forAll arbitraryShared $ \(syncShared, _, _) -> do
         let syncStore = syncShared ^. Sync.store
@@ -21,3 +21,11 @@ asyncTests = do
             gen = runReader Async.genSyncStore asyncShared
         generatedSyncStore <- atomically (load >> gen)
         syncStore `shouldBe` generatedSyncStore
+    it "Sync.Temp -> Async.Temp -> Sync.Temp = Sync.Temp" $
+      forAll arbitraryShared $ \(syncShared, _, _) -> do
+        let syncTemp = syncShared ^. Sync.temp
+        asyncShared <- atomically Async.newShared
+        let load = runReader (Async.loadSyncTemp syncTemp) asyncShared
+            gen = runReader Async.genSyncTemp asyncShared
+        generatedSyncTemp <- atomically (load >> gen)
+        syncTemp `shouldBe` generatedSyncTemp
