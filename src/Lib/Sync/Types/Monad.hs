@@ -112,4 +112,4 @@ import Control.Monad.State (StateT)
 --   modifyTemp proj f =
 --     ModerateTerseM (Identity <$> modify (over (temp . proj) f))
 
-type SheepdogM = StateT Shared IO
+type TerseM = StateT Shared

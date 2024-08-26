@@ -101,7 +101,7 @@ unsafeStoreEntity
   -> SpaceId
   -> VersionId
   -> Maybe VersionId
-  -> m (Either VersionId ())
+  -> m ()
 unsafeStoreEntity eId sId vId mForkId = do
   s <- get
   let s' =
@@ -111,17 +111,14 @@ unsafeStoreEntity eId sId vId mForkId = do
           & store . toVersions . at vId ?~ initVersion
           & temp . toSpaceOf . at eId ?~ sId
           & temp . toEntityOf . at vId ?~ eId
-  case do
-    t' <- loadRefsAndSubs vId (s' ^. store) (s' ^. temp)
-    pure $ loadForks eId (s' ^. store) t' of
-    Left e -> pure (Left e)
-    Right t -> Right () <$ put (s' & temp .~ t)
+      t = loadForks eId (s' ^. store) $ loadRefsAndSubs vId (s' ^. store) (s' ^. temp)
+  put (s' & temp .~ t)
 
 unsafeStoreVersion
   :: (MonadState Shared m)
   => EntityId
   -> VersionId
-  -> m (Either VersionId ())
+  -> m ()
 unsafeStoreVersion eId vId = do
   s <- get
   let s' =
@@ -129,6 +126,5 @@ unsafeStoreVersion eId vId = do
           & store . toEntities . ix eId . versions %~ (vId <|)
           & store . toVersions . at vId ?~ initVersion
           & temp . toEntityOf . at vId ?~ eId
-  case loadRefsAndSubs vId (s' ^. store) (s' ^. temp) of -- don't need to check forks
-    Left e -> pure (Left e)
-    Right t -> Right () <$ put (s' & temp .~ t)
+      t = loadRefsAndSubs vId (s' ^. store) (s' ^. temp)
+  put (s' & temp .~ t)

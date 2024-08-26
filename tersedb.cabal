@@ -28,6 +28,7 @@ source-repository head
 library
   exposed-modules:
       Lib.Actions.Safe.Utils
+      Lib.Async.Actions.Safe.Store
       Lib.Async.Actions.Safe.Verify
       Lib.Async.Actions.Safe.Verify.Actor
       Lib.Async.Actions.Safe.Verify.Group
@@ -40,10 +41,9 @@ library
       Lib.Async.Types.Store
       Lib.Async.Types.Store.Iso
       Lib.Async.Types.Tabulation
-      Lib.Sync.Actions.Gen
+      Lib.Class
       Lib.Sync.Actions.Safe
       Lib.Sync.Actions.Safe.Remove
-      Lib.Sync.Actions.Safe.Store
       Lib.Sync.Actions.Safe.Update
       Lib.Sync.Actions.Safe.Update.Group
       Lib.Sync.Actions.Safe.Verify

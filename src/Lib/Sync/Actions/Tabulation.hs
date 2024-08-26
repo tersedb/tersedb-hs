@@ -161,13 +161,12 @@ loadRefsAndSubs
   :: VersionId
   -> Store
   -> Temp
-  -> Either VersionId Temp
+  -> Temp
 loadRefsAndSubs vId s t =
   case s ^. toVersions . at vId of
-    Nothing -> Left vId
+    Nothing -> t
     Just v ->
-      pure
-        (foldr storeSubs (foldr storeRefs t (v ^. references)) (v ^. subscriptions))
+      foldr storeSubs (foldr storeRefs t (v ^. references)) (v ^. subscriptions)
  where
   storeRefs refId t =
     t
@@ -204,10 +203,7 @@ tempFromStore s = execState go emptyTemp
   loadVersions :: State Temp ()
   loadVersions =
     for_ (HM.keysSet (s ^. toVersions)) $ \vId -> do
-      t <- get
-      case loadRefsAndSubs vId s t of
-        Left e -> error (show e)
-        Right t' -> put t'
+      modify (loadRefsAndSubs vId s)
 
   loadForks' :: State Temp ()
   loadForks' =
