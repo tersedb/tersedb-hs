@@ -4,19 +4,20 @@ module Lib.Async.Actions.Safe.Verify.SpaceAndEntity
   , anyCanCreateSpace
   , anyCanUpdateSpace
   , anyCanDeleteSpace
-  , hasSpacePermission
   , anyCanReadAllEntities
   , anyCanReadEntity
   , anyCanCreateEntity
   , anyCanUpdateAllEntities
   , anyCanUpdateEntity
   , anyCanDeleteEntity
-  , hasEntityPermission
   , anyCanReadVersion
   , anyCanCreateVersion
   , anyCanUpdateVersion
   , anyCanDeleteVersion
   , anyCanDeleteVersionAndEntity
+  , hasUniversePermission
+  , hasSpacePermission
+  , hasEntityPermission
   ) where
 
 import Lib.Types.Id (ActorId, SpaceId, GroupId, EntityId, VersionId)
@@ -39,6 +40,14 @@ import qualified Data.List.NonEmpty as NE
 import Lib.Async.Types.Tabulation (forSpaces, forEntities)
 import Lib.Actions.Safe.Utils (deriveCollectionPermission)
 import DeferredFolds.UnfoldlM (forM_)
+
+hasUniversePermission :: ActorId -> CollectionPermissionWithExemption -> TerseM STM Bool
+hasUniversePermission aId p =
+  canDo getCheckedPerm aId p
+  where
+    getCheckedPerm gId = do
+      s <- ask
+      liftBase $ fromMaybe minBound <$> Map.lookup gId (s ^. temp . toTabUniverse)
 
 canReadSpace :: ActorId -> SpaceId -> TerseM STM Bool
 canReadSpace reader sId = do

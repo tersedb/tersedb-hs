@@ -35,6 +35,7 @@ module Lib.Sync.Actions.Safe.Verify.SpaceAndEntity (
   anyCanDeleteVersion,
   hasEntityPermission,
   hasSpacePermission,
+  hasUniversePermission,
   anyCanReadSpaceOld,
 ) where
 
@@ -81,6 +82,14 @@ import Lib.Types.Permission (
   collectionPermission,
   escalate,
  )
+
+hasUniversePermission
+  :: (MonadState Shared m) => ActorId -> CollectionPermissionWithExemption -> m Bool
+hasUniversePermission aId p =
+  canDo
+    (^. forUniverse)
+    aId
+    p
 
 -- * Spaces
 

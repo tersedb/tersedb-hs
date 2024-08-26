@@ -19,7 +19,6 @@ You can reach me at athan.clark@gmail.com.
 -}
 
 module Lib.Sync.Actions.Unsafe.Update.Group (
-  LinkGroupError (..),
   unsafeLinkGroups,
   unsafeUnlinkGroups,
   unsafeUpdateGroupParent,
@@ -33,8 +32,8 @@ module Lib.Sync.Actions.Unsafe.Update.Group (
   unsafeAdjustMemberPermission,
 ) where
 
-import Control.Lens (Lens', at, ix, non, (%~), (&), (.~), (^.), (^?), _Just)
-import Control.Monad.State (MonadState (get, put), modify, runState)
+import Control.Lens (Lens', at, ix, non, (%~), (&), (.~), (^.), (^?), _Just, (?~))
+import Control.Monad.State (MonadState (get, put), modify, runState, execState)
 import Data.Foldable (foldlM, for_)
 import Data.HashSet (HashSet)
 import qualified Data.HashSet as HS
@@ -68,38 +67,29 @@ import Lib.Types.Permission (
   CollectionPermissionWithExemption,
   SinglePermission,
  )
-
-data LinkGroupError
-  = CycleDetected [GroupId]
-  | MultiParent GroupId
-  deriving (Eq, Show, Read)
+import Control.Monad (unless)
 
 -- | Loads the parent's untabulated permissions if it's not already tabulated!
 unsafeLinkGroups
-  :: (MonadState Shared m) => GroupId -> GroupId -> m (Either LinkGroupError ())
+  :: (MonadState Shared m) => GroupId -> GroupId -> m ()
 unsafeLinkGroups from to = do
   s <- get
   let groups = s ^. store . toGroups
-  if HS.member (from, to) (groups ^. edges)
-    then pure (Right ())
-    else
-      if HS.member to (groups ^. outs)
-        then pure (Left (MultiParent to))
-        else
-          let newGroups =
-                groups
-                  & edges . at (from, to) .~ Just ()
-                  & outs . at to .~ Just ()
-                  & outs . at from .~ Nothing
-                  & roots . at to .~ Nothing
-                  & nodes . ix from . next . at to .~ Just ()
-                  & nodes . ix to . prev .~ Just from
-           in case hasCycle newGroups of
-                Just cycle -> pure . Left $ CycleDetected cycle
-                Nothing -> do
-                  modify $ store . toGroups .~ newGroups
-                  updateTabulationStartingAt to
-                  pure (Right ())
+  unless (HS.member (from, to) (groups ^. edges)) $ -- edge already exists
+    unless (HS.member to (groups ^. outs)) $ -- would cause a cycle
+      let newGroups =
+            groups
+              & edges . at (from, to) ?~ ()
+              & outs . at to ?~ ()
+              & outs . at from .~ Nothing
+              & roots . at to .~ Nothing
+              & nodes . ix from . next . at to ?~ ()
+              & nodes . ix to . prev ?~ from
+        in case hasCycle newGroups of
+            Just cycle -> pure ()
+            Nothing -> do
+              modify $ store . toGroups .~ newGroups
+              updateTabulationStartingAt to
 
 unsafeUnlinkGroups :: (MonadState Shared m) => GroupId -> GroupId -> m ()
 unsafeUnlinkGroups from to = do
@@ -109,8 +99,8 @@ unsafeUnlinkGroups from to = do
         groups
           & edges . at (from, to) .~ Nothing
           & outs . at to .~ Nothing
-          & outs . at from .~ Just ()
-          & roots . at to .~ Just ()
+          & outs . at from ?~ ()
+          & roots . at to ?~ ()
           & nodes . ix from . next . at to .~ Nothing
           & nodes . ix to . prev .~ Nothing
   put $
@@ -122,42 +112,36 @@ unsafeUpdateGroupParent
   :: (MonadState Shared m)
   => GroupId
   -> Maybe GroupId
-  -> m (Either LinkGroupError ())
+  -> m ()
 unsafeUpdateGroupParent gId mParent = do
   s <- get
   case s ^? store . toGroups . nodes . ix gId . prev . _Just of
-    mOldParent | mOldParent == mParent -> pure (Right ())
+    mOldParent | mOldParent == mParent -> pure ()
     Nothing -> unsafeLinkGroups (fromJust mParent) gId
     Just oldParent -> do
       unsafeUnlinkGroups oldParent gId
       case mParent of
-        Nothing -> pure (Right ())
+        Nothing -> pure ()
         Just newParent -> unsafeLinkGroups newParent gId
 
 unsafeUpdateGroupChildren
   :: (MonadState Shared m)
   => GroupId
   -> HashSet GroupId
-  -> m (Either LinkGroupError ())
+  -> m ()
 unsafeUpdateGroupChildren gId children = do
   let newChildren = HS.delete gId children
   s <- get
   case s ^? store . toGroups . nodes . ix gId . next of
-    Nothing -> pure (Right ()) -- FIXME gId not found - should be error?
+    Nothing -> pure () -- FIXME gId not found - should be error?
     Just oldChildren -> do
       let toAdd = newChildren `HS.difference` oldChildren
           toRemove = oldChildren `HS.difference` newChildren
-          addChild :: Shared -> GroupId -> Either LinkGroupError Shared
-          addChild s toAdd =
-            let (mX :: Either LinkGroupError (), s' :: Shared) =
-                  runState (unsafeLinkGroups gId toAdd) s
-             in fmap (const s') mX
-      case foldlM addChild s toAdd of
-        Left e -> pure (Left e)
-        Right s' -> do
-          put s'
-          for_ toRemove $ \toRemove -> unsafeUnlinkGroups gId toRemove
-          pure (Right ())
+          addChild :: GroupId -> Shared -> Shared
+          addChild toAdd = execState (unsafeLinkGroups gId toAdd)
+          s' = foldr addChild s toAdd
+      put s'
+      for_ toRemove $ \toRemove -> unsafeUnlinkGroups gId toRemove
 
 unsafeAdjustPermissionForGroup
   :: (MonadState Shared m)

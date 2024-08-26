@@ -24,6 +24,7 @@ module Lib.Sync.Actions.Safe.Verify.Group (
   anyCanUpdateGroup,
   anyCanDeleteGroup,
   canReadGroup,
+  hasOrganizationPermission,
   hasGroupPermission,
 ) where
 
@@ -44,8 +45,16 @@ import Lib.Types.Permission (
   CollectionPermission (..),
   SinglePermission,
   collectionPermission,
-  escalate,
+  escalate, CollectionPermissionWithExemption,
  )
+
+hasOrganizationPermission
+  :: (MonadState Shared m) => ActorId -> CollectionPermissionWithExemption -> m Bool
+hasOrganizationPermission aId p =
+  canDo
+    (^. forOrganization)
+    aId
+    p
 
 canReadGroup :: (MonadState Shared m) => ActorId -> GroupId -> m Bool
 canReadGroup reader gId = do

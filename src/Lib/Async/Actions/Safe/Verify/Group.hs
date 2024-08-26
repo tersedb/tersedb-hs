@@ -4,13 +4,15 @@ module Lib.Async.Actions.Safe.Verify.Group
   , anyCanCreateGroup
   , anyCanUpdateGroup
   , anyCanDeleteGroup
+  , hasOrganizationPermission
+  , hasGroupPermission
   ) where
 
 import Lib.Types.Id (ActorId, GroupId)
 import Lib.Async.Types.Monad (TerseM)
 import Control.Concurrent.STM (STM)
-import Lib.Types.Permission (CollectionPermission (..), collectionPermission)
-import Lib.Async.Actions.Safe.Verify.Utils (canDo)
+import Lib.Types.Permission (CollectionPermission (..), collectionPermission, CollectionPermissionWithExemption, SinglePermission, escalate)
+import Lib.Async.Actions.Safe.Verify.Utils (canDo, canDoWithTab)
 import Control.Monad.Base (MonadBase(liftBase))
 import Lib.Async.Types.Store (temp, toTabOrganization, toTabOther)
 import Control.Lens ((^.))
@@ -23,6 +25,14 @@ import Data.List.NonEmpty (NonEmpty)
 import qualified Data.List.NonEmpty as NE
 import Control.Monad.Extra (anyM)
 
+
+hasOrganizationPermission :: ActorId -> CollectionPermissionWithExemption -> TerseM STM Bool
+hasOrganizationPermission aId p =
+  canDo getCheckedPerm aId p
+  where
+    getCheckedPerm gId = do
+      s <- ask
+      liftBase $ fromMaybe minBound <$> Map.lookup gId (s ^. temp . toTabOrganization)
 
 canReadGroup :: ActorId -> GroupId -> TerseM STM Bool
 canReadGroup reader gId =
@@ -90,3 +100,24 @@ canDeleteGroup deleter gId =
 anyCanDeleteGroup :: NonEmpty ActorId -> GroupId -> TerseM STM Bool
 anyCanDeleteGroup deleters gId = anyM (`canDeleteGroup` gId) (NE.toList deleters)
 
+
+hasGroupPermission :: ActorId -> GroupId -> SinglePermission -> TerseM STM Bool
+hasGroupPermission aId sId p =
+  canDoWithTab getCheckedPerm aId getRefPerm
+  where
+    getCheckedPerm gId = do
+      s <- ask
+      liftBase $ do
+        mTabOther <- Map.lookup gId (s ^. temp . toTabOther)
+        case mTabOther of
+          Nothing -> pure Blind
+          Just tabOther -> do
+            major <- fromMaybe minBound <$> Map.lookup gId (s ^. temp . toTabOrganization)
+            minor <- Map.lookup sId (tabOther ^. forGroups)
+            pure (deriveCollectionPermission major minor)
+
+    getRefPerm gId = do
+      s <- ask
+      liftBase $ do
+        major <- fromMaybe minBound <$> Map.lookup gId (s ^. temp . toTabOrganization)
+        pure (escalate major p)

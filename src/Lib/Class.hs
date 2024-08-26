@@ -6,14 +6,18 @@ import qualified Lib.Async.Types.Monad as Async
 import qualified Lib.Async.Actions.Safe.Verify as Async
 import qualified Lib.Async.Actions.Unsafe.Store as Async
 import qualified Lib.Async.Actions.Unsafe.Update as Async
+import qualified Lib.Async.Actions.Unsafe.Update.Group as Async
+import qualified Lib.Async.Actions.Unsafe.Remove as Async
 import qualified Lib.Sync.Types.Monad as Sync
 import qualified Lib.Sync.Actions.Safe.Verify as Sync
 import qualified Lib.Sync.Actions.Unsafe.Read as Sync
 import qualified Lib.Sync.Actions.Unsafe.Store as Sync
 import qualified Lib.Sync.Actions.Unsafe.Update as Sync
+import qualified Lib.Sync.Actions.Unsafe.Update.Group as Sync
+import qualified Lib.Sync.Actions.Unsafe.Remove as Sync
 import Control.Concurrent.STM (STM, atomically)
 import Lib.Actions.Safe.Utils (conditionally)
-import Control.Monad.Extra (andM)
+import Control.Monad.Extra (andM, anyM)
 import Control.Monad.IO.Class (MonadIO)
 import System.Random.Stateful (Uniform(uniformM), globalStdGen)
 import Data.Maybe.HT (toMaybe)
@@ -23,6 +27,9 @@ import Control.Monad.Base (MonadBase(liftBase))
 import DeferredFolds.UnfoldlM (UnfoldlM)
 import ListT (ListT)
 import qualified ListT
+import Lib.Types.Permission (CollectionPermissionWithExemption, CollectionPermission, SinglePermission (Exists))
+import qualified Data.List.NonEmpty as NE
+import Data.Maybe (fromMaybe)
 
 generateWithAuthority
   :: ( MonadIO m
@@ -94,6 +101,13 @@ class Monad m => TerseDB m where
   anyCanCreateVersion :: NonEmpty ActorId -> EntityId -> m Bool
   anyCanUpdateVersion :: NonEmpty ActorId -> VersionId -> m Bool
   anyCanDeleteVersion :: NonEmpty ActorId -> VersionId -> m Bool
+  hasUniversePermission :: ActorId -> CollectionPermissionWithExemption -> m Bool
+  hasOrganizationPermission :: ActorId -> CollectionPermissionWithExemption -> m Bool
+  hasRecruiterPermission :: ActorId -> CollectionPermission -> m Bool
+  hasSpacePermission :: ActorId -> SpaceId -> SinglePermission -> m Bool
+  hasEntityPermission :: ActorId -> SpaceId -> CollectionPermission -> m Bool
+  hasGroupPermission :: ActorId -> GroupId -> SinglePermission -> m Bool
+  hasMemberPermission :: ActorId -> GroupId -> CollectionPermission -> m Bool
   unsafeReadReferencesEager :: VersionId -> UnfoldlM m VersionId
   unsafeReadReferencesLazy :: VersionId -> ListT m VersionId
   unsafeReadReferencesFromEager :: VersionId -> UnfoldlM m VersionId
@@ -110,6 +124,15 @@ class Monad m => TerseDB m where
   unsafeStoreSpace :: SpaceId -> m ()
   unsafeStoreEntity :: EntityId -> SpaceId -> VersionId -> Maybe VersionId -> m ()
   unsafeStoreVersion :: EntityId -> VersionId -> m ()
+  unsafeLinkGroups :: GroupId -> GroupId -> m ()
+  unsafeUnlinkGroups :: GroupId -> GroupId -> m ()
+  unsafeAdjustUniversePermission :: (CollectionPermissionWithExemption -> CollectionPermissionWithExemption) -> GroupId -> m ()
+  unsafeAdjustOrganizationPermission :: (CollectionPermissionWithExemption -> CollectionPermissionWithExemption) -> GroupId -> m ()
+  unsafeAdjustRecruiterPermission :: (CollectionPermission -> CollectionPermission) -> GroupId -> m ()
+  unsafeAdjustSpacePermission :: (Maybe SinglePermission -> Maybe SinglePermission) -> GroupId -> SpaceId -> m ()
+  unsafeAdjustEntityPermission :: (CollectionPermission -> CollectionPermission) -> GroupId -> SpaceId -> m ()
+  unsafeAdjustGroupPermission :: (Maybe SinglePermission -> Maybe SinglePermission) -> GroupId -> GroupId -> m ()
+  unsafeAdjustMemberPermission :: (CollectionPermission -> CollectionPermission) -> GroupId -> GroupId -> m ()
   unsafeAddReference :: VersionId -> VersionId -> m ()
   unsafeRemoveReference :: VersionId -> VersionId -> m ()
   unsafeAddSubscription :: VersionId -> EntityId -> m ()
@@ -150,6 +173,13 @@ instance Monad m => TerseDB (Sync.TerseM m) where
   anyCanCreateVersion = Sync.anyCanCreateVersion
   anyCanUpdateVersion = Sync.anyCanUpdateVersion
   anyCanDeleteVersion = Sync.anyCanDeleteVersion
+  hasUniversePermission = Sync.hasUniversePermission
+  hasOrganizationPermission = Sync.hasOrganizationPermission
+  hasRecruiterPermission = Sync.hasRecruiterPermission
+  hasSpacePermission = Sync.hasSpacePermission
+  hasEntityPermission = Sync.hasEntityPermission
+  hasGroupPermission = Sync.hasGroupPermission
+  hasMemberPermission = Sync.hasMemberPermission
   unsafeReadReferencesEager = Sync.unsafeReadReferencesEager
   unsafeReadReferencesLazy = Sync.unsafeReadReferencesLazy
   unsafeReadReferencesFromEager = Sync.unsafeReadReferencesFromEager
@@ -166,6 +196,15 @@ instance Monad m => TerseDB (Sync.TerseM m) where
   unsafeStoreSpace = Sync.unsafeStoreSpace
   unsafeStoreEntity = Sync.unsafeStoreEntity
   unsafeStoreVersion = Sync.unsafeStoreVersion
+  unsafeLinkGroups = Sync.unsafeLinkGroups
+  unsafeUnlinkGroups = Sync.unsafeUnlinkGroups
+  unsafeAdjustUniversePermission = Sync.unsafeAdjustUniversePermission
+  unsafeAdjustOrganizationPermission = Sync.unsafeAdjustOrganizationPermission
+  unsafeAdjustRecruiterPermission = Sync.unsafeAdjustRecruiterPermission
+  unsafeAdjustSpacePermission = Sync.unsafeAdjustSpacePermission
+  unsafeAdjustEntityPermission = Sync.unsafeAdjustEntityPermission
+  unsafeAdjustGroupPermission = Sync.unsafeAdjustGroupPermission
+  unsafeAdjustMemberPermission = Sync.unsafeAdjustMemberPermission
   unsafeAddReference = Sync.unsafeAddReference
   unsafeRemoveReference = Sync.unsafeRemoveReference
   unsafeAddSubscription = Sync.unsafeAddSubscription
@@ -174,6 +213,12 @@ instance Monad m => TerseDB (Sync.TerseM m) where
   unsafeMoveEntity = Sync.unsafeMoveEntity
   unsafeOffsetVersionIndex = Sync.unsafeOffsetVersionIndex
   unsafeSetVersionIndex = Sync.unsafeSetVersionIndex
+  unsafeRemoveVersion = Sync.unsafeRemoveVersion
+  unsafeRemoveEntity = Sync.unsafeRemoveEntity
+  unsafeRemoveSpace = Sync.unsafeRemoveSpace
+  unsafeRemoveMember = Sync.unsafeRemoveMember
+  unsafeRemoveActor = Sync.unsafeRemoveActor
+  unsafeRemoveGroup = Sync.unsafeRemoveGroup
 
 instance TerseDB (Async.TerseM STM) where
   anyCanReadActor = Async.anyCanReadActor
@@ -200,12 +245,28 @@ instance TerseDB (Async.TerseM STM) where
   anyCanCreateVersion = Async.anyCanCreateVersion
   anyCanUpdateVersion = Async.anyCanUpdateVersion
   anyCanDeleteVersion = Async.anyCanDeleteVersion
+  hasUniversePermission = Async.hasUniversePermission
+  hasOrganizationPermission = Async.hasOrganizationPermission
+  hasRecruiterPermission = Async.hasRecruiterPermission
+  hasSpacePermission = Async.hasSpacePermission
+  hasEntityPermission = Async.hasEntityPermission
+  hasGroupPermission = Async.hasGroupPermission
+  hasMemberPermission = Async.hasMemberPermission
   unsafeStoreGroup = Async.unsafeStoreGroup
   unsafeStoreActor = Async.unsafeStoreActor
   unsafeAddMember = Async.unsafeAddMember
   unsafeStoreSpace = Async.unsafeStoreSpace
   unsafeStoreEntity = Async.unsafeStoreEntity
   unsafeStoreVersion = Async.unsafeStoreVersion
+  unsafeLinkGroups = Async.unsafeLinkGroups
+  unsafeUnlinkGroups = Async.unsafeUnlinkGroups
+  unsafeAdjustUniversePermission = Async.unsafeAdjustUniversePermission
+  unsafeAdjustOrganizationPermission = Async.unsafeAdjustOrganizationPermission
+  unsafeAdjustRecruiterPermission = Async.unsafeAdjustRecruiterPermission
+  unsafeAdjustSpacePermission = Async.unsafeAdjustSpacePermission
+  unsafeAdjustEntityPermission = Async.unsafeAdjustEntityPermission
+  unsafeAdjustGroupPermission = Async.unsafeAdjustGroupPermission
+  unsafeAdjustMemberPermission = Async.unsafeAdjustMemberPermission
   unsafeAddReference = Async.unsafeAddReference
   unsafeRemoveReference = Async.unsafeRemoveReference
   unsafeAddSubscription = Async.unsafeAddSubscription
@@ -214,6 +275,14 @@ instance TerseDB (Async.TerseM STM) where
   unsafeMoveEntity = Async.unsafeMoveEntity
   unsafeOffsetVersionIndex = Async.unsafeOffsetVersionIndex
   unsafeSetVersionIndex = Async.unsafeSetVersionIndex
+  unsafeRemoveVersion = Async.unsafeRemoveVersion
+  unsafeRemoveEntity = Async.unsafeRemoveEntity
+  unsafeRemoveSpace = Async.unsafeRemoveSpace
+  unsafeRemoveMember = Async.unsafeRemoveMember
+  unsafeRemoveActor = Async.unsafeRemoveActor
+  unsafeRemoveGroup = Async.unsafeRemoveGroup
+
+-- * Store
 
 storeGroup
   :: (TerseDB m)
@@ -294,6 +363,180 @@ storeNextVersion
 storeNextVersion creator eId vId = do
   anyCanUpdateEntity creator eId
     >>= conditionally (unsafeStoreVersion eId vId)
+
+-- * Update
+
+linkGroups
+  :: (TerseDB m)
+  => NonEmpty ActorId
+  -> GroupId
+  -> GroupId
+  -> m Bool
+linkGroups updater gId childId = do
+  canAdjust <-
+    andM
+      [ anyCanUpdateGroup updater gId
+      , anyCanUpdateGroup updater childId
+      ]
+  conditionally (unsafeLinkGroups gId childId) canAdjust
+
+unlinkGroups
+  :: (TerseDB m)
+  => NonEmpty ActorId
+  -> GroupId
+  -> GroupId
+  -> m Bool
+unlinkGroups updater gId childId = do
+  canAdjust <-
+    andM
+      [ anyCanUpdateGroup updater gId
+      , anyCanUpdateGroup updater childId
+      ]
+  conditionally (unsafeUnlinkGroups gId childId) canAdjust
+
+-- | Will only update the group if the actor has same or greater permission
+setUniversePermission
+  :: (TerseDB m)
+  => NonEmpty ActorId
+  -- ^ actor attempting to set permission
+  -> CollectionPermissionWithExemption
+  -- ^ permission being set
+  -> GroupId
+  -- ^ group subject to new permission
+  -> m Bool
+setUniversePermission creator p gId = do
+  canAdjust <-
+    andM
+      [ anyCanUpdateGroup creator gId
+      , anyM (`hasUniversePermission` p) (NE.toList creator)
+      ]
+  conditionally
+    (unsafeAdjustUniversePermission (const p) gId)
+    canAdjust
+
+setOrganizationPermission
+  :: (TerseDB m)
+  => NonEmpty ActorId
+  -- ^ actor attempting to set permission
+  -> CollectionPermissionWithExemption
+  -- ^ permission being set
+  -> GroupId
+  -- ^ group subject to new permission
+  -> m Bool
+setOrganizationPermission creator p gId = do
+  canAdjust <-
+    andM
+      [ anyCanUpdateGroup creator gId
+      , anyM (`hasOrganizationPermission` p) (NE.toList creator)
+      ]
+  conditionally
+    (unsafeAdjustOrganizationPermission (const p) gId)
+    canAdjust
+
+setRecruiterPermission
+  :: (TerseDB m)
+  => NonEmpty ActorId
+  -- ^ actor attempting to set permission
+  -> CollectionPermission
+  -- ^ permission being set
+  -> GroupId
+  -- ^ group subject to new permission
+  -> m Bool
+setRecruiterPermission creator p gId = do
+  canAdjust <-
+    andM
+      [ anyCanUpdateGroup creator gId
+      , anyM (`hasRecruiterPermission` p) (NE.toList creator)
+      ]
+  conditionally
+    (unsafeAdjustRecruiterPermission (const p) gId)
+    canAdjust
+
+setSpacePermission
+  :: (TerseDB m)
+  => NonEmpty ActorId
+  -- ^ actor attempting to set permission
+  -> Maybe SinglePermission
+  -- ^ permission being set
+  -> GroupId
+  -- ^ group subject to new permission
+  -> SpaceId
+  -- ^ relevant to this space
+  -> m Bool
+setSpacePermission creator p gId sId = do
+  canAdjust <-
+    andM
+      [ anyCanUpdateGroup creator gId
+      , anyM (\c -> hasSpacePermission c sId (fromMaybe Exists p)) (NE.toList creator)
+      ]
+  conditionally
+    (unsafeAdjustSpacePermission (const p) gId sId)
+    canAdjust
+
+setEntityPermission
+  :: (TerseDB m)
+  => NonEmpty ActorId
+  -- ^ actor attempting to set permission
+  -> CollectionPermission
+  -- ^ permission being set
+  -> GroupId
+  -- ^ group subject to new permission
+  -> SpaceId
+  -- ^ relevant to this space
+  -> m Bool
+setEntityPermission creator p gId sId = do
+  canAdjust <-
+    andM
+      [ anyCanUpdateGroup creator gId
+      , anyM (\c -> hasEntityPermission c sId p) (NE.toList creator)
+      ]
+  conditionally
+    (unsafeAdjustEntityPermission (const p) gId sId)
+    canAdjust
+
+setGroupPermission
+  :: (TerseDB m)
+  => NonEmpty ActorId
+  -- ^ actor attempting to set permission
+  -> Maybe SinglePermission
+  -- ^ permission being set
+  -> GroupId
+  -- ^ group subject to new permission
+  -> GroupId
+  -- ^ relevant to this group (grants one group to NEAO other groups)
+  -> m Bool
+setGroupPermission creator p gId towardGId = do
+  canAdjust <-
+    andM
+      [ anyCanUpdateGroup creator gId
+      , anyM
+          (\c -> hasGroupPermission c towardGId (fromMaybe Exists p))
+          (NE.toList creator)
+      ]
+  conditionally
+    (unsafeAdjustGroupPermission (const p) gId towardGId)
+    canAdjust
+
+setMemberPermission
+  :: (TerseDB m)
+  => NonEmpty ActorId
+  -- ^ actor attempting to set permission
+  -> CollectionPermission
+  -- ^ the permission being granted
+  -> GroupId
+  -- ^ the group gaining the permission
+  -> GroupId
+  -- ^ the group that can have their members manipulated
+  -> m Bool
+setMemberPermission creator p manipulatorGId manipulatedGId = do
+  canAdjust <-
+    andM
+      [ anyCanUpdateGroup creator manipulatorGId
+      , anyM (\c -> hasMemberPermission c manipulatedGId p) (NE.toList creator)
+      ]
+  conditionally
+    (unsafeAdjustMemberPermission (const p) manipulatorGId manipulatedGId)
+    canAdjust
 
 -- | Moving an entity between spaces requires delete authority on the current space, and create authority on the destination space
 moveEntity
@@ -395,6 +638,8 @@ setVersionIndex
 setVersionIndex updater vId idx = do
   anyCanUpdateVersion updater vId
     >>= conditionally (unsafeSetVersionIndex vId idx)
+
+-- * Remove
 
 removeVersion
   :: (TerseDB m)
