@@ -21,7 +21,7 @@ You can reach me at athan.clark@gmail.com.
 module Lib.Sync.Actions.Unsafe.Remove where
 
 import Control.Lens (at, ix, non, (%~), (.~), (^.), (^?!), _Left)
-import Control.Monad.State (MonadState (get, put), modify, runState)
+import Control.Monad.State (MonadState (get, put), modify, runState, execState)
 import Data.Foldable (foldlM, for_)
 import qualified Data.List.NonEmpty as NE
 import Lib.Sync.Actions.Unsafe.Update (
@@ -62,104 +62,76 @@ import Lib.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
 unsafeRemoveVersion
   :: (MonadState Shared m)
   => VersionId
-  -> m (Either (Either VersionId EntityId) ())
+  -> m ()
 unsafeRemoveVersion vId = do
   s <- get
   case s ^. store . toVersions . at vId of
-    Nothing -> pure . Left $ Left vId
-    Just v ->
+    Nothing -> pure ()
+    Just v -> do
       let eId :: EntityId = s ^?! temp . toEntityOf . ix vId
-       in case foldlM removeRef s (v ^. references)
-            >>= flip
-              (foldlM removeReferred)
-              (s ^. temp . toReferencesFrom . at vId . non mempty)
-            >>= flip (foldlM removeSub) (v ^. subscriptions)
-            >>= flip
-              (foldlM removeFork)
-              (s ^. temp . toForksFrom . at vId . non mempty) of
-            Left e -> pure (Left e)
-            Right (s' :: Shared) -> do
-              put s'
-              modify $ store . toVersions . at vId .~ Nothing
-              modify $
-                store . toEntities . ix eId . versions
-                  %~ NE.fromList . NE.filter (/= vId)
-              pure $ Right ()
+          s' = foldr removeFork
+               (foldr removeSub
+                (foldr removeReferred
+                 (foldr removeRef s (v ^. references))
+                (s ^. temp . toReferencesFrom . at vId . non mempty))
+               (v ^. subscriptions))
+              (s ^. temp . toForksFrom . at vId . non mempty)
+      put s'
+      modify $ store . toVersions . at vId .~ Nothing
+      modify $
+        store . toEntities . ix eId . versions
+          %~ NE.fromList . NE.filter (/= vId)
  where
-  removeRef :: Shared -> VersionId -> Either (Either VersionId EntityId) Shared
-  removeRef s refId =
-    let (mE, s' :: Shared) = runState (unsafeRemoveReference vId refId) s
-     in _Left %~ Left $ const s' <$> mE
-  removeSub :: Shared -> EntityId -> Either (Either VersionId EntityId) Shared
-  removeSub s subId =
-    let (mE, s') = runState (unsafeRemoveSubscription vId subId) s
-     in _Left %~ Left $ const s' <$> mE
-  removeReferred
-    :: Shared -> VersionId -> Either (Either VersionId EntityId) Shared
-  removeReferred s referrerId =
-    let (mE, s' :: Shared) = runState (unsafeRemoveReference referrerId vId) s
-     in _Left %~ Left $ const s' <$> mE
-  removeFork :: Shared -> EntityId -> Either (Either VersionId EntityId) Shared
-  removeFork s eId =
-    let (mE, s') = runState (unsafeUpdateFork eId Nothing) s
-     in _Left %~ Right $ const s' <$> mE
+  removeRef :: VersionId -> Shared -> Shared
+  removeRef refId = execState (unsafeRemoveReference vId refId)
+  removeSub :: EntityId -> Shared -> Shared
+  removeSub subId = execState (unsafeRemoveSubscription vId subId)
+  removeReferred :: VersionId -> Shared -> Shared
+  removeReferred referrerId = execState (unsafeRemoveReference referrerId vId)
+  removeFork :: EntityId -> Shared -> Shared
+  removeFork eId = execState (unsafeUpdateFork eId Nothing)
 
 unsafeRemoveEntity
   :: (MonadState Shared m)
   => EntityId
-  -> m (Either (Either VersionId EntityId) ())
+  -> m ()
 unsafeRemoveEntity eId = do
   s <- get
   case s ^. store . toEntities . at eId of
-    Nothing -> pure . Left $ Right eId
-    Just e ->
-      case foldlM rmVersion s (e ^. versions)
-        >>= flip
-          (foldlM rmSubscription)
-          (s ^. temp . toSubscriptionsFrom . at eId . non mempty)
-        >>= rmFork of
-        Left e -> pure $ Left e
-        Right s' -> do
-          put s'
-          modify $ store . toEntities . at eId .~ Nothing
-          pure (Right ())
+    Nothing -> pure ()
+    Just e -> do
+      let s' = rmFork
+            (foldr rmSubscription
+              (foldr rmVersion s (e ^. versions))
+            (s ^. temp . toSubscriptionsFrom . at eId . non mempty))
+      put s'
+      modify $ store . toEntities . at eId .~ Nothing
  where
-  rmVersion :: Shared -> VersionId -> Either (Either VersionId EntityId) Shared
-  rmVersion s vId =
-    let (eUnit, s') = runState (unsafeRemoveVersion vId) s
-     in const s' <$> eUnit
+  rmVersion :: VersionId -> Shared -> Shared
+  rmVersion vId = execState (unsafeRemoveVersion vId)
 
   rmSubscription
-    :: Shared -> VersionId -> Either (Either VersionId EntityId) Shared
-  rmSubscription s vId =
-    let (eUnit, s') = runState (unsafeRemoveSubscription vId eId) s
-     in _Left %~ Left $ const s' <$> eUnit
+    :: VersionId -> Shared -> Shared
+  rmSubscription vId = execState (unsafeRemoveSubscription vId eId)
 
-  rmFork :: Shared -> Either (Either VersionId EntityId) Shared
-  rmFork s =
-    let (mE, s') = runState (unsafeUpdateFork eId Nothing) s
-     in _Left %~ Right $ const s' <$> mE
+  rmFork :: Shared -> Shared
+  rmFork = execState (unsafeUpdateFork eId Nothing)
 
 unsafeRemoveSpace
   :: (MonadState Shared m)
   => SpaceId
-  -> m (Either (Either (Either VersionId EntityId) SpaceId) ())
+  -> m ()
 unsafeRemoveSpace sId = do
   s <- get
   case s ^. store . toSpaces . at sId of
-    Nothing -> pure . Left $ Right sId
-    Just es -> case foldlM rmEntity s es of
-      Left e -> pure $ Left e
-      Right s' -> do
-        put s'
-        modify $ store . toSpaces . at sId .~ Nothing
-        pure (Right ())
+    Nothing -> pure ()
+    Just es -> do
+      let s' = foldr rmEntity s es
+      put s'
+      modify $ store . toSpaces . at sId .~ Nothing
  where
-  rmEntity
-    :: Shared -> EntityId -> Either (Either (Either VersionId EntityId) SpaceId) Shared
-  rmEntity s eId =
-    let (mE, s') = runState (unsafeRemoveEntity eId) s
-     in _Left %~ Left $ const s' <$> mE
+  rmEntity :: EntityId -> Shared -> Shared
+  rmEntity eId = execState (unsafeRemoveEntity eId)
 
 unsafeRemoveMember
   :: (MonadState Shared m)
@@ -184,11 +156,11 @@ unsafeRemoveActor aId = do
 unsafeRemoveGroup
   :: (MonadState Shared m)
   => GroupId
-  -> m (Either GroupId ())
+  -> m ()
 unsafeRemoveGroup gId = do
   s <- get
   case s ^. store . toGroups . nodes . at gId of
-    Nothing -> pure (Left gId)
+    Nothing -> pure ()
     Just g -> do
       for_ (g ^. members) $ \aId ->
         unsafeRemoveMember gId aId
@@ -199,4 +171,3 @@ unsafeRemoveGroup gId = do
       modify $ store . toGroups . nodes . at gId .~ Nothing
       modify $ store . toGroups . roots . at gId .~ Nothing
       modify $ store . toGroups . outs . at gId .~ Nothing
-      pure (Right ())

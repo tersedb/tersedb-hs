@@ -5,10 +5,11 @@ import Lib.Types.Id (ActorId, GroupId, SpaceId, EntityId, VersionId)
 import qualified Lib.Async.Types.Monad as Async
 import qualified Lib.Async.Actions.Safe.Verify as Async
 import qualified Lib.Async.Actions.Unsafe.Store as Async
+import qualified Lib.Async.Actions.Unsafe.Update as Async
 import qualified Lib.Sync.Types.Monad as Sync
 import qualified Lib.Sync.Actions.Safe.Verify as Sync
 import qualified Lib.Sync.Actions.Unsafe.Store as Sync
-import Data.Functor.Identity (Identity)
+import qualified Lib.Sync.Actions.Unsafe.Update as Sync
 import Control.Concurrent.STM (STM, atomically)
 import Lib.Actions.Safe.Utils (conditionally)
 import Control.Monad.Extra (andM)
@@ -16,9 +17,10 @@ import Control.Monad.IO.Class (MonadIO)
 import System.Random.Stateful (Uniform(uniformM), globalStdGen)
 import Data.Maybe.HT (toMaybe)
 import Control.Monad.Trans.Control (MonadBaseControl(liftBaseWith))
-import Control.Monad.State (StateT(runStateT))
 import Control.Monad.Reader (MonadReader(ask), ReaderT (runReaderT))
 import Control.Monad.Base (MonadBase(liftBase))
+import DeferredFolds.UnfoldlM (UnfoldlM)
+import ListT (ListT)
 
 generateWithAuthority
   :: ( MonadIO m
@@ -90,12 +92,36 @@ class Monad m => TerseDB m where
   anyCanCreateVersion :: NonEmpty ActorId -> EntityId -> m Bool
   anyCanUpdateVersion :: NonEmpty ActorId -> VersionId -> m Bool
   anyCanDeleteVersion :: NonEmpty ActorId -> VersionId -> m Bool
+  unsafeReadReferencesEager :: VersionId -> UnfoldlM m VersionId
+  unsafeReadReferencesLazy :: VersionId -> ListT m VersionId
+  unsafeReadReferencesFromEager :: VersionId -> UnfoldlM m VersionId
+  unsafeReadReferencesFromLazy :: VersionId -> ListT m VersionId
+  unsafeReadSubscriptionsEager :: VersionId -> UnfoldlM m EntityId
+  unsafeReadSubscriptionsLazy :: VersionId -> ListT m EntityId
+  unsafeReadSubscriptionsFromEager :: VersionId -> UnfoldlM m EntityId
+  unsafeReadSubscriptionsFromLazy :: VersionId -> ListT m EntityId
+  unsafeReadEntitiesEager :: VersionId -> UnfoldlM m EntityId
+  unsafeReadEntitiesLazy :: VersionId -> ListT m EntityId
   unsafeStoreGroup :: GroupId -> m ()
   unsafeStoreActor :: ActorId -> m ()
   unsafeAddMember :: GroupId -> ActorId -> m ()
   unsafeStoreSpace :: SpaceId -> m ()
   unsafeStoreEntity :: EntityId -> SpaceId -> VersionId -> Maybe VersionId -> m ()
   unsafeStoreVersion :: EntityId -> VersionId -> m ()
+  unsafeAddReference :: VersionId -> VersionId -> m ()
+  unsafeRemoveReference :: VersionId -> VersionId -> m ()
+  unsafeAddSubscription :: VersionId -> EntityId -> m ()
+  unsafeRemoveSubscription :: VersionId -> EntityId -> m ()
+  unsafeUpdateFork :: EntityId -> Maybe VersionId -> m ()
+  unsafeMoveEntity :: EntityId -> SpaceId -> m ()
+  unsafeOffsetVersionIndex :: VersionId -> Int -> m ()
+  unsafeSetVersionIndex :: VersionId -> Int -> m ()
+  unsafeRemoveVersion :: VersionId -> m ()
+  unsafeRemoveEntity :: EntityId -> m ()
+  unsafeRemoveSpace :: SpaceId -> m ()
+  unsafeRemoveMember :: GroupId -> ActorId -> m ()
+  unsafeRemoveActor :: ActorId -> m ()
+  unsafeRemoveGroup :: GroupId -> m ()
 
 instance Monad m => TerseDB (Sync.TerseM m) where
   anyCanReadActor = Sync.anyCanReadActor
@@ -128,6 +154,14 @@ instance Monad m => TerseDB (Sync.TerseM m) where
   unsafeStoreSpace = Sync.unsafeStoreSpace
   unsafeStoreEntity = Sync.unsafeStoreEntity
   unsafeStoreVersion = Sync.unsafeStoreVersion
+  unsafeAddReference = Sync.unsafeAddReference
+  unsafeRemoveReference = Sync.unsafeRemoveReference
+  unsafeAddSubscription = Sync.unsafeAddSubscription
+  unsafeRemoveSubscription = Sync.unsafeRemoveSubscription
+  unsafeUpdateFork = Sync.unsafeUpdateFork
+  unsafeMoveEntity = Sync.unsafeMoveEntity
+  unsafeOffsetVersionIndex = Sync.unsafeOffsetVersionIndex
+  unsafeSetVersionIndex = Sync.unsafeSetVersionIndex
 
 instance TerseDB (Async.TerseM STM) where
   anyCanReadActor = Async.anyCanReadActor
@@ -160,6 +194,14 @@ instance TerseDB (Async.TerseM STM) where
   unsafeStoreSpace = Async.unsafeStoreSpace
   unsafeStoreEntity = Async.unsafeStoreEntity
   unsafeStoreVersion = Async.unsafeStoreVersion
+  unsafeAddReference = Async.unsafeAddReference
+  unsafeRemoveReference = Async.unsafeRemoveReference
+  unsafeAddSubscription = Async.unsafeAddSubscription
+  unsafeRemoveSubscription = Async.unsafeRemoveSubscription
+  unsafeUpdateFork = Async.unsafeUpdateFork
+  unsafeMoveEntity = Async.unsafeMoveEntity
+  unsafeOffsetVersionIndex = Async.unsafeOffsetVersionIndex
+  unsafeSetVersionIndex = Async.unsafeSetVersionIndex
 
 storeGroup
   :: (TerseDB m)
@@ -240,3 +282,104 @@ storeNextVersion
 storeNextVersion creator eId vId = do
   anyCanUpdateEntity creator eId
     >>= conditionally (unsafeStoreVersion eId vId)
+
+-- | Moving an entity between spaces requires delete authority on the current space, and create authority on the destination space
+moveEntity
+  :: (TerseDB m) => NonEmpty ActorId -> EntityId -> SpaceId -> m Bool
+moveEntity updater eId newSId = do
+  canAdjust <-
+    andM
+      [ anyCanDeleteEntity updater eId
+      , anyCanCreateEntity updater newSId
+      ]
+  conditionally (unsafeMoveEntity eId newSId) canAdjust
+
+addReference
+  :: (TerseDB m)
+  => NonEmpty ActorId
+  -> VersionId
+  -> VersionId
+  -> m Bool 
+addReference updater vId refId = do
+  canAdjust <-
+    andM
+      [ anyCanReadVersion updater refId
+      , anyCanUpdateVersion updater vId
+      ]
+  conditionally (unsafeAddReference vId refId) canAdjust
+
+removeReference
+  :: (TerseDB m)
+  => NonEmpty ActorId
+  -> VersionId
+  -> VersionId
+  -> m Bool
+removeReference updater vId refId = do
+  canAdjust <-
+    andM
+      [ anyCanReadVersion updater refId
+      , anyCanUpdateVersion updater vId
+      ]
+  conditionally (unsafeRemoveReference vId refId) canAdjust
+
+addSubscription
+  :: (TerseDB m)
+  => NonEmpty ActorId
+  -> VersionId
+  -> EntityId
+  -> m Bool
+addSubscription updater vId subId = do
+  canAdjust <-
+    andM
+      [ anyCanReadEntity updater subId
+      , anyCanUpdateVersion updater vId
+      ]
+  conditionally (unsafeAddSubscription vId subId) canAdjust
+
+removeSubscription
+  :: (TerseDB m)
+  => NonEmpty ActorId
+  -> VersionId
+  -> EntityId
+  -> m Bool
+removeSubscription updater vId subId = do
+  canAdjust <-
+    andM
+      [ anyCanReadEntity updater subId
+      , anyCanUpdateVersion updater vId
+      ]
+  conditionally (unsafeRemoveSubscription vId subId) canAdjust
+
+updateFork
+  :: (TerseDB m)
+  => NonEmpty ActorId
+  -> EntityId
+  -> Maybe VersionId
+  -> m Bool
+updateFork updater eId mFork = do
+  canAdjust <-
+    andM
+      [ anyCanUpdateEntity updater eId
+      , maybe (pure True) (anyCanReadVersion updater) mFork
+      ]
+  conditionally (unsafeUpdateFork eId mFork) canAdjust
+
+offsetVersionIndex
+  :: (TerseDB m)
+  => NonEmpty ActorId
+  -> VersionId
+  -> Int
+  -> m Bool
+offsetVersionIndex updater vId offset = do
+  anyCanUpdateVersion updater vId
+    >>= conditionally (unsafeOffsetVersionIndex vId offset)
+
+setVersionIndex
+  :: (TerseDB m)
+  => NonEmpty ActorId
+  -> VersionId
+  -> Int
+  -> m Bool
+setVersionIndex updater vId idx = do
+  anyCanUpdateVersion updater vId
+    >>= conditionally (unsafeSetVersionIndex vId idx)

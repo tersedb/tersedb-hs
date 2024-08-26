@@ -49,11 +49,11 @@ unsafeUpdateVersionReferences
   :: (MonadState Shared m)
   => VersionId
   -> HashSet VersionId
-  -> m (Either VersionId ())
+  -> m ()
 unsafeUpdateVersionReferences vId refIds = do
   s <- get
   case s ^. store . toVersions . at vId of
-    Nothing -> pure $ Left vId
+    Nothing -> pure ()
     Just v -> do
       let oldRefs = v ^. references
           refsToAdd = refIds `HS.difference` oldRefs
@@ -75,17 +75,16 @@ unsafeUpdateVersionReferences vId refIds = do
         s
           & temp .~ foldr removeRefs (foldr addNewRefs (s ^. temp) refsToAdd) refsToRemove
           & store . toVersions . ix vId . references .~ refIds
-      pure (Right ())
 
 unsafeAddReference
   :: (MonadState Shared m)
   => VersionId
   -> VersionId
-  -> m (Either VersionId ())
+  -> m ()
 unsafeAddReference vId refId = do
   s <- get
   case s ^? store . toVersions . ix vId . references of
-    Nothing -> pure (Left vId)
+    Nothing -> pure ()
     Just refs -> unsafeUpdateVersionReferences vId (HS.insert refId refs)
 
 unsafeRemoveReference
@@ -94,22 +93,22 @@ unsafeRemoveReference
   -- ^ Referrer
   -> VersionId
   -- ^ Referred
-  -> m (Either VersionId ())
+  -> m ()
 unsafeRemoveReference vId refId = do
   s <- get
   case s ^? store . toVersions . ix vId . references of
-    Nothing -> pure (Left vId)
+    Nothing -> pure ()
     Just refs -> unsafeUpdateVersionReferences vId (HS.delete refId refs)
 
 unsafeUpdateVersionSubscriptions
   :: (MonadState Shared m)
   => VersionId
   -> HashSet EntityId
-  -> m (Either VersionId ())
+  -> m ()
 unsafeUpdateVersionSubscriptions vId subIds = do
   s <- get
   case s ^. store . toVersions . at vId of
-    Nothing -> pure $ Left vId
+    Nothing -> pure ()
     Just v -> do
       let oldSubs = v ^. subscriptions
           subsToAdd = subIds `HS.difference` oldSubs
@@ -132,28 +131,27 @@ unsafeUpdateVersionSubscriptions vId subIds = do
         s
           & temp .~ foldr removeSubs (foldr addNewSubs (s ^. temp) subsToAdd) subsToRemove
           & store . toVersions . ix vId . subscriptions .~ subIds
-      pure (Right ())
 
 unsafeAddSubscription
   :: (MonadState Shared m)
   => VersionId
   -> EntityId
-  -> m (Either VersionId ())
+  -> m ()
 unsafeAddSubscription vId subId = do
   s <- get
   case s ^? store . toVersions . ix vId . subscriptions of
-    Nothing -> pure (Left vId)
+    Nothing -> pure ()
     Just subs -> unsafeUpdateVersionSubscriptions vId (HS.insert subId subs)
 
 unsafeRemoveSubscription
   :: (MonadState Shared m)
   => VersionId
   -> EntityId
-  -> m (Either VersionId ())
+  -> m ()
 unsafeRemoveSubscription vId subId = do
   s <- get
   case s ^? store . toVersions . ix vId . subscriptions of
-    Nothing -> pure (Left vId)
+    Nothing -> pure ()
     Just subs -> unsafeUpdateVersionSubscriptions vId (HS.delete subId subs)
 
 -- -- | Only works if this is the newest version in its owner entity
@@ -167,13 +165,13 @@ unsafeUpdateFork
   :: (MonadState Shared m)
   => EntityId
   -> Maybe VersionId
-  -> m (Either EntityId ())
+  -> m ()
 unsafeUpdateFork eId mFork = do
   s <- get
   case s ^. store . toEntities . at eId of
-    Nothing -> pure $ Left eId
+    Nothing -> pure ()
     Just e
-      | e ^. fork == mFork -> pure (Right ())
+      | e ^. fork == mFork -> pure ()
       | otherwise -> do
           case e ^. fork of
             Nothing -> pure ()
@@ -188,39 +186,36 @@ unsafeUpdateFork eId mFork = do
             Just newForkId ->
               modify $ temp . toForksFrom . at newForkId . non mempty . at eId ?~ ()
           modify $ store . toEntities . ix eId . fork .~ mFork
-          pure (Right ())
 
 unsafeMoveEntity
   :: (MonadState Shared m)
   => EntityId
   -> SpaceId
-  -> m (Either EntityId ())
+  -> m ()
 unsafeMoveEntity eId newSId = do
   s <- get
   case s ^. temp . toSpaceOf . at eId of
-    Nothing -> pure $ Left eId
+    Nothing -> pure ()
     Just oldSId
-      | oldSId == newSId -> pure (Right ())
+      | oldSId == newSId -> pure ()
       | otherwise -> do
           modify $ store . toSpaces . ix oldSId . at eId .~ Nothing
           modify $ store . toSpaces . ix newSId . at eId ?~ ()
           modify $ temp . toSpaceOf . ix eId .~ newSId
-          pure (Right ())
 
 unsafeOffsetVersionIndex
   :: (MonadState Shared m)
   => VersionId
   -> Int
   -- ^ 0 - don't move it, negative - move it earlier, positive - move it later
-  -> m (Either VersionId ())
-unsafeOffsetVersionIndex _ 0 = pure (Right ())
+  -> m ()
+unsafeOffsetVersionIndex _ 0 = pure ()
 unsafeOffsetVersionIndex vId offset = do
   s <- get
   case s ^. temp . toEntityOf . at vId of
-    Nothing -> pure $ Left vId
+    Nothing -> pure ()
     Just eId -> do
       modify $ store . toEntities . ix eId . versions %~ go
-      pure $ Right ()
  where
   go vs =
     -- FIXME it'd be nice to use mutable vectors here
@@ -235,14 +230,13 @@ unsafeSetVersionIndex
   :: (MonadState Shared m)
   => VersionId
   -> Int
-  -> m (Either VersionId ())
+  -> m ()
 unsafeSetVersionIndex vId newIdx = do
   s <- get
   case s ^. temp . toEntityOf . at vId of
-    Nothing -> pure $ Left vId
+    Nothing -> pure ()
     Just eId -> do
       modify $ store . toEntities . ix eId . versions %~ go
-      pure $ Right ()
  where
   go vs =
     let vs' = NE.toList vs

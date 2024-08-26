@@ -36,7 +36,9 @@ library
       Lib.Async.Actions.Safe.Verify.SpaceAndEntity
       Lib.Async.Actions.Safe.Verify.Utils
       Lib.Async.Actions.Tabulation
+      Lib.Async.Actions.Unsafe.Remove
       Lib.Async.Actions.Unsafe.Store
+      Lib.Async.Actions.Unsafe.Update
       Lib.Async.Types.Monad
       Lib.Async.Types.Store
       Lib.Async.Types.Store.Iso
@@ -54,6 +56,7 @@ library
       Lib.Sync.Actions.Safe.Verify.Utils
       Lib.Sync.Actions.Tabulation
       Lib.Sync.Actions.Unsafe
+      Lib.Sync.Actions.Unsafe.Read
       Lib.Sync.Actions.Unsafe.Remove
       Lib.Sync.Actions.Unsafe.Store
       Lib.Sync.Actions.Unsafe.Update
@@ -103,6 +106,7 @@ library
     , hashable
     , lens
     , list-t
+    , mmorph
     , monad-control
     , mtl
     , quickcheck-instances
@@ -154,6 +158,7 @@ executable tersedb-hs
     , hashable
     , lens
     , list-t
+    , mmorph
     , monad-control
     , mtl
     , quickcheck-instances
@@ -218,6 +223,7 @@ test-suite tersedb-test
     , hashable
     , lens
     , list-t
+    , mmorph
     , monad-control
     , mtl
     , pretty-simple

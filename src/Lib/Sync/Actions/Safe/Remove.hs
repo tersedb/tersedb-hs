@@ -57,7 +57,7 @@ removeVersion
   :: (MonadState Shared m)
   => NonEmpty ActorId
   -> VersionId
-  -> m (Maybe (Either (Either VersionId EntityId) ()))
+  -> m Bool
 removeVersion remover vId = do
   s <- get
   canAdjust <-
@@ -70,15 +70,13 @@ removeVersion remover vId = do
           -- this version's references and subscriptions, because we're essentially
           -- making this version blind to them by deleting it
       ]
-  if not canAdjust
-    then pure Nothing
-    else Just <$> unsafeRemoveVersion vId
+  conditionally (unsafeRemoveVersion vId) canAdjust
 
 removeEntity
   :: (MonadState Shared m)
   => NonEmpty ActorId
   -> EntityId
-  -> m (Maybe (Either (Either VersionId EntityId) ()))
+  -> m Bool
 removeEntity remover eId = do
   s <- get
   canAdjust <-
@@ -88,15 +86,13 @@ removeEntity remover eId = do
           Nothing -> pure True
           Just subs -> allM (anyCanUpdateVersion remover) (HS.toList subs)
       ]
-  if not canAdjust
-    then pure Nothing
-    else Just <$> unsafeRemoveEntity eId
+  conditionally (unsafeRemoveEntity eId) canAdjust
 
 removeSpace
   :: (MonadState Shared m)
   => NonEmpty ActorId
   -> SpaceId
-  -> m (Maybe (Either (Either (Either VersionId EntityId) SpaceId) ()))
+  -> m Bool
 removeSpace remover sId = do
   s <- get
   canAdjust <- case s ^? store . toSpaces . ix sId of
@@ -106,9 +102,7 @@ removeSpace remover sId = do
         [ anyCanDeleteSpace remover sId
         , allM (anyCanDeleteEntity remover) (HS.toList es)
         ]
-  if not canAdjust
-    then pure Nothing
-    else Just <$> unsafeRemoveSpace sId
+  conditionally (unsafeRemoveSpace sId) canAdjust
 
 removeMember
   :: (MonadState Shared m)
@@ -131,9 +125,6 @@ removeGroup
   :: (MonadState Shared m)
   => NonEmpty ActorId
   -> GroupId
-  -> m (Maybe (Either GroupId ()))
-removeGroup remover gId = do
-  canAdjust <- anyCanDeleteGroup remover gId
-  if not canAdjust
-    then pure Nothing
-    else Just <$> unsafeRemoveGroup gId
+  -> m Bool
+removeGroup remover gId =
+  anyCanDeleteGroup remover gId >>= conditionally (unsafeRemoveGroup gId)

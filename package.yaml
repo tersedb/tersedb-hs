@@ -49,6 +49,7 @@ dependencies:
   - hashable
   - lens
   - list-t
+  - mmorph
   - monad-control
   - mtl
   - transformers-base
