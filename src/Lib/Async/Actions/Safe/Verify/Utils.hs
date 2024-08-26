@@ -21,13 +21,11 @@ canDoWithTab getPermToCheck aId getReferencePerm = do
   s <- ask
   liftBaseWith $ \runInBase -> do
     let go :: Bool -> GroupId -> STM (Maybe Bool)
-        go acc gId = do
-          if acc
-            then pure Nothing
-            else do
-              permToCheck <- runInBase (getPermToCheck gId)
-              referencePerm <- runInBase (getReferencePerm gId)
-              pure . Just $ permToCheck `hasMinimumPermission` referencePerm
+        go True _ = pure Nothing
+        go False gId = do
+          permToCheck <- runInBase (getPermToCheck gId)
+          referencePerm <- runInBase (getReferencePerm gId)
+          pure . Just $ permToCheck `hasMinimumPermission` referencePerm
     foldMaybe go False (Multimap.listTByKey aId (s ^. temp . toMemberOf))
 
 canDo

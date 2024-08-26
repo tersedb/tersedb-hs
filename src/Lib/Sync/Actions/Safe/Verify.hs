@@ -23,11 +23,11 @@ module Lib.Sync.Actions.Safe.Verify (
   module Lib.Sync.Actions.Safe.Verify.Group,
   module Lib.Sync.Actions.Safe.Verify.Member,
   module Lib.Sync.Actions.Safe.Verify.Actor,
-  module Lib.Sync.Actions.Safe.Verify.Utils,
+  module Lib.Actions.Safe.Utils,
 ) where
 
 import Lib.Sync.Actions.Safe.Verify.Actor
 import Lib.Sync.Actions.Safe.Verify.Group
 import Lib.Sync.Actions.Safe.Verify.Member
 import Lib.Sync.Actions.Safe.Verify.SpaceAndEntity
-import Lib.Sync.Actions.Safe.Verify.Utils (conditionally)
+import Lib.Actions.Safe.Utils (conditionally)
