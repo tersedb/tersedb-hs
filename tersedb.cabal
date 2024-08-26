@@ -45,7 +45,6 @@ library
       Lib.Async.Types.Tabulation
       Lib.Class
       Lib.Sync.Actions.Safe
-      Lib.Sync.Actions.Safe.Remove
       Lib.Sync.Actions.Safe.Update
       Lib.Sync.Actions.Safe.Update.Group
       Lib.Sync.Actions.Safe.Verify

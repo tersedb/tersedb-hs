@@ -8,6 +8,7 @@ import qualified Lib.Async.Actions.Unsafe.Store as Async
 import qualified Lib.Async.Actions.Unsafe.Update as Async
 import qualified Lib.Sync.Types.Monad as Sync
 import qualified Lib.Sync.Actions.Safe.Verify as Sync
+import qualified Lib.Sync.Actions.Unsafe.Read as Sync
 import qualified Lib.Sync.Actions.Unsafe.Store as Sync
 import qualified Lib.Sync.Actions.Unsafe.Update as Sync
 import Control.Concurrent.STM (STM, atomically)
@@ -21,6 +22,7 @@ import Control.Monad.Reader (MonadReader(ask), ReaderT (runReaderT))
 import Control.Monad.Base (MonadBase(liftBase))
 import DeferredFolds.UnfoldlM (UnfoldlM)
 import ListT (ListT)
+import qualified ListT
 
 generateWithAuthority
   :: ( MonadIO m
@@ -98,10 +100,10 @@ class Monad m => TerseDB m where
   unsafeReadReferencesFromLazy :: VersionId -> ListT m VersionId
   unsafeReadSubscriptionsEager :: VersionId -> UnfoldlM m EntityId
   unsafeReadSubscriptionsLazy :: VersionId -> ListT m EntityId
-  unsafeReadSubscriptionsFromEager :: VersionId -> UnfoldlM m EntityId
-  unsafeReadSubscriptionsFromLazy :: VersionId -> ListT m EntityId
-  unsafeReadEntitiesEager :: VersionId -> UnfoldlM m EntityId
-  unsafeReadEntitiesLazy :: VersionId -> ListT m EntityId
+  unsafeReadSubscriptionsFromEager :: EntityId -> UnfoldlM m VersionId
+  unsafeReadSubscriptionsFromLazy :: EntityId -> ListT m VersionId
+  unsafeReadEntitiesEager :: SpaceId -> UnfoldlM m EntityId
+  unsafeReadEntitiesLazy :: SpaceId -> ListT m EntityId
   unsafeStoreGroup :: GroupId -> m ()
   unsafeStoreActor :: ActorId -> m ()
   unsafeAddMember :: GroupId -> ActorId -> m ()
@@ -148,6 +150,16 @@ instance Monad m => TerseDB (Sync.TerseM m) where
   anyCanCreateVersion = Sync.anyCanCreateVersion
   anyCanUpdateVersion = Sync.anyCanUpdateVersion
   anyCanDeleteVersion = Sync.anyCanDeleteVersion
+  unsafeReadReferencesEager = Sync.unsafeReadReferencesEager
+  unsafeReadReferencesLazy = Sync.unsafeReadReferencesLazy
+  unsafeReadReferencesFromEager = Sync.unsafeReadReferencesFromEager
+  unsafeReadReferencesFromLazy = Sync.unsafeReadReferencesFromLazy
+  unsafeReadSubscriptionsEager = Sync.unsafeReadSubscriptionsEager
+  unsafeReadSubscriptionsLazy = Sync.unsafeReadSubscriptionsLazy
+  unsafeReadSubscriptionsFromEager = Sync.unsafeReadSubscriptionsFromEager
+  unsafeReadSubscriptionsFromLazy = Sync.unsafeReadSubscriptionsFromLazy
+  unsafeReadEntitiesEager = Sync.unsafeReadEntitiesEager
+  unsafeReadEntitiesLazy = Sync.unsafeReadEntitiesLazy
   unsafeStoreGroup = Sync.unsafeStoreGroup
   unsafeStoreActor = Sync.unsafeStoreActor
   unsafeAddMember = Sync.unsafeAddMember
@@ -383,3 +395,73 @@ setVersionIndex
 setVersionIndex updater vId idx = do
   anyCanUpdateVersion updater vId
     >>= conditionally (unsafeSetVersionIndex vId idx)
+
+removeVersion
+  :: (TerseDB m)
+  => NonEmpty ActorId
+  -> VersionId
+  -> m Bool
+removeVersion remover vId = do
+  canAdjust <-
+    andM
+      [ anyCanDeleteVersion remover vId
+      , let go False _ = pure Nothing
+            go True referrerId = Just <$> anyCanUpdateVersion remover referrerId
+        in  ListT.foldMaybe go True (unsafeReadReferencesFromLazy vId)
+      ]
+  conditionally (unsafeRemoveVersion vId) canAdjust
+
+removeEntity
+  :: (TerseDB m)
+  => NonEmpty ActorId
+  -> EntityId
+  -> m Bool
+removeEntity remover eId = do
+  canAdjust <-
+    andM
+      [ anyCanDeleteEntity remover eId
+      , let go False _ = pure Nothing
+            go True subscriberId = Just <$> anyCanUpdateVersion remover subscriberId
+        in  ListT.foldMaybe go True (unsafeReadSubscriptionsFromLazy eId)
+      ]
+  conditionally (unsafeRemoveEntity eId) canAdjust
+
+removeSpace
+  :: (TerseDB m)
+  => NonEmpty ActorId
+  -> SpaceId
+  -> m Bool
+removeSpace remover sId = do
+  canAdjust <-
+    andM
+      [ anyCanDeleteSpace remover sId
+      , let go False _ = pure Nothing
+            go True eId = Just <$> anyCanDeleteEntity remover eId
+        in  ListT.foldMaybe go True (unsafeReadEntitiesLazy sId)
+      ]
+  conditionally (unsafeRemoveSpace sId) canAdjust
+
+removeMember
+  :: (TerseDB m)
+  => NonEmpty ActorId
+  -> GroupId
+  -> ActorId
+  -> m Bool
+removeMember remover gId aId =
+  anyCanDeleteMember remover gId >>= conditionally (unsafeRemoveMember gId aId)
+
+removeActor
+  :: (TerseDB m)
+  => NonEmpty ActorId
+  -> ActorId
+  -> m Bool
+removeActor remover aId =
+  anyCanDeleteActor remover aId >>= conditionally (unsafeRemoveActor aId)
+
+removeGroup
+  :: (TerseDB m)
+  => NonEmpty ActorId
+  -> GroupId
+  -> m Bool
+removeGroup remover gId =
+  anyCanDeleteGroup remover gId >>= conditionally (unsafeRemoveGroup gId)
