@@ -1,16 +1,33 @@
 module Spec.Generic.Joint where
 
-import Test.Syd (Spec, it, context, shouldBe)
-import Lib.Class (TerseDB (genSyncShared, commit), TerseDBGen (runTerseDB), storeActor, storeGroup, setMemberPermission, addMember, storeSpace, setUniversePermission, setEntityPermission, storeEntity, moveEntity, setSpacePermission)
-import Data.Data (Proxy(Proxy))
-import Lib.Types.Id (ActorId, GroupId, SpaceId, EntityId, VersionId)
-import Lib.Types.Permission (CollectionPermission(..), CollectionPermissionWithExemption (..), SinglePermission (NonExistent))
+import Control.Lens (Ixed (ix), (^?))
 import Control.Monad (unless)
-import Test.QuickCheck (forAll, Testable (property))
-import Spec.Sync.Sample.Store (arbitraryEmptyShared)
+import Data.Data (Proxy (Proxy))
 import qualified Data.List.NonEmpty as NE
+import Lib.Class (
+  TerseDB (commit, genSyncShared),
+  TerseDBGen (runTerseDB),
+  addMember,
+  moveEntity,
+  setEntityPermission,
+  setMemberPermission,
+  setSpacePermission,
+  setUniversePermission,
+  storeActor,
+  storeEntity,
+  storeGroup,
+  storeSpace,
+ )
 import qualified Lib.Sync.Types.Store as Sync
-import Control.Lens ((^?), Ixed (ix))
+import Lib.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
+import Lib.Types.Permission (
+  CollectionPermission (..),
+  CollectionPermissionWithExemption (..),
+  SinglePermission (NonExistent),
+ )
+import Spec.Sync.Sample.Store (arbitraryEmptyShared)
+import Test.QuickCheck (Testable (property), forAll)
+import Test.Syd (Spec, context, it, shouldBe)
 
 jointTests :: forall n m. (TerseDB n m, TerseDBGen n) => Proxy m -> Spec
 jointTests Proxy = do

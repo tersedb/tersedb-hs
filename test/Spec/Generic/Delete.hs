@@ -59,9 +59,10 @@ removeTests Proxy = do
                   context "References are removed" $
                     for_ (fromJust (s ^? Sync.store . Sync.toVersions . ix vId . Sync.references)) $ \refId ->
                       (s' ^? Sync.temp . Sync.toReferencesFrom . ix refId . ix vId) `shouldBe` Nothing
-                  context "Subscriptions are removed" $
-                    for_
-                      (fromJust (s ^? Sync.store . Sync.toVersions . ix vId . Sync.subscriptions)) $ \subId ->
+                  context "Subscriptions are removed"
+                    $ for_
+                      (fromJust (s ^? Sync.store . Sync.toVersions . ix vId . Sync.subscriptions))
+                    $ \subId ->
                       (s' ^? Sync.temp . Sync.toSubscriptionsFrom . ix subId . ix vId)
                         `shouldBe` Nothing
                   context "Doesn't exist as a reference" $

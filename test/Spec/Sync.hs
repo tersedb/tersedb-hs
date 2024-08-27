@@ -64,20 +64,20 @@ syncTests = do
         let s = loadSample xs
             sTemp = s ^. temp
             sFrom = tempFromStore (s ^. store)
-        in shouldSatisfy (s ^. store, sTemp, sFrom) $ \_ -> sTemp == sFrom
+         in shouldSatisfy (s ^. store, sTemp, sFrom) $ \_ -> sTemp == sFrom
     it "all descendants are supersets of roots - build all permissions" $
       property $ \(xs :: SampleStore) ->
         let groups = sampleGroups xs
-        in testPermissionInheritance (current groups) (children groups) (loadSample xs)
+         in testPermissionInheritance (current groups) (children groups) (loadSample xs)
     it "all spaces are disjoint" $
       property $ \(xs :: SampleStore) ->
         let s = loadSample xs
-        in foldr HS.intersection mempty (s ^. store . toSpaces)
+         in foldr HS.intersection mempty (s ^. store . toSpaces)
               `shouldBe` mempty
     it "all elements exist in their space" $
       property $ \(xs :: SampleStore) ->
         let s = loadSample xs
-        in if null (s ^. store . toEntities)
+         in if null (s ^. store . toEntities)
               then property True
               else forAll (elements . HM.toList $ s ^. store . toEntities) $ \(eId, e) ->
                 (s, eId, HM.lookup (s ^?! temp . toSpaceOf . ix eId) (s ^. store . toSpaces))
@@ -111,4 +111,4 @@ syncTests = do
                 for_ (HM.keys $ s ^. store . toSpaces) $ \sId ->
                   unsafeAdjustEntityPermission (const Update) adminGroup sId
                 resetTabulation
-          in safeStore `shouldBe` unsafeStore
+           in safeStore `shouldBe` unsafeStore
