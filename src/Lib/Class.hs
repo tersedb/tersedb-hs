@@ -111,6 +111,7 @@ class Monad m => TerseDB n m | m -> n where
   anyCanUpdateMember :: NonEmpty ActorId -> GroupId -> m Bool
   anyCanDeleteMember :: NonEmpty ActorId -> GroupId -> m Bool
   anyCanReadSpace :: NonEmpty ActorId -> SpaceId -> m Bool
+  anyCanReadSpaceOld :: NonEmpty ActorId -> SpaceId -> m Bool
   anyCanCreateSpace :: NonEmpty ActorId -> m Bool
   anyCanUpdateSpace :: NonEmpty ActorId -> SpaceId -> m Bool
   anyCanDeleteSpace :: NonEmpty ActorId -> SpaceId -> m Bool
@@ -187,6 +188,7 @@ instance Monad m => TerseDB (Sync.TerseM m) (Sync.TerseM m) where
   anyCanUpdateMember = Sync.anyCanUpdateMember
   anyCanDeleteMember = Sync.anyCanDeleteMember
   anyCanReadSpace = Sync.anyCanReadSpace
+  anyCanReadSpaceOld = Sync.anyCanReadSpaceOld
   anyCanCreateSpace = Sync.anyCanCreateSpace
   anyCanUpdateSpace = Sync.anyCanUpdateSpace
   anyCanDeleteSpace = Sync.anyCanDeleteSpace
@@ -265,6 +267,7 @@ instance TerseDB (Async.TerseM IO) (Async.TerseM STM) where
   anyCanUpdateMember = Async.anyCanUpdateMember
   anyCanDeleteMember = Async.anyCanDeleteMember
   anyCanReadSpace = Async.anyCanReadSpace
+  anyCanReadSpaceOld = Async.anyCanReadSpaceOld
   anyCanCreateSpace = Async.anyCanCreateSpace
   anyCanUpdateSpace = Async.anyCanUpdateSpace
   anyCanDeleteSpace = Async.anyCanDeleteSpace

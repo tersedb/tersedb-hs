@@ -9,14 +9,14 @@ module Lib.Async.Actions.Safe.Verify.Member
 import Lib.Types.Id (ActorId, GroupId)
 import Lib.Async.Types.Monad (TerseM)
 import Control.Concurrent.STM (STM)
-import Control.Monad.Extra (andM, anyM)
+import Control.Monad.Extra (andM, anyM, orM)
 import Lib.Async.Actions.Safe.Verify.Utils (canDo)
 import Lib.Async.Actions.Safe.Verify.Group (canReadGroup)
 import Control.Monad.Reader (MonadReader(ask))
 import Control.Monad.Base (MonadBase(liftBase))
 import qualified StmContainers.Map as Map
-import Lib.Async.Types.Store (temp, toTabOther)
-import Lib.Types.Permission (CollectionPermission(..))
+import Lib.Async.Types.Store (temp, toTabOther, toTabOrganization)
+import Lib.Types.Permission (CollectionPermission(..), collectionPermission)
 import Data.Maybe (fromMaybe)
 import Lib.Async.Types.Tabulation (forMembers)
 import Control.Lens ((^.))
@@ -102,12 +102,19 @@ anyCanDeleteMember deleters gId =
 hasMemberPermission :: ActorId -> GroupId -> CollectionPermission -> TerseM STM Bool
 hasMemberPermission aId gId p = andM
   [ canReadGroup aId gId
-  , let getPerm gId = do
-          s <- ask
-          liftBase $ do
-            mTabOther <- Map.lookup gId (s ^. temp . toTabOther)
-            case mTabOther of
-              Nothing -> pure Blind
-              Just tabOther -> fromMaybe Blind <$> Map.lookup gId (tabOther ^. forMembers)
-    in  canDo getPerm aId p
+  , orM
+    [ let getPerm gId = do
+            s <- ask
+            liftBase $ do
+              mTabOther <- Map.lookup gId (s ^. temp . toTabOther)
+              case mTabOther of
+                Nothing -> pure Blind
+                Just tabOther -> fromMaybe Blind <$> Map.lookup gId (tabOther ^. forMembers)
+      in  canDo getPerm aId p
+    , let getPerm gId = do
+            s <- ask
+            liftBase $
+              maybe Blind (^. collectionPermission) <$> Map.lookup gId (s ^. temp . toTabOrganization)
+      in  canDo getPerm aId Update
+    ]
   ]

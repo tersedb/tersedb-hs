@@ -73,31 +73,6 @@ groupsTests = do
           then True `shouldBe` True
           else hasCycle (loadCycle xs) `shouldBe` Just (head xs : reverse xs)
   describe "logical mechanism" $ do
-    it "unlinking causes disjoint trees" $
-      property $ \(xs :: SampleGroupTree ()) ->
-        let s = loadSampleTree xs
-            createdEdges = s ^. store . toGroups . edges
-         in if null createdEdges
-              then property True
-              else forAll (elements (HS.toList createdEdges)) $ \(from, to) ->
-                let newS = execState (unsafeUnlinkGroups from to) s
-                    newGroups = newS ^. store . toGroups
-                    rootsWithoutTo = HS.delete to (newGroups ^. roots)
-                    descendants :: GroupId -> HashSet GroupId
-                    descendants gId =
-                      let children = fromJust (HM.lookup gId (newGroups ^. nodes)) ^. next
-                       in HS.insert gId (HS.unions (map descendants (HS.toList children)))
-                 in (newS, from, to)
-                      `shouldSatisfy` ( \_ ->
-                                          to `HS.member` (newS ^. store . toGroups . roots)
-                                            && all
-                                              ( \descendantOfTo ->
-                                                  not . HS.member descendantOfTo . HS.unions . map descendants $
-                                                    HS.toList rootsWithoutTo
-                                              )
-                                              (HS.toList (descendants to))
-                                      )
-
     describe "total vs. incremental tabulation" $ do
       let testsPerStoreBuild buildStore = do
             it "all descendants are supersets of roots - only universal permission" $

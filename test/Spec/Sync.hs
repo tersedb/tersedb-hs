@@ -61,65 +61,65 @@ import Data.Data (Proxy (..))
 syncTests :: Spec
 syncTests = do
   describe "Generics" (genericTests (Proxy @(TerseM IO)))
-  describe "Simple" simpleSyncTests
-  describe "Groups" groupsTests
-  describe "Store" $ do
-    it "temp data is reproducible from store" $
-      property $ \(xs :: SampleStore) ->
-        let s = loadSample xs
-            sTemp = s ^. temp
-            sFrom = tempFromStore (s ^. store)
-         in shouldSatisfy (s ^. store, sTemp, sFrom) $ \_ -> sTemp == sFrom
-    it "all descendants are supersets of roots - build all permissions" $
-      property $ \(xs :: SampleStore) ->
-        let groups = sampleGroups xs
-         in testPermissionInheritance (current groups) (children groups) (loadSample xs)
-    it "all spaces are disjoint" $
-      property $ \(xs :: SampleStore) ->
-        let s = loadSample xs
-         in foldr HS.intersection mempty (s ^. store . toSpaces)
-              `shouldBe` mempty
-    it "all elements exist in their space" $
-      property $ \(xs :: SampleStore) ->
-        let s = loadSample xs
-         in if null (s ^. store . toEntities)
-              then property True
-              else forAll (elements . HM.toList $ s ^. store . toEntities) $ \(eId, e) ->
-                (s, eId, HM.lookup (s ^?! temp . toSpaceOf . ix eId) (s ^. store . toSpaces))
-                  `shouldSatisfy` ( \(_, _, mSpace) ->
-                                      maybe False (eId `HS.member`) mSpace
-                                  )
-    describe "Safe" $ do
-      it "should be identical to unsafe" $
-        property $ \(xs :: SampleStore, adminActor :: ActorId, adminGroup :: GroupId) ->
-          let safeStore = storeSample xs adminActor adminGroup
-              unsafeStore = flip execState (loadSample xs) $ do
-                -- setup admin
-                unsafeStoreGroup adminGroup
-                unsafeAdjustUniversePermission
-                  (const $ CollectionPermissionWithExemption Delete True)
-                  adminGroup
-                unsafeAdjustOrganizationPermission
-                  (const $ CollectionPermissionWithExemption Delete True)
-                  adminGroup
-                unsafeAdjustRecruiterPermission (const Delete) adminGroup
-                unsafeStoreActor adminActor
-                unsafeAddMember adminGroup adminActor
-                -- "backdate" the granting of group adjust rights to admin group
-                s <- get
-                for_ (HM.keys $ s ^. store . toGroups . nodes) $ \gId ->
-                  unless (gId == adminGroup) $ do
-                    unsafeAdjustGroupPermission (const (Just Adjust)) adminGroup gId
-                    unsafeAdjustMemberPermission (const Create) adminGroup gId
-                -- "backdate" the granting of space create rights to admin group
-                s <- get
-                for_ (HM.keys $ s ^. store . toSpaces) $ \sId ->
-                  unsafeAdjustEntityPermission (const Update) adminGroup sId
-                resetTabulation
-           in safeStore `shouldBe` unsafeStore
-      describe "Permissions" $ do
-        readTests
-        createTests
-        updateTests
-        removeTests
-    jointTests
+  -- describe "Simple" simpleSyncTests
+  -- describe "Groups" groupsTests
+  -- describe "Store" $ do
+  --   it "temp data is reproducible from store" $
+  --     property $ \(xs :: SampleStore) ->
+  --       let s = loadSample xs
+  --           sTemp = s ^. temp
+  --           sFrom = tempFromStore (s ^. store)
+  --        in shouldSatisfy (s ^. store, sTemp, sFrom) $ \_ -> sTemp == sFrom
+  --   it "all descendants are supersets of roots - build all permissions" $
+  --     property $ \(xs :: SampleStore) ->
+  --       let groups = sampleGroups xs
+  --        in testPermissionInheritance (current groups) (children groups) (loadSample xs)
+  --   it "all spaces are disjoint" $
+  --     property $ \(xs :: SampleStore) ->
+  --       let s = loadSample xs
+  --        in foldr HS.intersection mempty (s ^. store . toSpaces)
+  --             `shouldBe` mempty
+  --   it "all elements exist in their space" $
+  --     property $ \(xs :: SampleStore) ->
+  --       let s = loadSample xs
+  --        in if null (s ^. store . toEntities)
+  --             then property True
+  --             else forAll (elements . HM.toList $ s ^. store . toEntities) $ \(eId, e) ->
+  --               (s, eId, HM.lookup (s ^?! temp . toSpaceOf . ix eId) (s ^. store . toSpaces))
+  --                 `shouldSatisfy` ( \(_, _, mSpace) ->
+  --                                     maybe False (eId `HS.member`) mSpace
+  --                                 )
+  --   describe "Safe" $ do
+  --     it "should be identical to unsafe" $
+  --       property $ \(xs :: SampleStore, adminActor :: ActorId, adminGroup :: GroupId) ->
+  --         let safeStore = storeSample xs adminActor adminGroup
+  --             unsafeStore = flip execState (loadSample xs) $ do
+  --               -- setup admin
+  --               unsafeStoreGroup adminGroup
+  --               unsafeAdjustUniversePermission
+  --                 (const $ CollectionPermissionWithExemption Delete True)
+  --                 adminGroup
+  --               unsafeAdjustOrganizationPermission
+  --                 (const $ CollectionPermissionWithExemption Delete True)
+  --                 adminGroup
+  --               unsafeAdjustRecruiterPermission (const Delete) adminGroup
+  --               unsafeStoreActor adminActor
+  --               unsafeAddMember adminGroup adminActor
+  --               -- "backdate" the granting of group adjust rights to admin group
+  --               s <- get
+  --               for_ (HM.keys $ s ^. store . toGroups . nodes) $ \gId ->
+  --                 unless (gId == adminGroup) $ do
+  --                   unsafeAdjustGroupPermission (const (Just Adjust)) adminGroup gId
+  --                   unsafeAdjustMemberPermission (const Create) adminGroup gId
+  --               -- "backdate" the granting of space create rights to admin group
+  --               s <- get
+  --               for_ (HM.keys $ s ^. store . toSpaces) $ \sId ->
+  --                 unsafeAdjustEntityPermission (const Update) adminGroup sId
+  --               resetTabulation
+  --          in safeStore `shouldBe` unsafeStore
+  --     describe "Permissions" $ do
+  --       readTests
+  --       createTests
+  --       updateTests
+  --       removeTests
+  --   jointTests

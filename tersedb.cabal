@@ -190,6 +190,7 @@ test-suite tersedb-test
       Spec.Async
       Spec.Generic
       Spec.Generic.Group
+      Spec.Generic.Read
       Spec.Simple
       Spec.Sync
       Spec.Sync.Sample.Store

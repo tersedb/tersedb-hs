@@ -69,6 +69,7 @@ import StmContainers.Map (Map)
 import qualified StmContainers.Map as Map
 import qualified StmContainers.Multimap as Multimap
 import qualified StmContainers.Set as Set
+import Lib.Actions.Safe.Utils (deriveCollectionPermission)
 
 setInitTabulatedPermissions
   :: GroupId -> TerseM STM ()
@@ -144,7 +145,9 @@ updateTabulatedPermissionsStartingAt gId = do
         forM_ (Set.unfoldlM (s ^. store . toSpaces)) makeSpaceVisible
       CollectionPermissionWithExemption _ False ->
         -- FIXME what if the space hasn't been listed? Like how I want to make entries spotty if they rely on universe setting
-        forM_ (Map.unfoldlM (tabOther ^. forSpaces)) $ \(sId, p) ->
+        forM_ (Set.unfoldlM (s ^. store . toSpaces)) $ \sId -> do
+          pMinor <- Map.lookup sId (tabOther ^. forSpaces)
+          let p = deriveCollectionPermission univPerm pMinor
           if p == Blind then hideSpace sId else makeSpaceVisible sId
   liftBaseWith $ \runInBase ->
     forM_

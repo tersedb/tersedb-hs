@@ -75,13 +75,13 @@ canReadSpaceOld reader sId =
     getPerm readerGId = do
       s <- ask
       liftBase $ do
-        mTabOther <- Map.lookup readerGId (s ^. temp . toTabOther)
-        case mTabOther of
-          Nothing -> pure Blind
-          Just tabOther -> do
-            major <- fromMaybe minBound <$> Map.lookup readerGId (s ^. temp . toTabUniverse)
-            minor <- Map.lookup sId (tabOther ^. forSpaces)
-            pure (deriveCollectionPermission major minor)
+        major <- fromMaybe minBound <$> Map.lookup readerGId (s ^. temp . toTabUniverse)
+        minor <- do
+          mTabOther <- Map.lookup readerGId (s ^. temp . toTabOther)
+          case mTabOther of
+            Nothing -> pure Nothing
+            Just tabOther -> Map.lookup sId (tabOther ^. forSpaces)
+        pure (deriveCollectionPermission major minor)
 
 anyCanReadSpaceOld :: NonEmpty ActorId -> SpaceId -> TerseM STM Bool
 anyCanReadSpaceOld readers sId = anyM (`canReadSpaceOld` sId) (NE.toList readers)

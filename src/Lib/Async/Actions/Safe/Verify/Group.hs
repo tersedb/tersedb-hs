@@ -41,13 +41,13 @@ canReadGroup reader gId =
     getPerm readerGId = do
       s <- ask
       liftBase $ do
-        mTabOther <- Map.lookup readerGId (s ^. temp . toTabOther)
-        case mTabOther of
-          Nothing -> pure Blind
-          Just tabOther -> do
-            major <- fromMaybe minBound <$> Map.lookup readerGId (s ^. temp . toTabOrganization)
-            minor <- Map.lookup gId (tabOther ^. forGroups)
-            pure (deriveCollectionPermission major minor)
+        major <- fromMaybe minBound <$> Map.lookup readerGId (s ^. temp . toTabOrganization)
+        minor <- do
+          mTabOther <- Map.lookup readerGId (s ^. temp . toTabOther)
+          case mTabOther of
+            Nothing -> pure Nothing
+            Just tabOther -> Map.lookup gId (tabOther ^. forGroups)
+        pure (deriveCollectionPermission major minor)
 
 anyCanReadGroup :: NonEmpty ActorId -> GroupId -> TerseM STM Bool
 anyCanReadGroup readers gId = anyM (`canReadGroup` gId) (NE.toList readers)
@@ -71,13 +71,13 @@ canUpdateGroup updater gId =
     getPerm updaterGId = do
       s <- ask
       liftBase $ do
-        mTabOther <- Map.lookup updaterGId (s ^. temp . toTabOther)
-        case mTabOther of
-          Nothing -> pure Blind
-          Just tabOther -> do
-            major <- fromMaybe minBound <$> Map.lookup updaterGId (s ^. temp . toTabOrganization)
-            minor <- Map.lookup gId (tabOther ^. forGroups)
-            pure (deriveCollectionPermission major minor)
+        major <- fromMaybe minBound <$> Map.lookup updaterGId (s ^. temp . toTabOrganization)
+        minor <- do
+          mTabOther <- Map.lookup updaterGId (s ^. temp . toTabOther)
+          case mTabOther of
+            Nothing -> pure Nothing
+            Just tabOther -> Map.lookup gId (tabOther ^. forGroups)
+        pure (deriveCollectionPermission major minor)
 
 anyCanUpdateGroup :: NonEmpty ActorId -> GroupId -> TerseM STM Bool
 anyCanUpdateGroup updaters gId = anyM (`canUpdateGroup` gId) (NE.toList updaters)
@@ -89,13 +89,13 @@ canDeleteGroup deleter gId =
     getPerm deleterGId = do
       s <- ask
       liftBase $ do
-        mTabOther <- Map.lookup deleterGId (s ^. temp . toTabOther)
-        case mTabOther of
-          Nothing -> pure Blind
-          Just tabOther -> do
-            major <- fromMaybe minBound <$> Map.lookup deleterGId (s ^. temp . toTabOrganization)
-            minor <- Map.lookup gId (tabOther ^. forGroups)
-            pure (deriveCollectionPermission major minor)
+        major <- fromMaybe minBound <$> Map.lookup deleterGId (s ^. temp . toTabOrganization)
+        minor <- do
+          mTabOther <- Map.lookup deleterGId (s ^. temp . toTabOther)
+          case mTabOther of
+            Nothing -> pure Nothing
+            Just tabOther -> Map.lookup gId (tabOther ^. forGroups)
+        pure (deriveCollectionPermission major minor)
 
 anyCanDeleteGroup :: NonEmpty ActorId -> GroupId -> TerseM STM Bool
 anyCanDeleteGroup deleters gId = anyM (`canDeleteGroup` gId) (NE.toList deleters)
@@ -108,13 +108,13 @@ hasGroupPermission aId sId p =
     getCheckedPerm gId = do
       s <- ask
       liftBase $ do
-        mTabOther <- Map.lookup gId (s ^. temp . toTabOther)
-        case mTabOther of
-          Nothing -> pure Blind
-          Just tabOther -> do
-            major <- fromMaybe minBound <$> Map.lookup gId (s ^. temp . toTabOrganization)
-            minor <- Map.lookup sId (tabOther ^. forGroups)
-            pure (deriveCollectionPermission major minor)
+        major <- fromMaybe minBound <$> Map.lookup gId (s ^. temp . toTabOrganization)
+        minor <- do
+          mTabOther <- Map.lookup gId (s ^. temp . toTabOther)
+          case mTabOther of
+            Nothing -> pure Nothing
+            Just tabOther -> Map.lookup sId (tabOther ^. forGroups)
+        pure (deriveCollectionPermission major minor)
 
     getRefPerm gId = do
       s <- ask

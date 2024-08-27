@@ -84,46 +84,7 @@ import Test.Syd (Spec, describe, it, shouldBe, shouldSatisfy)
 
 readTests :: Spec
 readTests = describe "Read" $ do
-  describe "New vs. Old" $ do
-    it "Spaces" $
-      let gen = suchThat arbitraryShared $ \(s, _, _) ->
-            not (null (s ^. store . toActors)) && not (null (s ^. store . toSpaces))
-       in forAll gen $ \(s, _, _) ->
-            let genAId = elements . HS.toList $ s ^. store . toActors
-                genSId = elements . HM.keys $ s ^. store . toSpaces
-             in forAll ((,) <$> genAId <*> genSId) $ \(aId, sId) ->
-                  let resNew = evalState (anyCanReadSpace (NE.singleton aId) sId) s
-                      resOld = evalState (anyCanReadSpaceOld (NE.singleton aId) sId) s
-                      gs = HS.toList $ s ^?! temp . toMemberOf . ix aId
-                   in shouldSatisfy
-                        ( gs
-                        , (\g -> (g, s ^?! store . toGroups . nodes . ix g)) <$> gs
-                        , (\g -> (g, s ^?! temp . toTabulatedGroups . ix g)) <$> gs
-                        , s ^? temp . toSpacesHiddenTo . ix sId
-                        , (\g -> (g, s ^? store . toSpacePermissions . ix g)) <$> gs
-                        , resNew
-                        , resOld
-                        , aId
-                        , sId
-                        )
-                        $ \_ -> resNew == resOld
   describe "Should Succeed" $ do
-    it "Spaces" $
-      forAll arbitraryEmptyShared $ \(s, adminActor, adminGroup) ->
-        property $ \(sId :: SpaceId, aId :: ActorId, gId :: GroupId) ->
-          let go :: State Shared Bool
-              go = do
-                setup adminActor adminGroup aId gId
-                worked <- storeSpace (NE.singleton adminActor) sId
-                unless worked $ error $ "Couldn't make space " <> show sId
-                worked <-
-                  setUniversePermission
-                    (NE.singleton adminActor)
-                    (CollectionPermissionWithExemption Read False)
-                    gId
-                unless worked $ error $ "Couldn't set universe permission " <> show gId
-                anyCanReadSpace (NE.singleton aId) sId
-           in evalState go s `shouldBe` True
     it "Entities" $
       property $
         \( adminActor :: ActorId

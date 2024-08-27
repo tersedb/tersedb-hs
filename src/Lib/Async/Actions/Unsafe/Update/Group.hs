@@ -19,8 +19,9 @@ import Control.Exception (Exception)
 import Lib.Async.Actions.Tabulation (updateTabulatedPermissionsStartingAt)
 import Control.Monad.Catch (throwM)
 import Control.Monad.Trans.Control (MonadBaseControl(liftBaseWith))
-import Lib.Types.Permission (CollectionPermissionWithExemption, CollectionPermission, SinglePermission)
+import Lib.Types.Permission (CollectionPermissionWithExemption, CollectionPermission (Blind), SinglePermission)
 import qualified Focus
+import Data.Maybe (fromMaybe)
 
 hasCycle :: TerseM STM (Maybe [GroupId])
 hasCycle = do
@@ -118,7 +119,7 @@ unsafeAdjustEntityPermission f gId sId = do
     case mPermOther of
       Nothing -> pure ()
       Just permOther -> do
-        Map.focus (Focus.adjust f) sId (permOther ^. entityPermission)
+        Map.focus (Focus.alter (Just . f . fromMaybe Blind)) sId (permOther ^. entityPermission)
         runInBase $ updateTabulatedPermissionsStartingAt gId
 
 unsafeAdjustGroupPermission :: (Maybe SinglePermission -> Maybe SinglePermission) -> GroupId -> GroupId -> TerseM STM ()
@@ -140,5 +141,5 @@ unsafeAdjustMemberPermission f gId sId = do
     case mPermOther of
       Nothing -> pure ()
       Just permOther -> do
-        Map.focus (Focus.adjust f) sId (permOther ^. memberPermission)
+        Map.focus (Focus.alter (Just . f . fromMaybe Blind)) sId (permOther ^. memberPermission)
         runInBase $ updateTabulatedPermissionsStartingAt gId
