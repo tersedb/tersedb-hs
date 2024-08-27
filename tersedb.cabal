@@ -200,7 +200,6 @@ test-suite tersedb-test
       Spec.Sync.Sample.Store
       Spec.Sync.Sample.Tree
       Spec.Sync.Test.Groups
-      Spec.Sync.Test.Joint
       Spec.Sync.Test.Simple
       Paths_tersedb
   autogen-modules:
