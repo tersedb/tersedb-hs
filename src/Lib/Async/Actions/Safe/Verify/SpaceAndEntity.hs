@@ -278,7 +278,7 @@ canUpdateAllEntities :: ActorId -> SpaceId -> TerseM STM Bool
 canUpdateAllEntities updater sId =
   andM
     [ canDo getPerm updater Update
-    , canUpdateSpace updater sId
+    , canReadSpace updater sId
     ]
  where
   getPerm updaterGId = do
