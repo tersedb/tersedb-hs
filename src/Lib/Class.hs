@@ -152,15 +152,15 @@ class (Monad m) => TerseDB n m | m -> n where
   hasMemberPermission :: ActorId -> GroupId -> CollectionPermission -> m Bool
   unsafeReadPrevGroup :: GroupId -> m (Maybe GroupId)
   unsafeReadReferencesEager :: VersionId -> UnfoldlM m VersionId
-  unsafeReadReferencesLazy :: VersionId -> ListT m VersionId
+  unsafeReadReferencesLazy :: VersionId -> m (ListT m VersionId)
   unsafeReadReferencesFromEager :: VersionId -> UnfoldlM m VersionId
-  unsafeReadReferencesFromLazy :: VersionId -> ListT m VersionId
+  unsafeReadReferencesFromLazy :: VersionId -> m (ListT m VersionId)
   unsafeReadSubscriptionsEager :: VersionId -> UnfoldlM m EntityId
-  unsafeReadSubscriptionsLazy :: VersionId -> ListT m EntityId
+  unsafeReadSubscriptionsLazy :: VersionId -> m (ListT m EntityId)
   unsafeReadSubscriptionsFromEager :: EntityId -> UnfoldlM m VersionId
-  unsafeReadSubscriptionsFromLazy :: EntityId -> ListT m VersionId
+  unsafeReadSubscriptionsFromLazy :: EntityId -> m (ListT m VersionId)
   unsafeReadEntitiesEager :: SpaceId -> UnfoldlM m EntityId
-  unsafeReadEntitiesLazy :: SpaceId -> ListT m EntityId
+  unsafeReadEntitiesLazy :: SpaceId -> m (ListT m EntityId)
   unsafeStoreGroup :: GroupId -> m ()
   unsafeStoreActor :: ActorId -> m ()
   unsafeAddMember :: GroupId -> ActorId -> m ()
@@ -766,7 +766,7 @@ removeVersion remover vId = do
       [ anyCanDeleteVersion remover vId
       , let go False _ = pure Nothing
             go True referrerId = Just <$> anyCanUpdateVersion remover referrerId
-         in ListT.foldMaybe go True (unsafeReadReferencesFromLazy vId)
+         in ListT.foldMaybe go True =<< unsafeReadReferencesFromLazy vId
       ]
   conditionally (unsafeRemoveVersion vId) canAdjust
 
@@ -781,7 +781,7 @@ removeEntity remover eId = do
       [ anyCanDeleteEntity remover eId
       , let go False _ = pure Nothing
             go True subscriberId = Just <$> anyCanUpdateVersion remover subscriberId
-         in ListT.foldMaybe go True (unsafeReadSubscriptionsFromLazy eId)
+         in ListT.foldMaybe go True =<< unsafeReadSubscriptionsFromLazy eId
       ]
   conditionally (unsafeRemoveEntity eId) canAdjust
 
@@ -796,7 +796,7 @@ removeSpace remover sId = do
       [ anyCanDeleteSpace remover sId
       , let go False _ = pure Nothing
             go True eId = Just <$> anyCanDeleteEntity remover eId
-         in ListT.foldMaybe go True (unsafeReadEntitiesLazy sId)
+         in ListT.foldMaybe go True =<< unsafeReadEntitiesLazy sId
       ]
   conditionally (unsafeRemoveSpace sId) canAdjust
 

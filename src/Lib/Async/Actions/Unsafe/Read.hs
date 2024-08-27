@@ -44,31 +44,11 @@ unsafeReadReferencesEager vId = UnfoldlM $ \f acc -> do
       reducer = flip runReaderT s
   UnfoldlM.foldlM' f acc . UnfoldlM.hoist lifter reducer $ refs
 
-unsafeReadReferencesLazy :: VersionId -> ListT (TerseM STM) VersionId
-unsafeReadReferencesLazy vId = hoist loadRefs $ ListT.unfoldM go ()
- where
-  loadRefs
-    :: forall a
-     . ReadingStateT (TVar (ListT STM VersionId)) (TerseM STM) a
-    -> TerseM STM a
-  loadRefs m = do
-    s <- ask
-    refsVar <-
-      liftBase . newTVar $ Multimap.listTByKey vId (s ^. store . toReferences)
-    runReaderT (runReadingStateT m) refsVar
-  go
-    :: ()
-    -> ReadingStateT (TVar (ListT STM VersionId)) (TerseM STM) (Maybe (VersionId, ()))
-  go _ = do
-    refsVar <- ask'
-    liftBase $ do
-      refs <- readTVar refsVar
-      mNext <- ListT.uncons refs
-      case mNext of
-        Nothing -> pure Nothing
-        Just (x, next) -> do
-          writeTVar refsVar next
-          pure (Just (x, ()))
+unsafeReadReferencesLazy :: VersionId -> TerseM STM (ListT (TerseM STM) VersionId)
+unsafeReadReferencesLazy vId = do
+  s <- ask
+  let refs = Multimap.listTByKey vId (s ^. store . toReferences)
+  pure (hoist liftBase refs)
 
 unsafeReadReferencesFromEager :: VersionId -> UnfoldlM (TerseM STM) VersionId
 unsafeReadReferencesFromEager vId = UnfoldlM $ \f acc -> do
@@ -81,31 +61,11 @@ unsafeReadReferencesFromEager vId = UnfoldlM $ \f acc -> do
       reducer = flip runReaderT s
   UnfoldlM.foldlM' f acc . UnfoldlM.hoist lifter reducer $ refs
 
-unsafeReadReferencesFromLazy :: VersionId -> ListT (TerseM STM) VersionId
-unsafeReadReferencesFromLazy vId = hoist loadRefs $ ListT.unfoldM go ()
- where
-  loadRefs
-    :: forall a
-     . ReadingStateT (TVar (ListT STM VersionId)) (TerseM STM) a
-    -> TerseM STM a
-  loadRefs m = do
-    s <- ask
-    refsVar <-
-      liftBase . newTVar $ Multimap.listTByKey vId (s ^. temp . toReferencesFrom)
-    runReaderT (runReadingStateT m) refsVar
-  go
-    :: ()
-    -> ReadingStateT (TVar (ListT STM VersionId)) (TerseM STM) (Maybe (VersionId, ()))
-  go _ = do
-    refsVar <- ask'
-    liftBase $ do
-      refs <- readTVar refsVar
-      mNext <- ListT.uncons refs
-      case mNext of
-        Nothing -> pure Nothing
-        Just (x, next) -> do
-          writeTVar refsVar next
-          pure (Just (x, ()))
+unsafeReadReferencesFromLazy :: VersionId -> TerseM STM (ListT (TerseM STM) VersionId)
+unsafeReadReferencesFromLazy vId = do
+  s <- ask
+  let refs = Multimap.listTByKey vId (s ^. temp . toReferencesFrom)
+  pure (hoist liftBase refs)
 
 unsafeReadSubscriptionsEager :: VersionId -> UnfoldlM (TerseM STM) EntityId
 unsafeReadSubscriptionsEager vId = UnfoldlM $ \f acc -> do
@@ -118,31 +78,11 @@ unsafeReadSubscriptionsEager vId = UnfoldlM $ \f acc -> do
       reducer = flip runReaderT s
   UnfoldlM.foldlM' f acc . UnfoldlM.hoist lifter reducer $ subs
 
-unsafeReadSubscriptionsLazy :: VersionId -> ListT (TerseM STM) EntityId
-unsafeReadSubscriptionsLazy vId = hoist loadsubs $ ListT.unfoldM go ()
- where
-  loadsubs
-    :: forall a
-     . ReadingStateT (TVar (ListT STM EntityId)) (TerseM STM) a
-    -> TerseM STM a
-  loadsubs m = do
-    s <- ask
-    subsVar <-
-      liftBase . newTVar $ Multimap.listTByKey vId (s ^. store . toSubscriptions)
-    runReaderT (runReadingStateT m) subsVar
-  go
-    :: ()
-    -> ReadingStateT (TVar (ListT STM EntityId)) (TerseM STM) (Maybe (EntityId, ()))
-  go _ = do
-    subsVar <- ask'
-    liftBase $ do
-      subs <- readTVar subsVar
-      mNext <- ListT.uncons subs
-      case mNext of
-        Nothing -> pure Nothing
-        Just (x, next) -> do
-          writeTVar subsVar next
-          pure (Just (x, ()))
+unsafeReadSubscriptionsLazy :: VersionId -> TerseM STM (ListT (TerseM STM) EntityId)
+unsafeReadSubscriptionsLazy vId = do
+  s <- ask
+  let subs = Multimap.listTByKey vId (s ^. store . toSubscriptions)
+  pure (hoist liftBase subs)
 
 unsafeReadSubscriptionsFromEager :: EntityId -> UnfoldlM (TerseM STM) VersionId
 unsafeReadSubscriptionsFromEager eId = UnfoldlM $ \f acc -> do
@@ -155,31 +95,11 @@ unsafeReadSubscriptionsFromEager eId = UnfoldlM $ \f acc -> do
       reducer = flip runReaderT s
   UnfoldlM.foldlM' f acc . UnfoldlM.hoist lifter reducer $ subs
 
-unsafeReadSubscriptionsFromLazy :: EntityId -> ListT (TerseM STM) VersionId
-unsafeReadSubscriptionsFromLazy eId = hoist loadsubs $ ListT.unfoldM go ()
- where
-  loadsubs
-    :: forall a
-     . ReadingStateT (TVar (ListT STM VersionId)) (TerseM STM) a
-    -> TerseM STM a
-  loadsubs m = do
-    s <- ask
-    subsVar <-
-      liftBase . newTVar $ Multimap.listTByKey eId (s ^. temp . toSubscriptionsFrom)
-    runReaderT (runReadingStateT m) subsVar
-  go
-    :: ()
-    -> ReadingStateT (TVar (ListT STM VersionId)) (TerseM STM) (Maybe (VersionId, ()))
-  go _ = do
-    subsVar <- ask'
-    liftBase $ do
-      subs <- readTVar subsVar
-      mNext <- ListT.uncons subs
-      case mNext of
-        Nothing -> pure Nothing
-        Just (x, next) -> do
-          writeTVar subsVar next
-          pure (Just (x, ()))
+unsafeReadSubscriptionsFromLazy :: EntityId -> TerseM STM (ListT (TerseM STM) VersionId)
+unsafeReadSubscriptionsFromLazy eId = do
+  s <- ask
+  let subs = Multimap.listTByKey eId (s ^. temp . toSubscriptionsFrom)
+  pure (hoist liftBase subs)
 
 unsafeReadEntitiesEager :: SpaceId -> UnfoldlM (TerseM STM) EntityId
 unsafeReadEntitiesEager sId = UnfoldlM $ \f acc -> do
@@ -192,28 +112,8 @@ unsafeReadEntitiesEager sId = UnfoldlM $ \f acc -> do
       reducer = flip runReaderT s
   UnfoldlM.foldlM' f acc . UnfoldlM.hoist lifter reducer $ subs
 
-unsafeReadEntitiesLazy :: SpaceId -> ListT (TerseM STM) EntityId
-unsafeReadEntitiesLazy sId = hoist loadsubs $ ListT.unfoldM go ()
- where
-  loadsubs
-    :: forall a
-     . ReadingStateT (TVar (ListT STM EntityId)) (TerseM STM) a
-    -> TerseM STM a
-  loadsubs m = do
-    s <- ask
-    subsVar <-
-      liftBase . newTVar $ Multimap.listTByKey sId (s ^. store . toSpaceEntities)
-    runReaderT (runReadingStateT m) subsVar
-  go
-    :: ()
-    -> ReadingStateT (TVar (ListT STM EntityId)) (TerseM STM) (Maybe (EntityId, ()))
-  go _ = do
-    subsVar <- ask'
-    liftBase $ do
-      subs <- readTVar subsVar
-      mNext <- ListT.uncons subs
-      case mNext of
-        Nothing -> pure Nothing
-        Just (x, next) -> do
-          writeTVar subsVar next
-          pure (Just (x, ()))
+unsafeReadEntitiesLazy :: SpaceId -> TerseM STM (ListT (TerseM STM) EntityId)
+unsafeReadEntitiesLazy sId = do
+  s <- ask
+  let subs = Multimap.listTByKey sId (s ^. store . toSpaceEntities)
+  pure (hoist liftBase subs)

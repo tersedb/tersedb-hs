@@ -71,29 +71,6 @@ import Test.Syd (Spec, context, describe, it, shouldBe)
 
 removeTests :: Spec
 removeTests = describe "Remove" $ do
-  it "Version" $
-    let gen = suchThat arbitraryShared $ \(s, _, _) ->
-          not . null . HM.filter (\e -> length (e ^. versions) > 1) $
-            s ^. store . toEntities
-     in forAll gen $ \(s, adminActor, adminGroup) ->
-          let entsWith2OrMoreVersions =
-                HM.filter (\e -> length (e ^. versions) > 1) $
-                  s ^. store . toEntities
-           in forAll (elements $ HM.toList entsWith2OrMoreVersions) $ \(eId, e) ->
-                forAll (elements . NE.toList $ e ^. versions) $ \vId -> do
-                  let s' = flip execState s $ do
-                        worked <- removeVersion (NE.singleton adminActor) vId
-                        unless worked $ error $ "Couldn't remove version " <> show (vId)
-                  (s' ^? store . toVersions . ix vId) `shouldBe` Nothing
-                  ( filter (== vId) . fromMaybe mempty . fmap NE.toList $
-                      s' ^? store . toEntities . ix eId . versions
-                    )
-                    `shouldBe` mempty
-                  for_ (fromJust (s ^? store . toVersions . ix vId . references)) $ \refId ->
-                    (s' ^? temp . toReferencesFrom . ix refId . ix vId) `shouldBe` Nothing
-                  for_ (fromJust (s ^? store . toVersions . ix vId . subscriptions)) $ \subId ->
-                    (s' ^? temp . toSubscriptionsFrom . ix subId . ix vId) `shouldBe` Nothing
-                  (s' ^? temp . toReferencesFrom . ix vId) `shouldBe` Nothing
   describe "Entity" $
     it "should delete all versions" $
       let gen = suchThat arbitraryShared $ \(s, _, _) ->

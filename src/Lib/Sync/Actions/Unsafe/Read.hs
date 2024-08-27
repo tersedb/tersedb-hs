@@ -43,16 +43,11 @@ unsafeReadReferencesEager vId = UnfoldlM $ \f acc -> do
   foldlM f acc refs
 
 unsafeReadReferencesLazy
-  :: forall m. (MonadState Shared m) => VersionId -> ListT m VersionId
-unsafeReadReferencesLazy vId = ListT.unfoldM go 0
- where
-  go idx = do
-    s <- get
-    let refs :: [VersionId]
-        refs = HS.toList . fromMaybe mempty $ s ^? store . toVersions . ix vId . references
-    if length refs >= idx
-      then pure Nothing
-      else pure (Just (refs !! idx, idx + 1))
+  :: forall m. (MonadState Shared m) => VersionId -> m (ListT m VersionId)
+unsafeReadReferencesLazy vId = do
+  s <- get
+  let refs = fromMaybe mempty $ s ^? store . toVersions . ix vId . references
+  pure (ListT.fromFoldable refs)
 
 unsafeReadReferencesFromEager
   :: (MonadState Shared m) => VersionId -> UnfoldlM m VersionId
@@ -62,16 +57,11 @@ unsafeReadReferencesFromEager vId = UnfoldlM $ \f acc -> do
   foldlM f acc refs
 
 unsafeReadReferencesFromLazy
-  :: forall m. (MonadState Shared m) => VersionId -> ListT m VersionId
-unsafeReadReferencesFromLazy vId = ListT.unfoldM go 0
- where
-  go idx = do
-    s <- get
-    let refs :: [VersionId]
-        refs = HS.toList $ s ^. temp . toReferencesFrom . at vId . non mempty
-    if length refs >= idx
-      then pure Nothing
-      else pure (Just (refs !! idx, idx + 1))
+  :: forall m. (MonadState Shared m) => VersionId -> m (ListT m VersionId)
+unsafeReadReferencesFromLazy vId = do
+  s <- get
+  let refs = s ^. temp . toReferencesFrom . at vId . non mempty
+  pure (ListT.fromFoldable refs)
 
 unsafeReadSubscriptionsEager
   :: (MonadState Shared m) => VersionId -> UnfoldlM m EntityId
@@ -81,17 +71,11 @@ unsafeReadSubscriptionsEager vId = UnfoldlM $ \f acc -> do
   foldlM f acc subs
 
 unsafeReadSubscriptionsLazy
-  :: forall m. (MonadState Shared m) => VersionId -> ListT m EntityId
-unsafeReadSubscriptionsLazy vId = ListT.unfoldM go 0
- where
-  go idx = do
-    s <- get
-    let subs :: [EntityId]
-        subs =
-          HS.toList . fromMaybe mempty $ s ^? store . toVersions . ix vId . subscriptions
-    if length subs >= idx
-      then pure Nothing
-      else pure (Just (subs !! idx, idx + 1))
+  :: forall m. (MonadState Shared m) => VersionId -> m (ListT m EntityId)
+unsafeReadSubscriptionsLazy vId = do
+  s <- get
+  let subs = fromMaybe mempty $ s ^? store . toVersions . ix vId . subscriptions
+  pure (ListT.fromFoldable subs)
 
 unsafeReadSubscriptionsFromEager
   :: (MonadState Shared m) => EntityId -> UnfoldlM m VersionId
@@ -101,16 +85,11 @@ unsafeReadSubscriptionsFromEager eId = UnfoldlM $ \f acc -> do
   foldlM f acc subs
 
 unsafeReadSubscriptionsFromLazy
-  :: forall m. (MonadState Shared m) => EntityId -> ListT m VersionId
-unsafeReadSubscriptionsFromLazy eId = ListT.unfoldM go 0
- where
-  go idx = do
-    s <- get
-    let subs :: [VersionId]
-        subs = HS.toList $ s ^. temp . toSubscriptionsFrom . at eId . non mempty
-    if length subs >= idx
-      then pure Nothing
-      else pure (Just (subs !! idx, idx + 1))
+  :: forall m. (MonadState Shared m) => EntityId -> m (ListT m VersionId)
+unsafeReadSubscriptionsFromLazy eId = do
+  s <- get
+  let subs = s ^. temp . toSubscriptionsFrom . at eId . non mempty
+  pure (ListT.fromFoldable subs)
 
 unsafeReadEntitiesEager
   :: (MonadState Shared m) => SpaceId -> UnfoldlM m EntityId
@@ -120,13 +99,8 @@ unsafeReadEntitiesEager sId = UnfoldlM $ \f acc -> do
   foldlM f acc es
 
 unsafeReadEntitiesLazy
-  :: forall m. (MonadState Shared m) => SpaceId -> ListT m EntityId
-unsafeReadEntitiesLazy sId = ListT.unfoldM go 0
- where
-  go idx = do
-    s <- get
-    let es :: [EntityId]
-        es = HS.toList $ s ^. store . toSpaces . at sId . non mempty
-    if length es >= idx
-      then pure Nothing
-      else pure (Just (es !! idx, idx + 1))
+  :: forall m. (MonadState Shared m) => SpaceId -> m (ListT m EntityId)
+unsafeReadEntitiesLazy sId = do
+  s <- get
+  let es = s ^. store . toSpaces . at sId . non mempty
+  pure (ListT.fromFoldable es)

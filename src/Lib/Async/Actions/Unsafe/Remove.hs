@@ -52,23 +52,25 @@ unsafeRemoveVersion vId = do
     case mEId of
       Nothing -> pure ()
       Just eId -> do
-        vs <- Map.lookup eId (s ^. store . toEntities)
-        unless (length vs == 1) $ do
-          Map.focus
-            (Focus.adjust (NE.fromList . NE.filter (/= vId)))
-            eId
-            (s ^. store . toEntities)
-          Set.delete vId (s ^. store . toVersions)
-          forM_ (Multimap.unfoldlMByKey vId (s ^. store . toReferences)) $ \refId ->
-            Multimap.delete vId refId (s ^. temp . toReferencesFrom)
-          Multimap.deleteByKey vId (s ^. store . toReferences)
-          Multimap.deleteByKey vId (s ^. temp . toReferencesFrom)
-          forM_ (Multimap.unfoldlMByKey vId (s ^. store . toSubscriptions)) $ \subId ->
-            Multimap.delete vId subId (s ^. temp . toSubscriptionsFrom)
-          Multimap.deleteByKey vId (s ^. store . toSubscriptions)
-          forM_ (Multimap.unfoldlMByKey vId (s ^. temp . toForksFrom)) $ \forkId ->
-            Map.delete forkId (s ^. store . toForks)
-          Multimap.deleteByKey vId (s ^. temp . toForksFrom)
+        mVs <- Map.lookup eId (s ^. store . toEntities)
+        case mVs of
+          Nothing -> pure ()
+          Just vs -> unless (length vs == 1) $ do
+            Map.focus
+              (Focus.adjust (NE.fromList . NE.filter (/= vId)))
+              eId
+              (s ^. store . toEntities)
+            Set.delete vId (s ^. store . toVersions)
+            forM_ (Multimap.unfoldlMByKey vId (s ^. store . toReferences)) $ \refId ->
+              Multimap.delete vId refId (s ^. temp . toReferencesFrom)
+            Multimap.deleteByKey vId (s ^. store . toReferences)
+            Multimap.deleteByKey vId (s ^. temp . toReferencesFrom)
+            forM_ (Multimap.unfoldlMByKey vId (s ^. store . toSubscriptions)) $ \subId ->
+              Multimap.delete vId subId (s ^. temp . toSubscriptionsFrom)
+            Multimap.deleteByKey vId (s ^. store . toSubscriptions)
+            forM_ (Multimap.unfoldlMByKey vId (s ^. temp . toForksFrom)) $ \forkId ->
+              Map.delete forkId (s ^. store . toForks)
+            Multimap.deleteByKey vId (s ^. temp . toForksFrom)
 
 unsafeRemoveEntity :: EntityId -> TerseM STM ()
 unsafeRemoveEntity eId = do
