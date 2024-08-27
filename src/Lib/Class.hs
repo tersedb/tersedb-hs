@@ -1,7 +1,7 @@
 module Lib.Class where
 
 import Control.Concurrent.STM (STM, atomically)
-import Control.Lens ((^.))
+import Control.Lens ((^.), (^?), _Just, ix)
 import Control.Monad.Base (MonadBase (liftBase))
 import Control.Monad.Extra (andM, anyM)
 import Control.Monad.IO.Class (MonadIO)
@@ -43,6 +43,7 @@ import qualified Lib.Sync.Actions.Unsafe.Update as Sync
 import qualified Lib.Sync.Actions.Unsafe.Update.Group as Sync
 import qualified Lib.Sync.Types.Monad as Sync
 import qualified Lib.Sync.Types.Store as Sync
+import qualified Lib.Sync.Types.Store.Groups as Sync
 import Lib.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
 import Lib.Types.Permission (
   CollectionPermission,
@@ -52,6 +53,7 @@ import Lib.Types.Permission (
 import ListT (ListT)
 import qualified ListT
 import System.Random.Stateful (Uniform (uniformM), globalStdGen)
+import qualified StmContainers.Map as Map
 
 generateWithAuthority
   :: ( MonadIO m
@@ -148,6 +150,7 @@ class (Monad m) => TerseDB n m | m -> n where
   hasEntityPermission :: ActorId -> SpaceId -> CollectionPermission -> m Bool
   hasGroupPermission :: ActorId -> GroupId -> SinglePermission -> m Bool
   hasMemberPermission :: ActorId -> GroupId -> CollectionPermission -> m Bool
+  unsafeReadPrevGroup :: GroupId -> m (Maybe GroupId)
   unsafeReadReferencesEager :: VersionId -> UnfoldlM m VersionId
   unsafeReadReferencesLazy :: VersionId -> ListT m VersionId
   unsafeReadReferencesFromEager :: VersionId -> UnfoldlM m VersionId
@@ -237,6 +240,9 @@ instance (Monad m) => TerseDB (Sync.TerseM m) (Sync.TerseM m) where
   hasEntityPermission = Sync.hasEntityPermission
   hasGroupPermission = Sync.hasGroupPermission
   hasMemberPermission = Sync.hasMemberPermission
+  unsafeReadPrevGroup gId = do
+    s <- get
+    pure $ s ^? Sync.store . Sync.toGroups . Sync.nodes . ix gId . Sync.prev . _Just
   unsafeReadReferencesEager = Sync.unsafeReadReferencesEager
   unsafeReadReferencesLazy = Sync.unsafeReadReferencesLazy
   unsafeReadReferencesFromEager = Sync.unsafeReadReferencesFromEager
@@ -317,6 +323,9 @@ instance TerseDB (Async.TerseM IO) (Async.TerseM STM) where
   hasEntityPermission = Async.hasEntityPermission
   hasGroupPermission = Async.hasGroupPermission
   hasMemberPermission = Async.hasMemberPermission
+  unsafeReadPrevGroup gId = do
+    s <- ask
+    liftBase $ Map.lookup gId (s ^. Async.store . Async.toGroupsPrev)
   unsafeReadReferencesEager = Async.unsafeReadReferencesEager
   unsafeReadReferencesLazy = Async.unsafeReadReferencesLazy
   unsafeReadReferencesFromEager = Async.unsafeReadReferencesFromEager
@@ -468,6 +477,36 @@ unlinkGroups updater gId childId = do
       , anyCanUpdateGroup updater childId
       ]
   conditionally (unsafeUnlinkGroups gId childId) canAdjust
+
+updateGroupParent
+  :: (TerseDB n m)
+  => NonEmpty ActorId
+  -> GroupId
+  -> Maybe GroupId
+  -> m Bool
+updateGroupParent updater gId mPrevId = do
+  canAdjust <-
+    andM
+      [ anyCanUpdateGroup updater gId
+      , case mPrevId of
+          Nothing -> pure True
+          Just prevId -> anyCanUpdateGroup updater prevId
+      ]
+  if not canAdjust
+  then pure False
+  else do
+    mOldPrevId <- unsafeReadPrevGroup gId
+    if mOldPrevId == mPrevId
+    then pure True
+    else do
+      worked <- case mOldPrevId of
+        Nothing -> pure True
+        Just prevId -> unlinkGroups updater prevId gId
+      if not worked
+      then pure False
+      else case mPrevId of
+        Nothing -> pure True
+        Just prevId -> linkGroups updater prevId gId
 
 -- | Will only update the group if the actor has same or greater permission
 setUniversePermission

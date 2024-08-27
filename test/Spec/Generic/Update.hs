@@ -5,7 +5,7 @@ import Lib.Types.Id (ActorId, GroupId, SpaceId, EntityId, VersionId)
 import Lib.Types.Permission (CollectionPermission (..), CollectionPermissionWithExemption (..))
 import Test.QuickCheck (forAll, Testable (property), suchThat, elements, suchThatMap, chooseInt, Arbitrary (arbitrary))
 import Spec.Sync.Sample.Store (arbitraryEmptyShared, arbitraryShared)
-import Lib.Class (TerseDB (genSyncShared, commit), storeActor, storeGroup, setMemberPermission, addMember, setUniversePermission, storeSpace, setEntityPermission, storeEntity, moveEntity, TerseDBGen (runTerseDB), addReference, removeReference, addSubscription, removeSubscription, updateFork, offsetVersionIndex, setVersionIndex)
+import Lib.Class (TerseDB (genSyncShared, commit), storeActor, storeGroup, setMemberPermission, addMember, setUniversePermission, storeSpace, setEntityPermission, storeEntity, moveEntity, TerseDBGen (runTerseDB), addReference, removeReference, addSubscription, removeSubscription, updateFork, offsetVersionIndex, setVersionIndex, updateGroupParent, unlinkGroups, linkGroups)
 import Control.Monad (unless)
 import qualified Data.List.NonEmpty as NE
 import Control.Lens ((^?), Ixed (ix), (^.), _Just, (^?!))
@@ -13,10 +13,12 @@ import Data.Data (Proxy(Proxy))
 import qualified Lib.Sync.Types.Store as Sync
 import qualified Lib.Sync.Types.Store.Version as Sync
 import qualified Lib.Sync.Types.Store.Entity as Sync
+import qualified Lib.Sync.Types.Store.Groups as Sync
 import qualified Data.HashMap.Strict as HM
 import qualified Data.HashSet as HS
 import Data.Maybe (fromJust, isJust)
 import Data.List (elemIndex)
+import Lib.Sync.Types.Store.Tabulation.Group (hasLessOrEqualPermissionsTo)
 
 
 updateTests :: forall m n. (TerseDBGen n, TerseDB n m) => Proxy m -> Spec
@@ -324,6 +326,69 @@ updateTests Proxy = do
                                 genSyncShared
                           s' <- runTerseDB (commit go) s
                           (s' ^? Sync.store . Sync.toEntities . ix eId . Sync.versions . ix idx) `shouldBe` Just vId
+  describe "Group" $ do
+    -- updating what it inherits from / who it inherits to
+    describe "Should Succeed" $ do
+      it "deleting parent relationship should affect both nodes, and unrelate them" $
+        let gen = suchThat arbitraryShared $ \(s, _, _) ->
+              not . null . HM.filter (\g -> isJust (g ^. Sync.prev)) $
+                s ^. Sync.store . Sync.toGroups . Sync.nodes
+         in forAll gen $ \(s, adminActor, adminGroup) ->
+              let gsWithParent = HM.filter (\g -> isJust (g ^. Sync.prev)) $
+                    s ^. Sync.store . Sync.toGroups . Sync.nodes
+               in forAll (elements (HM.toList gsWithParent)) $ \(gId :: GroupId, g) -> do
+                    let go :: m Sync.Shared
+                        go = do
+                          worked <- updateGroupParent (NE.singleton adminActor) gId Nothing
+                          unless worked $ error $ "Couldn't set group parent " <> show (gId)
+                          genSyncShared
+                        parentId = fromJust $ g ^. Sync.prev
+                    s' <- runTerseDB (commit go) s
+                    (s' ^? Sync.store . Sync.toGroups . Sync.nodes . ix gId . Sync.prev . _Just) `shouldBe` Nothing
+                    (s' ^? Sync.store . Sync.toGroups . Sync.nodes . ix parentId . Sync.next . ix gId)
+                      `shouldBe` Nothing
+      it "deleting child relationship should affect both nodes, and unrelate them" $
+        let gen = suchThat arbitraryShared $ \(s, _, _) ->
+              not . null . HM.filter (\g -> isJust (g ^. Sync.prev)) $
+                s ^. Sync.store . Sync.toGroups . Sync.nodes
+         in forAll gen $ \(s, adminActor, adminGroup) ->
+              let gsWithParent = HM.filter (\g -> isJust (g ^. Sync.prev)) $ s ^. Sync.store . Sync.toGroups . Sync.nodes
+               in forAll (elements (HM.toList gsWithParent)) $ \(gId :: GroupId, g) -> do
+                    let go :: m Sync.Shared
+                        go = do
+                          worked <- unlinkGroups (NE.singleton adminActor) parentId gId
+                          unless worked $ error $ "Couldn't unlink groups " <> show (parentId, gId)
+                          genSyncShared
+                        parentId = fromJust $ g ^. Sync.prev
+                    s' <- runTerseDB (commit go) s
+                    (s' ^? Sync.store . Sync.toGroups . Sync.nodes . ix gId . Sync.prev . _Just) `shouldBe` Nothing
+                    (s' ^? Sync.store . Sync.toGroups . Sync.nodes . ix parentId . Sync.next . ix gId)
+                      `shouldBe` Nothing
+      it "adding child relationship should cause inheritance" $
+        let gen = do
+              (s', aA, aG) <- suchThat arbitraryShared $ \(s, _, _) ->
+                not . null . HM.filter (\g -> isJust (g ^. Sync.prev)) $
+                  s ^. Sync.store . Sync.toGroups . Sync.nodes
+              nG <- arbitrary
+              pure (s', aA, aG, nG)
+         in forAll gen $ \(s, adminActor, adminGroup, newGId) ->
+              let gsWithParent = HM.filter (\g -> isJust (g ^. Sync.prev)) $ s ^. Sync.store . Sync.toGroups . Sync.nodes
+               in forAll (elements (HM.toList gsWithParent)) $ \(gId :: GroupId, _) -> do
+                    let go :: m Sync.Shared
+                        go = do
+                          worked <- storeGroup (NE.singleton adminActor) newGId
+                          unless worked $ error $ "Couldn't Sync.store group " <> show newGId
+                          worked <- linkGroups (NE.singleton adminActor) gId newGId
+                          unless worked $ error $ "Couldn't set child " <> show (gId, newGId)
+                          genSyncShared
+                    s' <- runTerseDB (commit go) s
+                    shouldSatisfy (s', gId, newGId) $ \_ ->
+                      fromJust (s' ^? Sync.temp . Sync.toTabulatedGroups . ix gId)
+                        `hasLessOrEqualPermissionsTo` fromJust (s' ^? Sync.temp . Sync.toTabulatedGroups . ix newGId)
+  describe "Member" $
+    it "doesn't apply" True
+  describe "Actor" $
+    it "doesn't apply" True
 
 setStage
   :: (TerseDB n m) => ActorId -> GroupId -> ActorId -> GroupId -> m ()
