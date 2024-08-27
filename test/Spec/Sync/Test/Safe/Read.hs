@@ -85,62 +85,6 @@ import Test.Syd (Spec, describe, it, shouldBe, shouldSatisfy)
 readTests :: Spec
 readTests = describe "Read" $ do
   describe "Should Succeed" $ do
-    it "Entities" $
-      property $
-        \( adminActor :: ActorId
-          , adminGroup :: GroupId
-          , sId :: SpaceId
-          , aId :: ActorId
-          , gId :: GroupId
-          ) ->
-            let s = emptyShared adminActor adminGroup
-                go :: State Shared Bool
-                go = do
-                  setup adminActor adminGroup aId gId
-                  worked <- storeSpace (NE.singleton adminActor) sId
-                  unless worked $ error $ "Couldn't make space " <> show sId
-                  worked <-
-                    setUniversePermission
-                      (NE.singleton adminActor)
-                      (CollectionPermissionWithExemption Read False)
-                      gId
-                  unless worked $ error $ "Couldn't set universe permission " <> show gId
-                  worked <- setEntityPermission (NE.singleton adminActor) Read gId sId
-                  unless worked $ error $ "Couldn't set entity permission " <> show gId
-                  anyCanReadAllEntities (NE.singleton aId) sId
-                s' = execState go s
-             in shouldSatisfy (s', aId, gId, sId) $ \_ -> evalState go s == True
-    it "Entity" $
-      property $
-        \( adminActor :: ActorId
-          , adminGroup :: GroupId
-          , sId :: SpaceId
-          , aId :: ActorId
-          , gId :: GroupId
-          , eId :: EntityId
-          , vId :: VersionId
-          ) ->
-            let s = emptyShared adminActor adminGroup
-                go :: State Shared Bool
-                go = do
-                  setup adminActor adminGroup aId gId
-                  worked <- storeSpace (NE.singleton adminActor) sId
-                  unless worked $ error $ "Couldn't make space " <> show sId
-                  worked <- setEntityPermission (NE.singleton adminActor) Create adminGroup sId
-                  unless worked $ error $ "Couldn't grant entity permissions " <> show sId
-                  worked <- storeEntity (NE.singleton adminActor) eId sId vId Nothing
-                  unless worked $ error $ "Couldn't store entity " <> show (eId, vId)
-                  worked <-
-                    setUniversePermission
-                      (NE.singleton adminActor)
-                      (CollectionPermissionWithExemption Read False)
-                      gId
-                  unless worked $ error $ "Couldn't set universe permission " <> show gId
-                  worked <- setEntityPermission (NE.singleton adminActor) Read gId sId
-                  unless worked $ error $ "Couldn't set entity permission " <> show gId
-                  anyCanReadEntity (NE.singleton aId) eId
-                s' = execState go s
-             in shouldSatisfy (s', aId, gId, sId) $ \_ -> evalState go s == True
     it "Version" $
       property $
         \( adminActor :: ActorId
