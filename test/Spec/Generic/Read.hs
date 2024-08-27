@@ -8,22 +8,30 @@ import qualified Data.HashSet as HS
 import qualified Data.List.NonEmpty as NE
 import Lib.Class (
   TerseDB (
+    anyCanReadActor,
     anyCanReadAllEntities,
+    anyCanReadEntity,
+    anyCanReadGroup,
+    anyCanReadMember,
     anyCanReadSpace,
     anyCanReadSpaceOld,
     anyCanReadVersion,
     commit,
-    genSyncShared, anyCanReadGroup, anyCanReadMember, anyCanReadActor, anyCanReadEntity
+    genSyncShared
   ),
   TerseDBGen (runTerseDB),
   addMember,
   setEntityPermission,
+  setGroupPermission,
   setMemberPermission,
+  setOrganizationPermission,
+  setRecruiterPermission,
+  setSpacePermission,
   setUniversePermission,
   storeActor,
   storeEntity,
   storeGroup,
-  storeSpace, setOrganizationPermission, setRecruiterPermission, setSpacePermission, setGroupPermission,
+  storeSpace,
  )
 import Lib.Sync.Types.Store (store, toActors, toSpaces)
 import qualified Lib.Sync.Types.Store as Sync
@@ -31,7 +39,8 @@ import qualified Lib.Sync.Types.Store.Groups as Sync
 import Lib.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
 import Lib.Types.Permission (
   CollectionPermission (..),
-  CollectionPermissionWithExemption (CollectionPermissionWithExemption), SinglePermission (NonExistent),
+  CollectionPermissionWithExemption (CollectionPermissionWithExemption),
+  SinglePermission (NonExistent),
  )
 import Spec.Sync.Sample.Store (arbitraryEmptyShared, arbitraryShared)
 import Test.QuickCheck (Testable (property), elements, forAll, suchThat)
@@ -158,56 +167,56 @@ readTests Proxy = do
           , adminActor :: ActorId
           , adminGroup :: GroupId
           ) ->
-          property $
-         \( gId' :: GroupId
-          , aId :: ActorId
-          , gId :: GroupId
-          ) -> do
-            let go :: m (Bool, Sync.Shared)
-                go = do
-                  setup adminActor adminGroup aId gId
-                  worked <- storeGroup (NE.singleton adminActor) gId'
-                  unless worked $ error $ "Couldn't make group " <> show gId'
-                  worked <-
-                    setOrganizationPermission
-                      (NE.singleton adminActor)
-                      (CollectionPermissionWithExemption Read False)
-                      gId
-                  unless worked $ error $ "Couldn't set organization permission " <> show gId
-                  res <- anyCanReadGroup (NE.singleton aId) gId'
-                  s' <- genSyncShared
-                  pure (res,s')
-            (res, s') <- runTerseDB (commit go) s
-            shouldSatisfy (s', aId, gId, gId') $ \_ -> res == True
+            property $
+              \( gId' :: GroupId
+                , aId :: ActorId
+                , gId :: GroupId
+                ) -> do
+                  let go :: m (Bool, Sync.Shared)
+                      go = do
+                        setup adminActor adminGroup aId gId
+                        worked <- storeGroup (NE.singleton adminActor) gId'
+                        unless worked $ error $ "Couldn't make group " <> show gId'
+                        worked <-
+                          setOrganizationPermission
+                            (NE.singleton adminActor)
+                            (CollectionPermissionWithExemption Read False)
+                            gId
+                        unless worked $ error $ "Couldn't set organization permission " <> show gId
+                        res <- anyCanReadGroup (NE.singleton aId) gId'
+                        s' <- genSyncShared
+                        pure (res, s')
+                  (res, s') <- runTerseDB (commit go) s
+                  shouldSatisfy (s', aId, gId, gId') $ \_ -> res == True
     it "Member" $
       forAll arbitraryEmptyShared $
         \( s
           , adminActor :: ActorId
           , adminGroup :: GroupId
           ) ->
-          property $
-         \( gId' :: GroupId
-          , aId :: ActorId
-          , gId :: GroupId
-          ) -> do
-            let go :: m (Bool, Sync.Shared)
-                go = do
-                  setup adminActor adminGroup aId gId
-                  worked <- storeGroup (NE.singleton adminActor) gId'
-                  unless worked $ error $ "Couldn't make group " <> show gId'
-                  worked <-
-                    setOrganizationPermission
-                      (NE.singleton adminActor)
-                      (CollectionPermissionWithExemption Read False)
-                      gId
-                  unless worked $ error $ "Couldn't set organization permission " <> show gId
-                  worked <- setMemberPermission (NE.singleton adminActor) Read gId gId'
-                  unless worked $ error $ "Couldn't set member permission " <> show gId
-                  res <- anyCanReadMember (NE.singleton aId) gId'
-                  s' <- genSyncShared
-                  pure (res,s')
-            (res, s') <- runTerseDB (commit go) s
-            shouldSatisfy (s', aId, gId, gId') $ \_ -> res == True
+            property $
+              \( gId' :: GroupId
+                , aId :: ActorId
+                , gId :: GroupId
+                ) -> do
+                  let go :: m (Bool, Sync.Shared)
+                      go = do
+                        setup adminActor adminGroup aId gId
+                        worked <- storeGroup (NE.singleton adminActor) gId'
+                        unless worked $ error $ "Couldn't make group " <> show gId'
+                        worked <-
+                          setOrganizationPermission
+                            (NE.singleton adminActor)
+                            (CollectionPermissionWithExemption Read False)
+                            gId
+                        unless worked $ error $ "Couldn't set organization permission " <> show gId
+                        worked <- setMemberPermission (NE.singleton adminActor) Read gId gId'
+                        unless worked $ error $ "Couldn't set member permission " <> show gId
+                        res <- anyCanReadMember (NE.singleton aId) gId'
+                        s' <- genSyncShared
+                        pure (res, s')
+                  (res, s') <- runTerseDB (commit go) s
+                  shouldSatisfy (s', aId, gId, gId') $ \_ -> res == True
     it "Actor" $
       forAll arbitraryEmptyShared $ \(s, adminActor :: ActorId, adminGroup :: GroupId) ->
         property $ \(aId :: ActorId, gId :: GroupId) -> do
@@ -218,7 +227,7 @@ readTests Proxy = do
                 unless worked $ error $ "Couldn't set recruiter permission " <> show gId
                 res <- anyCanReadActor (NE.singleton aId)
                 s' <- genSyncShared
-                pure (res,s')
+                pure (res, s')
           (res, s') <- runTerseDB (commit go) s
           shouldSatisfy (s', aId, gId) $ \_ -> res == True
   describe "Should Fail" $ do
@@ -228,336 +237,336 @@ readTests Proxy = do
           , adminActor :: ActorId
           , adminGroup :: GroupId
           ) ->
-          property $
-         \( sId :: SpaceId
-          , aId :: ActorId
-          , gId :: GroupId
-          ) -> do
-            let go :: m (Bool, Sync.Shared)
-                go = do
-                  setup adminActor adminGroup aId gId
-                  worked <- storeSpace (NE.singleton adminActor) sId
-                  unless worked $ error $ "Couldn't make space " <> show sId
-                  worked <-
-                    setUniversePermission
-                      (NE.singleton adminActor)
-                      (CollectionPermissionWithExemption Blind False)
-                      gId
-                  unless worked $ error $ "Couldn't set universe permission " <> show gId
-                  res <- anyCanReadSpace (NE.singleton aId) sId
-                  s' <- genSyncShared
-                  pure (res,s')
-            (res, s') <- runTerseDB (commit go) s 
-            shouldSatisfy (s', aId, gId, sId) $ \_ -> res == False
+            property $
+              \( sId :: SpaceId
+                , aId :: ActorId
+                , gId :: GroupId
+                ) -> do
+                  let go :: m (Bool, Sync.Shared)
+                      go = do
+                        setup adminActor adminGroup aId gId
+                        worked <- storeSpace (NE.singleton adminActor) sId
+                        unless worked $ error $ "Couldn't make space " <> show sId
+                        worked <-
+                          setUniversePermission
+                            (NE.singleton adminActor)
+                            (CollectionPermissionWithExemption Blind False)
+                            gId
+                        unless worked $ error $ "Couldn't set universe permission " <> show gId
+                        res <- anyCanReadSpace (NE.singleton aId) sId
+                        s' <- genSyncShared
+                        pure (res, s')
+                  (res, s') <- runTerseDB (commit go) s
+                  shouldSatisfy (s', aId, gId, sId) $ \_ -> res == False
     it "Spaces when explicit" $
       forAll arbitraryEmptyShared $
         \( s
           , adminActor :: ActorId
           , adminGroup :: GroupId
           ) ->
-          property $
-         \( sId :: SpaceId
-          , aId :: ActorId
-          , gId :: GroupId
-          ) -> do
-            let go :: m (Bool, Sync.Shared)
-                go = do
-                  setup adminActor adminGroup aId gId
-                  worked <- storeSpace (NE.singleton adminActor) sId
-                  unless worked $ error $ "Couldn't make space " <> show sId
-                  worked <-
-                    setUniversePermission
-                      (NE.singleton adminActor)
-                      (CollectionPermissionWithExemption Read False)
-                      gId
-                  unless worked $ error $ "Couldn't set universe permission " <> show gId
-                  worked <-
-                    setSpacePermission (NE.singleton adminActor) (Just NonExistent) gId sId
-                  unless worked $ error $ "Couldn't set spaces permission " <> show (gId, sId)
-                  res <- anyCanReadSpace (NE.singleton aId) sId
-                  s' <- genSyncShared
-                  pure (res,s')
-            (res, s') <- runTerseDB (commit go) s
-            shouldSatisfy (s', aId, gId, sId) $ \_ -> res == False
+            property $
+              \( sId :: SpaceId
+                , aId :: ActorId
+                , gId :: GroupId
+                ) -> do
+                  let go :: m (Bool, Sync.Shared)
+                      go = do
+                        setup adminActor adminGroup aId gId
+                        worked <- storeSpace (NE.singleton adminActor) sId
+                        unless worked $ error $ "Couldn't make space " <> show sId
+                        worked <-
+                          setUniversePermission
+                            (NE.singleton adminActor)
+                            (CollectionPermissionWithExemption Read False)
+                            gId
+                        unless worked $ error $ "Couldn't set universe permission " <> show gId
+                        worked <-
+                          setSpacePermission (NE.singleton adminActor) (Just NonExistent) gId sId
+                        unless worked $ error $ "Couldn't set spaces permission " <> show (gId, sId)
+                        res <- anyCanReadSpace (NE.singleton aId) sId
+                        s' <- genSyncShared
+                        pure (res, s')
+                  (res, s') <- runTerseDB (commit go) s
+                  shouldSatisfy (s', aId, gId, sId) $ \_ -> res == False
     it "Spaces when implicit" $
       forAll arbitraryEmptyShared $
         \( s
           , adminActor :: ActorId
           , adminGroup :: GroupId
           ) ->
-          property $
-         \( sId :: SpaceId
-          , aId :: ActorId
-          , gId :: GroupId
-          ) -> do
-            let go :: m (Bool, Sync.Shared)
-                go = do
-                  setup adminActor adminGroup aId gId
-                  worked <- storeSpace (NE.singleton adminActor) sId
-                  unless worked $ error $ "Couldn't make space " <> show sId
-                  res <- anyCanReadSpace (NE.singleton aId) sId
-                  s' <- genSyncShared
-                  pure (res, s')
-            (res, s') <- runTerseDB (commit go) s
-            shouldSatisfy (s', aId, gId, sId) $ \_ -> res == False
+            property $
+              \( sId :: SpaceId
+                , aId :: ActorId
+                , gId :: GroupId
+                ) -> do
+                  let go :: m (Bool, Sync.Shared)
+                      go = do
+                        setup adminActor adminGroup aId gId
+                        worked <- storeSpace (NE.singleton adminActor) sId
+                        unless worked $ error $ "Couldn't make space " <> show sId
+                        res <- anyCanReadSpace (NE.singleton aId) sId
+                        s' <- genSyncShared
+                        pure (res, s')
+                  (res, s') <- runTerseDB (commit go) s
+                  shouldSatisfy (s', aId, gId, sId) $ \_ -> res == False
     it "Entities when explicit" $
       forAll arbitraryEmptyShared $
         \( s
           , adminActor :: ActorId
           , adminGroup :: GroupId
           ) ->
-          property $
-         \( sId :: SpaceId
-          , aId :: ActorId
-          , gId :: GroupId
-          ) -> do
-            let go :: m (Bool, Sync.Shared)
-                go = do
-                  setup adminActor adminGroup aId gId
-                  worked <- storeSpace (NE.singleton adminActor) sId
-                  unless worked $ error $ "Couldn't make space " <> show sId
-                  worked <-
-                    setUniversePermission
-                      (NE.singleton adminActor)
-                      (CollectionPermissionWithExemption Read False)
-                      gId
-                  unless worked $ error $ "Couldn't set universe permission " <> show gId
-                  worked <- setEntityPermission (NE.singleton adminActor) Blind gId sId
-                  unless worked $ error $ "Couldn't set entity permission " <> show gId
-                  res <- anyCanReadAllEntities (NE.singleton aId) sId
-                  s' <- genSyncShared
-                  pure (res,s')
-            (res, s') <- runTerseDB (commit go) s
-            shouldSatisfy (s', aId, gId, sId) $ \_ -> res == False
+            property $
+              \( sId :: SpaceId
+                , aId :: ActorId
+                , gId :: GroupId
+                ) -> do
+                  let go :: m (Bool, Sync.Shared)
+                      go = do
+                        setup adminActor adminGroup aId gId
+                        worked <- storeSpace (NE.singleton adminActor) sId
+                        unless worked $ error $ "Couldn't make space " <> show sId
+                        worked <-
+                          setUniversePermission
+                            (NE.singleton adminActor)
+                            (CollectionPermissionWithExemption Read False)
+                            gId
+                        unless worked $ error $ "Couldn't set universe permission " <> show gId
+                        worked <- setEntityPermission (NE.singleton adminActor) Blind gId sId
+                        unless worked $ error $ "Couldn't set entity permission " <> show gId
+                        res <- anyCanReadAllEntities (NE.singleton aId) sId
+                        s' <- genSyncShared
+                        pure (res, s')
+                  (res, s') <- runTerseDB (commit go) s
+                  shouldSatisfy (s', aId, gId, sId) $ \_ -> res == False
     it "Entity when explicit" $
       forAll arbitraryEmptyShared $
         \( s
           , adminActor :: ActorId
           , adminGroup :: GroupId
           ) ->
-          property $
-         \( sId :: SpaceId
-          , aId :: ActorId
-          , gId :: GroupId
-          , eId :: EntityId
-          , vId :: VersionId
-          ) -> do
-            let go :: m (Bool, Sync.Shared)
-                go = do
-                  setup adminActor adminGroup aId gId
-                  worked <- storeSpace (NE.singleton adminActor) sId
-                  unless worked $ error $ "Couldn't make space " <> show sId
-                  worked <- setEntityPermission (NE.singleton adminActor) Create adminGroup sId
-                  unless worked $ error $ "Couldn't grant entity permissions " <> show sId
-                  worked <- storeEntity (NE.singleton adminActor) eId sId vId Nothing
-                  unless worked $ error $ "Couldn't make entity " <> show (eId, vId)
-                  worked <-
-                    setUniversePermission
-                      (NE.singleton adminActor)
-                      (CollectionPermissionWithExemption Read False)
-                      gId
-                  unless worked $ error $ "Couldn't set universe permission " <> show gId
-                  worked <- setEntityPermission (NE.singleton adminActor) Blind gId sId
-                  unless worked $ error $ "Couldn't set entity permission " <> show gId
-                  res <- anyCanReadEntity (NE.singleton aId) eId
-                  s' <- genSyncShared
-                  pure (res,s')
-            (res, s') <- runTerseDB (commit go) s
-            shouldSatisfy (s', aId, gId, sId) $ \_ -> res == False
+            property $
+              \( sId :: SpaceId
+                , aId :: ActorId
+                , gId :: GroupId
+                , eId :: EntityId
+                , vId :: VersionId
+                ) -> do
+                  let go :: m (Bool, Sync.Shared)
+                      go = do
+                        setup adminActor adminGroup aId gId
+                        worked <- storeSpace (NE.singleton adminActor) sId
+                        unless worked $ error $ "Couldn't make space " <> show sId
+                        worked <- setEntityPermission (NE.singleton adminActor) Create adminGroup sId
+                        unless worked $ error $ "Couldn't grant entity permissions " <> show sId
+                        worked <- storeEntity (NE.singleton adminActor) eId sId vId Nothing
+                        unless worked $ error $ "Couldn't make entity " <> show (eId, vId)
+                        worked <-
+                          setUniversePermission
+                            (NE.singleton adminActor)
+                            (CollectionPermissionWithExemption Read False)
+                            gId
+                        unless worked $ error $ "Couldn't set universe permission " <> show gId
+                        worked <- setEntityPermission (NE.singleton adminActor) Blind gId sId
+                        unless worked $ error $ "Couldn't set entity permission " <> show gId
+                        res <- anyCanReadEntity (NE.singleton aId) eId
+                        s' <- genSyncShared
+                        pure (res, s')
+                  (res, s') <- runTerseDB (commit go) s
+                  shouldSatisfy (s', aId, gId, sId) $ \_ -> res == False
     it "Entities when implicit" $
       forAll arbitraryEmptyShared $
         \( s
           , adminActor :: ActorId
           , adminGroup :: GroupId
           ) ->
-          property $
-         \( sId :: SpaceId
-          , aId :: ActorId
-          , gId :: GroupId
-          ) -> do
-            let go :: m (Bool, Sync.Shared)
-                go = do
-                  setup adminActor adminGroup aId gId
-                  worked <- storeSpace (NE.singleton adminActor) sId
-                  unless worked $ error $ "Couldn't make space " <> show sId
-                  worked <-
-                    setUniversePermission
-                      (NE.singleton adminActor)
-                      (CollectionPermissionWithExemption Read False)
-                      gId
-                  unless worked $ error $ "Couldn't set universe permission " <> show gId
-                  res <- anyCanReadAllEntities (NE.singleton aId) sId
-                  s' <- genSyncShared
-                  pure (res,s')
-            (res, s') <- runTerseDB (commit go) s
-            shouldSatisfy (s', aId, gId, sId) $ \_ -> res == False
+            property $
+              \( sId :: SpaceId
+                , aId :: ActorId
+                , gId :: GroupId
+                ) -> do
+                  let go :: m (Bool, Sync.Shared)
+                      go = do
+                        setup adminActor adminGroup aId gId
+                        worked <- storeSpace (NE.singleton adminActor) sId
+                        unless worked $ error $ "Couldn't make space " <> show sId
+                        worked <-
+                          setUniversePermission
+                            (NE.singleton adminActor)
+                            (CollectionPermissionWithExemption Read False)
+                            gId
+                        unless worked $ error $ "Couldn't set universe permission " <> show gId
+                        res <- anyCanReadAllEntities (NE.singleton aId) sId
+                        s' <- genSyncShared
+                        pure (res, s')
+                  (res, s') <- runTerseDB (commit go) s
+                  shouldSatisfy (s', aId, gId, sId) $ \_ -> res == False
     it "Entity when implicit" $
       forAll arbitraryEmptyShared $
         \( s
           , adminActor :: ActorId
           , adminGroup :: GroupId
           ) ->
-          property $
-         \( sId :: SpaceId
-          , aId :: ActorId
-          , gId :: GroupId
-          , eId :: EntityId
-          , vId :: VersionId
-          ) -> do
-            let go :: m (Bool, Sync.Shared)
-                go = do
-                  setup adminActor adminGroup aId gId
-                  worked <- storeSpace (NE.singleton adminActor) sId
-                  unless worked $ error $ "Couldn't make space " <> show sId
-                  worked <- setEntityPermission (NE.singleton adminActor) Create adminGroup sId
-                  unless worked $ error $ "Couldn't grant entity permissions " <> show sId
-                  worked <- storeEntity (NE.singleton adminActor) eId sId vId Nothing
-                  unless worked $ error $ "Couldn't make entity " <> show (eId, vId)
-                  worked <-
-                    setUniversePermission
-                      (NE.singleton adminActor)
-                      (CollectionPermissionWithExemption Read False)
-                      gId
-                  unless worked $ error $ "Couldn't set universe permission " <> show gId
-                  res <- anyCanReadEntity (NE.singleton aId) eId
-                  s' <- genSyncShared
-                  pure (res,s')
-            (res, s') <- runTerseDB (commit go) s
-            shouldSatisfy (s', aId, gId, sId) $ \_ -> res == False
+            property $
+              \( sId :: SpaceId
+                , aId :: ActorId
+                , gId :: GroupId
+                , eId :: EntityId
+                , vId :: VersionId
+                ) -> do
+                  let go :: m (Bool, Sync.Shared)
+                      go = do
+                        setup adminActor adminGroup aId gId
+                        worked <- storeSpace (NE.singleton adminActor) sId
+                        unless worked $ error $ "Couldn't make space " <> show sId
+                        worked <- setEntityPermission (NE.singleton adminActor) Create adminGroup sId
+                        unless worked $ error $ "Couldn't grant entity permissions " <> show sId
+                        worked <- storeEntity (NE.singleton adminActor) eId sId vId Nothing
+                        unless worked $ error $ "Couldn't make entity " <> show (eId, vId)
+                        worked <-
+                          setUniversePermission
+                            (NE.singleton adminActor)
+                            (CollectionPermissionWithExemption Read False)
+                            gId
+                        unless worked $ error $ "Couldn't set universe permission " <> show gId
+                        res <- anyCanReadEntity (NE.singleton aId) eId
+                        s' <- genSyncShared
+                        pure (res, s')
+                  (res, s') <- runTerseDB (commit go) s
+                  shouldSatisfy (s', aId, gId, sId) $ \_ -> res == False
     it "Group when explicit via universe" $
       forAll arbitraryEmptyShared $
         \( s
           , adminActor :: ActorId
           , adminGroup :: GroupId
           ) ->
-          property $
-         \( gId' :: GroupId
-          , aId :: ActorId
-          , gId :: GroupId
-          ) -> do
-            let go :: m (Bool, Sync.Shared)
-                go = do
-                  setup adminActor adminGroup aId gId
-                  worked <- storeGroup (NE.singleton adminActor) gId'
-                  unless worked $ error $ "Couldn't make group " <> show gId'
-                  worked <-
-                    setOrganizationPermission
-                      (NE.singleton adminActor)
-                      (CollectionPermissionWithExemption Blind False)
-                      gId
-                  unless worked $ error $ "Couldn't set organization permission " <> show gId
-                  res <- anyCanReadGroup (NE.singleton aId) gId'
-                  s' <- genSyncShared
-                  pure (res,s')
-            (res, s') <- runTerseDB (commit go) s
-            shouldSatisfy (s', aId, gId, gId') $ \_ -> res == False
+            property $
+              \( gId' :: GroupId
+                , aId :: ActorId
+                , gId :: GroupId
+                ) -> do
+                  let go :: m (Bool, Sync.Shared)
+                      go = do
+                        setup adminActor adminGroup aId gId
+                        worked <- storeGroup (NE.singleton adminActor) gId'
+                        unless worked $ error $ "Couldn't make group " <> show gId'
+                        worked <-
+                          setOrganizationPermission
+                            (NE.singleton adminActor)
+                            (CollectionPermissionWithExemption Blind False)
+                            gId
+                        unless worked $ error $ "Couldn't set organization permission " <> show gId
+                        res <- anyCanReadGroup (NE.singleton aId) gId'
+                        s' <- genSyncShared
+                        pure (res, s')
+                  (res, s') <- runTerseDB (commit go) s
+                  shouldSatisfy (s', aId, gId, gId') $ \_ -> res == False
     it "Group when explicit" $
       forAll arbitraryEmptyShared $
         \( s
           , adminActor :: ActorId
           , adminGroup :: GroupId
           ) ->
-          property $
-         \( gId' :: GroupId
-          , aId :: ActorId
-          , gId :: GroupId
-          ) -> do
-            let go :: m (Bool, Sync.Shared)
-                go = do
-                  setup adminActor adminGroup aId gId
-                  worked <- storeGroup (NE.singleton adminActor) gId'
-                  unless worked $ error $ "Couldn't make group " <> show gId'
-                  worked <-
-                    setOrganizationPermission
-                      (NE.singleton adminActor)
-                      (CollectionPermissionWithExemption Read False)
-                      gId
-                  unless worked $ error $ "Couldn't set organization permission " <> show gId
-                  worked <-
-                    setGroupPermission (NE.singleton adminActor) (Just NonExistent) gId gId'
-                  unless worked $ error $ "Couldn't set group permission " <> show (gId, gId')
-                  res <- anyCanReadGroup (NE.singleton aId) gId'
-                  s' <- genSyncShared
-                  pure (res,s')
-            (res, s') <- runTerseDB (commit go) s
-            shouldSatisfy (s', aId, gId, gId') $ \_ -> res == False
+            property $
+              \( gId' :: GroupId
+                , aId :: ActorId
+                , gId :: GroupId
+                ) -> do
+                  let go :: m (Bool, Sync.Shared)
+                      go = do
+                        setup adminActor adminGroup aId gId
+                        worked <- storeGroup (NE.singleton adminActor) gId'
+                        unless worked $ error $ "Couldn't make group " <> show gId'
+                        worked <-
+                          setOrganizationPermission
+                            (NE.singleton adminActor)
+                            (CollectionPermissionWithExemption Read False)
+                            gId
+                        unless worked $ error $ "Couldn't set organization permission " <> show gId
+                        worked <-
+                          setGroupPermission (NE.singleton adminActor) (Just NonExistent) gId gId'
+                        unless worked $ error $ "Couldn't set group permission " <> show (gId, gId')
+                        res <- anyCanReadGroup (NE.singleton aId) gId'
+                        s' <- genSyncShared
+                        pure (res, s')
+                  (res, s') <- runTerseDB (commit go) s
+                  shouldSatisfy (s', aId, gId, gId') $ \_ -> res == False
     it "Group when implicit" $
       forAll arbitraryEmptyShared $
         \( s
           , adminActor :: ActorId
           , adminGroup :: GroupId
           ) ->
-          property $
-         \( gId' :: GroupId
-          , aId :: ActorId
-          , gId :: GroupId
-          ) -> do
-            let go :: m (Bool, Sync.Shared)
-                go = do
-                  setup adminActor adminGroup aId gId
-                  worked <- storeGroup (NE.singleton adminActor) gId'
-                  unless worked $ error $ "Couldn't make group " <> show gId'
-                  res <- anyCanReadGroup (NE.singleton aId) gId'
-                  s' <- genSyncShared
-                  pure (res,s')
-            (res, s') <- runTerseDB (commit go) s
-            shouldSatisfy (s', aId, gId, gId') $ \_ -> res == False
+            property $
+              \( gId' :: GroupId
+                , aId :: ActorId
+                , gId :: GroupId
+                ) -> do
+                  let go :: m (Bool, Sync.Shared)
+                      go = do
+                        setup adminActor adminGroup aId gId
+                        worked <- storeGroup (NE.singleton adminActor) gId'
+                        unless worked $ error $ "Couldn't make group " <> show gId'
+                        res <- anyCanReadGroup (NE.singleton aId) gId'
+                        s' <- genSyncShared
+                        pure (res, s')
+                  (res, s') <- runTerseDB (commit go) s
+                  shouldSatisfy (s', aId, gId, gId') $ \_ -> res == False
     it "Member when explicit" $
       forAll arbitraryEmptyShared $
         \( s
           , adminActor :: ActorId
           , adminGroup :: GroupId
           ) ->
-          property $
-         \( gId' :: GroupId
-          , aId :: ActorId
-          , gId :: GroupId
-          ) -> do
-            let go :: m (Bool, Sync.Shared)
-                go = do
-                  setup adminActor adminGroup aId gId
-                  worked <- storeGroup (NE.singleton adminActor) gId'
-                  unless worked $ error $ "Couldn't make group " <> show gId'
-                  worked <-
-                    setOrganizationPermission
-                      (NE.singleton adminActor)
-                      (CollectionPermissionWithExemption Read False)
-                      gId
-                  unless worked $ error $ "Couldn't set organization permission " <> show gId
-                  worked <- setMemberPermission (NE.singleton adminActor) Blind gId gId'
-                  unless worked $ error $ "Couldn't set member permission " <> show gId
-                  res <- anyCanReadMember (NE.singleton aId) gId'
-                  s' <- genSyncShared
-                  pure (res,s')
-            (res, s') <- runTerseDB (commit go) s
-            shouldSatisfy (s', aId, gId, gId') $ \_ -> res == False
+            property $
+              \( gId' :: GroupId
+                , aId :: ActorId
+                , gId :: GroupId
+                ) -> do
+                  let go :: m (Bool, Sync.Shared)
+                      go = do
+                        setup adminActor adminGroup aId gId
+                        worked <- storeGroup (NE.singleton adminActor) gId'
+                        unless worked $ error $ "Couldn't make group " <> show gId'
+                        worked <-
+                          setOrganizationPermission
+                            (NE.singleton adminActor)
+                            (CollectionPermissionWithExemption Read False)
+                            gId
+                        unless worked $ error $ "Couldn't set organization permission " <> show gId
+                        worked <- setMemberPermission (NE.singleton adminActor) Blind gId gId'
+                        unless worked $ error $ "Couldn't set member permission " <> show gId
+                        res <- anyCanReadMember (NE.singleton aId) gId'
+                        s' <- genSyncShared
+                        pure (res, s')
+                  (res, s') <- runTerseDB (commit go) s
+                  shouldSatisfy (s', aId, gId, gId') $ \_ -> res == False
     it "Member when implicit" $
       forAll arbitraryEmptyShared $
         \( s
           , adminActor :: ActorId
           , adminGroup :: GroupId
           ) ->
-          property $
-         \( gId' :: GroupId
-          , aId :: ActorId
-          , gId :: GroupId
-          ) -> do
-            let go :: m (Bool, Sync.Shared)
-                go = do
-                  setup adminActor adminGroup aId gId
-                  worked <- storeGroup (NE.singleton adminActor) gId'
-                  unless worked $ error $ "Couldn't make group " <> show gId'
-                  worked <-
-                    setOrganizationPermission
-                      (NE.singleton adminActor)
-                      (CollectionPermissionWithExemption Read False)
-                      gId
-                  unless worked $ error $ "Couldn't set organization permission " <> show gId
-                  res <- anyCanReadMember (NE.singleton aId) gId'
-                  s' <- genSyncShared
-                  pure (res,s')
-            (res, s') <- runTerseDB (commit go) s
-            shouldSatisfy (s', aId, gId, gId') $ \_ -> res == False
+            property $
+              \( gId' :: GroupId
+                , aId :: ActorId
+                , gId :: GroupId
+                ) -> do
+                  let go :: m (Bool, Sync.Shared)
+                      go = do
+                        setup adminActor adminGroup aId gId
+                        worked <- storeGroup (NE.singleton adminActor) gId'
+                        unless worked $ error $ "Couldn't make group " <> show gId'
+                        worked <-
+                          setOrganizationPermission
+                            (NE.singleton adminActor)
+                            (CollectionPermissionWithExemption Read False)
+                            gId
+                        unless worked $ error $ "Couldn't set organization permission " <> show gId
+                        res <- anyCanReadMember (NE.singleton aId) gId'
+                        s' <- genSyncShared
+                        pure (res, s')
+                  (res, s') <- runTerseDB (commit go) s
+                  shouldSatisfy (s', aId, gId, gId') $ \_ -> res == False
     it "Actor when explicit" $
       forAll arbitraryEmptyShared $ \(s, adminActor :: ActorId, adminGroup :: GroupId) ->
         property $ \(aId :: ActorId, gId :: GroupId) -> do
@@ -568,7 +577,7 @@ readTests Proxy = do
                 unless worked $ error $ "Couldn't set recruiter permission " <> show gId
                 res <- anyCanReadActor (NE.singleton aId)
                 s' <- genSyncShared
-                pure (res,s')
+                pure (res, s')
           (res, s') <- runTerseDB (commit go) s
           shouldSatisfy (s', aId, gId) $ \_ -> res == False
     it "Actor when implicit" $
@@ -579,7 +588,7 @@ readTests Proxy = do
                 setup adminActor adminGroup aId gId
                 res <- anyCanReadActor (NE.singleton aId)
                 s' <- genSyncShared
-                pure (res,s')
+                pure (res, s')
           (res, s') <- runTerseDB (commit go) s
           shouldSatisfy (s', aId, gId) $ \_ -> res == False
  where

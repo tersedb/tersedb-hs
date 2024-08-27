@@ -112,7 +112,8 @@ unsafeReadSubscriptionsFromLazy eId = ListT.unfoldM go 0
       then pure Nothing
       else pure (Just (subs !! idx, idx + 1))
 
-unsafeReadEntitiesEager :: (MonadState Shared m) => SpaceId -> UnfoldlM m EntityId
+unsafeReadEntitiesEager
+  :: (MonadState Shared m) => SpaceId -> UnfoldlM m EntityId
 unsafeReadEntitiesEager sId = UnfoldlM $ \f acc -> do
   s <- get
   let es = s ^. store . toSpaces . at sId . non mempty
