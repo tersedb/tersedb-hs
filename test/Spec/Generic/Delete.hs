@@ -1,19 +1,24 @@
 module Spec.Generic.Delete where
 
-import Test.Syd (Spec, it, shouldBe, context, shouldSatisfy)
+import Test.Syd (Spec, it, shouldBe, context, shouldSatisfy, describe)
 import Test.QuickCheck (suchThat, elements, forAll)
 import Spec.Sync.Sample.Store (arbitraryShared)
 import qualified Lib.Sync.Types.Store as Sync
+import qualified Lib.Sync.Types.Store.Groups as Sync
 import qualified Lib.Sync.Types.Store.Entity as Sync
 import qualified Lib.Sync.Types.Store.Version as Sync
-import Control.Lens ((^.), (^?), Ixed (ix))
+import Control.Lens ((^.), (^?), Ixed (ix), (^?!), At (at))
 import qualified Data.HashMap.Strict as HM
 import qualified Data.List.NonEmpty as NE
 import Data.Maybe (fromMaybe, fromJust)
 import Data.Foldable (for_)
 import Control.Monad (unless)
-import Lib.Class (TerseDB(genSyncShared, commit), TerseDBGen (runTerseDB), removeVersion)
+import Lib.Class (TerseDB(genSyncShared, commit), TerseDBGen (runTerseDB), removeVersion, setEntityPermission, removeEntity, removeSpace, removeGroup, removeActor, removeMember, setMemberPermission)
 import Data.Data (Proxy (Proxy))
+import Lib.Types.Permission (CollectionPermission(Delete))
+import Lib.Types.Id (ActorId)
+import qualified Data.HashSet as HS
+import Data.Foldable (fold)
 
 
 removeTests :: forall n m. (TerseDB n m, TerseDBGen n) => Proxy m -> Spec
@@ -50,3 +55,118 @@ removeTests Proxy = do
                       (s' ^? Sync.temp . Sync.toSubscriptionsFrom . ix subId . ix vId) `shouldBe` Nothing
                   context "Doesn't exist as a reference" $
                     (s' ^? Sync.temp . Sync.toReferencesFrom . ix vId) `shouldBe` Nothing
+  describe "Entity" $
+    it "should delete all versions" $
+      let gen = suchThat arbitraryShared $ \(s, _, _) ->
+            not . null $ s ^. Sync.store . Sync.toEntities
+       in forAll gen $ \(s, adminActor, adminGroup) ->
+            let genE = elements . HM.toList $ s ^. Sync.store . Sync.toEntities
+             in forAll genE $ \(eId, e) -> do
+                  let go :: m Sync.Shared
+                      go = do
+                        worked <-
+                          setEntityPermission
+                            (NE.singleton adminActor)
+                            Delete
+                            adminGroup
+                            (s ^?! Sync.temp . Sync.toSpaceOf . ix eId)
+                        unless worked $
+                          error $
+                            "Couldn't set delete permission for entities "
+                              <> show (s ^?! Sync.temp . Sync.toSpaceOf . ix eId)
+                        worked <- removeEntity (NE.singleton adminActor) eId
+                        unless worked $ error $ "Couldn't remove entity " <> show (eId)
+                        genSyncShared
+                  s' <- runTerseDB (commit go) s
+                  context "Entity shouldn't exist" $
+                    (s' ^. Sync.store . Sync.toEntities . at eId) `shouldBe` Nothing
+                  context "No versions should exist" $
+                    for_ (e ^. Sync.versions) $ \vId ->
+                      (s' ^. Sync.store . Sync.toVersions . at vId) `shouldBe` Nothing
+                  context "Shouldn't be forked by any version" $
+                    for_ (e ^. Sync.fork) $ \forkId ->
+                      (s' ^? Sync.temp . Sync.toForksFrom . ix forkId . ix eId) `shouldBe` Nothing
+                  context "Shouldn't be subscribed to" $
+                    (s' ^? Sync.temp . Sync.toSubscriptionsFrom . ix eId) `shouldBe` Nothing
+  describe "Space" $
+    it "should delete all entities" $
+      let gen = suchThat arbitraryShared $ \(s, _, _) ->
+            not . null $ s ^. Sync.store . Sync.toSpaces
+       in forAll gen $ \(s, adminActor, adminGroup) ->
+            let genS = elements . HM.toList $ s ^. Sync.store . Sync.toSpaces
+             in forAll genS $ \(sId, es) -> do
+                  let go :: m Sync.Shared
+                      go = do
+                        worked <- setEntityPermission (NE.singleton adminActor) Delete adminGroup sId
+                        unless worked $
+                          error $
+                            "Couldn't set delete permission for entities " <> show sId
+                        worked <- removeSpace (NE.singleton adminActor) sId
+                        unless worked $ error $ "Couldn't remove space " <> show (sId)
+                        genSyncShared
+                  s' <- runTerseDB (commit go) s
+                  (s' ^. Sync.store . Sync.toSpaces . at sId) `shouldBe` Nothing
+                  for_ es $ \eId -> do
+                    (s' ^. Sync.store . Sync.toEntities . at eId) `shouldBe` Nothing
+                    (s' ^? Sync.temp . Sync.toSubscriptionsFrom . ix eId) `shouldBe` Nothing
+                    for_ (s ^?! Sync.store . Sync.toEntities . ix eId . Sync.versions) $ \vId ->
+                      (s' ^? Sync.temp . Sync.toReferencesFrom . ix vId) `shouldBe` Nothing
+  describe "Member" $
+    it "should remove member from group" $
+      let gen = suchThat arbitraryShared $ \(s, _, _) ->
+            not . null . fold $ s ^. Sync.temp . Sync.toMemberOf
+       in forAll gen $ \(s, adminActor, adminGroup) ->
+            let genG = elements . HM.toList . HM.filter (not . null) $ s ^. Sync.temp . Sync.toMemberOf
+             in forAll genG $ \(aId :: ActorId, gs) ->
+                  forAll (elements $ HS.toList gs) $ \gId -> do
+                    let go :: m Sync.Shared
+                        go = do
+                          worked <- setMemberPermission (NE.singleton adminActor) Delete adminGroup gId
+                          unless worked $
+                            error $
+                              "Couldn't set group permission " <> show gId
+                          worked <- removeMember (NE.singleton adminActor) gId aId
+                          unless worked $
+                            error $
+                              "Couldn't remove member " <> show (gId, aId)
+                          genSyncShared
+                    s' <- runTerseDB (commit go) s
+                    context "Actor in Group" $
+                      (s' ^? Sync.store . Sync.toGroups . Sync.nodes . ix gId . Sync.members . ix aId) `shouldBe` Nothing
+                    context "Group in Actor" $
+                      (s' ^? Sync.temp . Sync.toMemberOf . ix aId . ix gId) `shouldBe` Nothing
+  describe "Actor" $
+    it "should remove member from group" $
+      let gen = suchThat arbitraryShared $ \(s, _, _) ->
+            not . null $ s ^. Sync.store . Sync.toActors
+       in forAll gen $ \(s, adminActor, adminGroup) ->
+            let genG = elements . HM.keys $ s ^. Sync.temp . Sync.toMemberOf
+             in forAll genG $ \(aId :: ActorId) -> do
+                  let go :: m Sync.Shared
+                      go = do
+                        worked <- removeActor (NE.singleton adminActor) aId
+                        unless worked $
+                          error $
+                            "Couldn't remove actor " <> show aId
+                        genSyncShared
+                  s' <- runTerseDB (commit go) s
+                  (s' ^? Sync.temp . Sync.toMemberOf . ix aId) `shouldBe` Nothing
+                  (foldMap (^. Sync.members) (s' ^. Sync.store . Sync.toGroups . Sync.nodes) ^. at aId)
+                    `shouldBe` Nothing
+  describe "Group" $
+    it "should remove member from group" $
+      let gen = suchThat arbitraryShared $ \(s, _, _) ->
+            not . null $ s ^. Sync.store . Sync.toGroups . Sync.nodes
+       in forAll gen $ \(s, adminActor, adminGroup) ->
+            let genG = elements . HM.keys $ s ^. Sync.store . Sync.toGroups . Sync.nodes
+             in forAll genG $ \gId -> do
+                  let go :: m Sync.Shared
+                      go = do
+                        worked <- removeGroup (NE.singleton adminActor) gId
+                        unless worked $ error $ "Couldn't remove group " <> show gId
+                        genSyncShared
+                  s' <- runTerseDB (commit go) s
+                  (s' ^? Sync.store . Sync.toGroups . Sync.nodes . ix gId) `shouldBe` Nothing
+                  let (froms, tos) = unzip . HS.toList $ s' ^. Sync.store . Sync.toGroups . Sync.edges
+                  filter (== gId) froms `shouldBe` mempty
+                  filter (== gId) tos `shouldBe` mempty

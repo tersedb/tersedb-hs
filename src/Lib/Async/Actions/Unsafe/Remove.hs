@@ -80,10 +80,21 @@ unsafeRemoveEntity eId = do
     case mVs of
       Nothing -> pure ()
       Just vs -> do
-        runInBase $ for_ vs unsafeRemoveVersion
         forM_ (Multimap.unfoldlMByKey eId (s ^. temp . toSubscriptionsFrom)) $ \subscriberId ->
           runInBase $ unsafeRemoveSubscription subscriberId eId
         runInBase $ unsafeUpdateFork eId Nothing
+        for_ vs $ \vId -> do
+          Set.delete vId (s ^. store . toVersions)
+          forM_ (Multimap.unfoldlMByKey vId (s ^. store . toReferences)) $ \refId ->
+            Multimap.delete vId refId (s ^. temp . toReferencesFrom)
+          Multimap.deleteByKey vId (s ^. store . toReferences)
+          Multimap.deleteByKey vId (s ^. temp . toReferencesFrom)
+          forM_ (Multimap.unfoldlMByKey vId (s ^. store . toSubscriptions)) $ \subId ->
+            Multimap.delete vId subId (s ^. temp . toSubscriptionsFrom)
+          Multimap.deleteByKey vId (s ^. store . toSubscriptions)
+          forM_ (Multimap.unfoldlMByKey vId (s ^. temp . toForksFrom)) $ \forkId ->
+            Map.delete forkId (s ^. store . toForks)
+          Multimap.deleteByKey vId (s ^. temp . toForksFrom)
         Map.delete eId (s ^. store . toEntities)
 
 unsafeRemoveSpace :: SpaceId -> TerseM STM ()
