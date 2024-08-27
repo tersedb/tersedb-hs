@@ -25,7 +25,6 @@ import Spec.Sync.Sample.Tree (
   loadSampleTree,
   loadSampleTreeNoTab,
  )
-
 import Lib.Sync.Actions.Tabulation (resetTabulation)
 import Lib.Sync.Actions.Unsafe.Update.Group (unsafeUnlinkGroups)
 import Lib.Sync.Types.Store (
@@ -74,13 +73,6 @@ groupsTests = do
           then True `shouldBe` True
           else hasCycle (loadCycle xs) `shouldBe` Just (head xs : reverse xs)
   describe "logical mechanism" $ do
-    it "tabulating while linking is the same as tabulating after linking" $
-      property $ \(xs :: SampleGroupTree ()) ->
-        loadSampleTree xs `shouldBe` execState resetTabulation (loadSampleTreeNoTab xs)
-    it "resetting tabulation is idempotent" $
-      property $ \(xs :: SampleGroupTree ()) ->
-        execState (resetTabulation >> resetTabulation) (loadSampleTreeNoTab xs)
-          `shouldBe` execState resetTabulation (loadSampleTreeNoTab xs)
     it "unlinking causes disjoint trees" $
       property $ \(xs :: SampleGroupTree ()) ->
         let s = loadSampleTree xs

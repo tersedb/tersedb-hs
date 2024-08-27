@@ -36,6 +36,7 @@ library
       Lib.Async.Actions.Safe.Verify.SpaceAndEntity
       Lib.Async.Actions.Safe.Verify.Utils
       Lib.Async.Actions.Tabulation
+      Lib.Async.Actions.Unsafe.Read
       Lib.Async.Actions.Unsafe.Remove
       Lib.Async.Actions.Unsafe.Store
       Lib.Async.Actions.Unsafe.Update
@@ -81,9 +82,11 @@ library
       DeriveGeneric
       FlexibleContexts
       FlexibleInstances
+      FunctionalDependencies
       GeneralizedNewtypeDeriving
       InstanceSigs
       KindSignatures
+      MultiParamTypeClasses
       NamedFieldPuns
       OverloadedStrings
       RankNTypes
@@ -91,7 +94,9 @@ library
       ScopedTypeVariables
       StandaloneDeriving
       TemplateHaskell
+      TypeApplications
       TypeFamilies
+      UndecidableInstances
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -Wno-name-shadowing
   build-depends:
       QuickCheck
@@ -134,9 +139,11 @@ executable tersedb-hs
       DeriveGeneric
       FlexibleContexts
       FlexibleInstances
+      FunctionalDependencies
       GeneralizedNewtypeDeriving
       InstanceSigs
       KindSignatures
+      MultiParamTypeClasses
       NamedFieldPuns
       OverloadedStrings
       RankNTypes
@@ -144,7 +151,9 @@ executable tersedb-hs
       ScopedTypeVariables
       StandaloneDeriving
       TemplateHaskell
+      TypeApplications
       TypeFamilies
+      UndecidableInstances
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -Wno-name-shadowing -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       QuickCheck
@@ -179,6 +188,9 @@ test-suite tersedb-test
   main-is: Spec.hs
   other-modules:
       Spec.Async
+      Spec.Generic
+      Spec.Generic.Group
+      Spec.Simple
       Spec.Sync
       Spec.Sync.Sample.Store
       Spec.Sync.Sample.Tree
@@ -200,9 +212,11 @@ test-suite tersedb-test
       DeriveGeneric
       FlexibleContexts
       FlexibleInstances
+      FunctionalDependencies
       GeneralizedNewtypeDeriving
       InstanceSigs
       KindSignatures
+      MultiParamTypeClasses
       NamedFieldPuns
       OverloadedStrings
       RankNTypes
@@ -210,7 +224,9 @@ test-suite tersedb-test
       ScopedTypeVariables
       StandaloneDeriving
       TemplateHaskell
+      TypeApplications
       TypeFamilies
+      UndecidableInstances
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -Wno-name-shadowing -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       QuickCheck

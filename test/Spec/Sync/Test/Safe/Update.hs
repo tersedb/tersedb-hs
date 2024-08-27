@@ -28,14 +28,12 @@ import qualified Data.HashSet as HS
 import Data.List (elemIndex)
 import qualified Data.List.NonEmpty as NE
 import Data.Maybe (fromJust, isJust)
-import Lib.Sync.Actions.Safe.Store (
+import Lib.Class (
   addMember,
   storeActor,
   storeEntity,
   storeGroup,
   storeSpace,
- )
-import Lib.Sync.Actions.Safe.Update (
   addReference,
   addSubscription,
   moveEntity,
@@ -43,15 +41,14 @@ import Lib.Sync.Actions.Safe.Update (
   removeReference,
   removeSubscription,
   setVersionIndex,
-  updateEntitySpace,
   updateFork,
- )
-import Lib.Sync.Actions.Safe.Update.Group (
   linkGroups,
   setEntityPermission,
   setMemberPermission,
   setUniversePermission,
-  unlinkGroups,
+  unlinkGroups, TerseDB,
+ )
+import Lib.Sync.Actions.Safe.Update.Group (
   updateGroupParent,
  )
 import Lib.Sync.Types.Store (
@@ -123,15 +120,13 @@ updateTests = describe "Update" $ do
                       unless worked $ error $ "Couldn't store space " <> show sId'
                       worked <- setEntityPermission (NE.singleton adminActor) Create adminGroup sId
                       unless worked $ error $ "Couldn't set entity permission " <> show sId
-                      mWorked <- storeEntity (NE.singleton adminActor) eId sId vId Nothing
-                      case mWorked of
-                        Just (Right ()) -> pure ()
-                        _ -> error $ "Couldn't store entity " <> show (eId, vId)
+                      worked <- storeEntity (NE.singleton adminActor) eId sId vId Nothing
+                      unless worked $ error $ "Couldn't store entity " <> show (eId, vId)
                       worked <- setEntityPermission (NE.singleton adminActor) Create gId sId'
                       unless worked $ error $ "Couldn't set entity permission " <> show sId'
                       worked <- setEntityPermission (NE.singleton adminActor) Delete gId sId
                       unless worked $ error $ "Couldn't set entity permission " <> show sId
-                      worked <- updateEntitySpace (NE.singleton aId) eId sId'
+                      worked <- moveEntity (NE.singleton aId) eId sId'
                       unless worked $ error $ "Couldn't move entity " <> show eId
                 (s' ^? store . toSpaces . ix sId . ix eId)
                   `shouldBe` Nothing
@@ -163,13 +158,11 @@ updateTests = describe "Update" $ do
                       unless worked $ error $ "Couldn't store space " <> show sId'
                       worked <- setEntityPermission (NE.singleton adminActor) Create adminGroup sId
                       unless worked $ error $ "Couldn't set entity permission " <> show sId
-                      mWorked <- storeEntity (NE.singleton adminActor) eId sId vId Nothing
-                      case mWorked of
-                        Just (Right ()) -> pure ()
-                        _ -> error $ "Couldn't store entity " <> show (eId, vId)
+                      worked <- storeEntity (NE.singleton adminActor) eId sId vId Nothing
+                      unless worked $ error $ "Couldn't store entity " <> show (eId, vId)
                       worked <- setEntityPermission (NE.singleton adminActor) Create gId sId'
                       unless worked $ error $ "Couldn't set entity permission " <> show sId'
-                      updateEntitySpace (NE.singleton aId) eId sId'
+                      moveEntity (NE.singleton aId) eId sId'
                     s' = execState go s
                 evalState go s `shouldBe` False
                 (s' ^? store . toSpaces . ix sId . ix eId)
@@ -201,13 +194,11 @@ updateTests = describe "Update" $ do
                       unless worked $ error $ "Couldn't store space " <> show sId'
                       worked <- setEntityPermission (NE.singleton adminActor) Create adminGroup sId
                       unless worked $ error $ "Couldn't set entity permission " <> show sId
-                      mWorked <- storeEntity (NE.singleton adminActor) eId sId vId Nothing
-                      case mWorked of
-                        Just (Right ()) -> pure ()
-                        _ -> error $ "Couldn't store entity " <> show (eId, vId)
+                      worked <- storeEntity (NE.singleton adminActor) eId sId vId Nothing
+                      unless worked $ error $ "Couldn't store entity " <> show (eId, vId)
                       worked <- setEntityPermission (NE.singleton adminActor) Delete gId sId
                       unless worked $ error $ "Couldn't set entity permission " <> show sId
-                      updateEntitySpace (NE.singleton aId) eId sId'
+                      moveEntity (NE.singleton aId) eId sId'
                     s' = execState go s
                 evalState go s `shouldBe` False
                 (s' ^. store . toSpaces . at sId . non mempty . at eId)
@@ -227,10 +218,8 @@ updateTests = describe "Update" $ do
                in forAll (elements $ HM.keys versions) $ \vId ->
                     forAll (elements . HM.keys $ HM.delete vId versions) $ \refId -> do
                       let s' = flip execState s $ do
-                            mE <- addReference (NE.singleton adminActor) vId refId
-                            case mE of
-                              Just (Right ()) -> pure ()
-                              _ -> error $ "Couldn't add reference " <> show (vId, refId, mE)
+                            worked <- addReference (NE.singleton adminActor) vId refId
+                            unless worked $ error $ "Couldn't add reference " <> show (vId, refId)
                       (s' ^? store . toVersions . ix vId . references . ix refId) `shouldBe` Just ()
                       (s' ^? temp . toReferencesFrom . ix refId . ix vId) `shouldBe` Just ()
       it "Remove Reference" $
@@ -241,10 +230,8 @@ updateTests = describe "Update" $ do
                in forAll (elements $ HM.keys refs) $ \refId ->
                     forAll (elements . HS.toList . fromJust $ HM.lookup refId refs) $ \vId -> do
                       let s' = flip execState s $ do
-                            mE <- removeReference (NE.singleton adminActor) vId refId
-                            case mE of
-                              Just (Right ()) -> pure ()
-                              _ -> error $ "Couldn't remove reference " <> show (vId, refId, mE)
+                            worked <- removeReference (NE.singleton adminActor) vId refId
+                            unless worked $ error $ "Couldn't remove reference " <> show (vId, refId)
                       (s' ^? store . toVersions . ix vId . references . ix refId) `shouldBe` Nothing
                       (s' ^? temp . toReferencesFrom . ix refId . ix vId) `shouldBe` Nothing
       it "Add Subscription" $
@@ -259,10 +246,8 @@ updateTests = describe "Update" $ do
                in forAll selectVersionAndEntity $ \(eIdOfVId, vId) ->
                     forAll (elements . HM.keys $ HM.delete eIdOfVId entities) $ \subId -> do
                       let s' = flip execState s $ do
-                            mE <- addSubscription (NE.singleton adminActor) vId subId
-                            case mE of
-                              Just (Right ()) -> pure ()
-                              _ -> error $ "Couldn't add subscription " <> show (vId, subId, mE)
+                            worked <- addSubscription (NE.singleton adminActor) vId subId
+                            unless worked $ error $ "Couldn't add subscription " <> show (vId, subId)
                       (s' ^? store . toVersions . ix vId . subscriptions . ix subId)
                         `shouldBe` Just ()
                       (s' ^? temp . toSubscriptionsFrom . ix subId . ix vId) `shouldBe` Just ()
@@ -274,10 +259,8 @@ updateTests = describe "Update" $ do
                in forAll (elements $ HM.keys subs) $ \subId ->
                     forAll (elements . HS.toList . fromJust $ HM.lookup subId subs) $ \vId -> do
                       let s' = flip execState s $ do
-                            mE <- removeSubscription (NE.singleton adminActor) vId subId
-                            case mE of
-                              Just (Right ()) -> pure ()
-                              _ -> error $ "Couldn't remove subscription " <> show (vId, subId, mE)
+                            worked <- removeSubscription (NE.singleton adminActor) vId subId
+                            unless worked $ error $ "Couldn't remove subscription " <> show (vId, subId)
                       (s' ^? store . toVersions . ix vId . subscriptions . ix subId)
                         `shouldBe` Nothing
                       (s' ^? temp . toSubscriptionsFrom . ix subId . ix vId) `shouldBe` Nothing
@@ -300,10 +283,8 @@ updateTests = describe "Update" $ do
               pure (s, eId, newFork, adminA, adminG)
          in forAll gen $ \(s, eId, newFork, adminActor, adminGroup) -> do
               let s' = flip execState s $ do
-                    mE <- updateFork (NE.singleton adminActor) eId (Just newFork)
-                    case mE of
-                      Just (Right ()) -> pure ()
-                      _ -> error $ "Couldn't remove version " <> show (newFork, mE)
+                    worked <- updateFork (NE.singleton adminActor) eId (Just newFork)
+                    unless worked $ error $ "Couldn't remove version " <> show (newFork)
               (s' ^? store . toEntities . ix eId . fork . _Just) `shouldBe` Just newFork
               (s' ^? temp . toForksFrom . ix newFork . ix eId) `shouldBe` Just ()
       it "Move an Entity" $
@@ -320,10 +301,12 @@ updateTests = describe "Update" $ do
                   )
                   $ \newSId -> do
                     let s' = flip execState s $ do
-                          mE <- moveEntity (NE.singleton adminActor) eId newSId
-                          case mE of
-                            Just (Right ()) -> pure ()
-                            _ -> error $ "Couldn't move entity " <> show (eId, newSId, mE)
+                          worked <- setEntityPermission (NE.singleton adminActor) Delete adminGroup (s ^?! temp . toSpaceOf . ix eId)
+                          unless worked $ error "Couldn't set delete entity permission"
+                          worked <- setEntityPermission (NE.singleton adminActor) Update adminGroup newSId
+                          unless worked $ error "Couldn't set create entity permission"
+                          worked <- moveEntity (NE.singleton adminActor) eId newSId
+                          unless worked $ error $ "Couldn't move entity " <> show (eId, newSId)
                     (s' ^? temp . toSpaceOf . ix eId) `shouldBe` Just newSId
                     (s' ^? store . toSpaces . ix newSId . ix eId) `shouldBe` Just ()
                     (s' ^? store . toSpaces . ix (s ^?! temp . toSpaceOf . ix eId) . ix eId)
@@ -350,10 +333,8 @@ updateTests = describe "Update" $ do
                           pure (v, offsetMagnitude)
                      in forAll genV $ \(vId, offset) -> do
                           let s' = flip execState s $ do
-                                mE <- offsetVersionIndex (NE.singleton adminActor) vId offset
-                                case mE of
-                                  Just (Right ()) -> pure ()
-                                  _ -> error $ "Couldn't offset version " <> show (eId, vId, mE)
+                                worked <- offsetVersionIndex (NE.singleton adminActor) vId offset
+                                unless worked $ error $ "Couldn't offset version " <> show (eId, vId)
                           shouldSatisfy (s' ^? store . toEntities . ix eId . versions) $ \mVs ->
                             let vs = NE.toList $ fromJust mVs
                                 oldIdx = fromJust . elemIndex vId . NE.toList $ e ^. versions
@@ -376,10 +357,8 @@ updateTests = describe "Update" $ do
                           pure (v, idx)
                      in forAll genV $ \(vId, idx) -> do
                           let s' = flip execState s $ do
-                                mE <- setVersionIndex (NE.singleton adminActor) vId idx
-                                case mE of
-                                  Just (Right ()) -> pure ()
-                                  _ -> error $ "Couldn't set version index " <> show (eId, vId, mE)
+                                worked <- setVersionIndex (NE.singleton adminActor) vId idx
+                                unless worked $ error $ "Couldn't set version index " <> show (eId, vId)
                           (s' ^? store . toEntities . ix eId . versions . ix idx) `shouldBe` Just vId
   -- updating a version occurs when you modify an existing one; still subject to modifying the
   -- entity by extension. Modifying a version - changing its references / subscriptions,
@@ -395,10 +374,8 @@ updateTests = describe "Update" $ do
               let gsWithParent = HM.filter (\g -> isJust (g ^. prev)) $ s ^. store . toGroups . nodes
                in forAll (elements (HM.toList gsWithParent)) $ \(gId :: GroupId, g) -> do
                     let s' = flip execState s $ do
-                          mE <- updateGroupParent (NE.singleton adminActor) gId Nothing
-                          case mE of
-                            Just (Right ()) -> pure ()
-                            _ -> error $ "Couldn't set group parent " <> show (gId, mE)
+                          worked <- updateGroupParent (NE.singleton adminActor) gId Nothing
+                          unless worked $ error $ "Couldn't set group parent " <> show (gId)
                         parentId = fromJust $ g ^. prev
                     (s' ^? store . toGroups . nodes . ix gId . prev . _Just) `shouldBe` Nothing
                     (s' ^? store . toGroups . nodes . ix parentId . next . ix gId)
@@ -430,10 +407,8 @@ updateTests = describe "Update" $ do
                     let s' = flip execState s $ do
                           worked <- storeGroup (NE.singleton adminActor) newGId
                           unless worked $ error $ "Couldn't store group " <> show newGId
-                          mE <- linkGroups (NE.singleton adminActor) gId newGId
-                          case mE of
-                            Just (Right ()) -> pure ()
-                            _ -> error $ "Couldn't set child " <> show (gId, newGId, mE)
+                          worked <- linkGroups (NE.singleton adminActor) gId newGId
+                          unless worked $ error $ "Couldn't set child " <> show (gId, newGId)
                      in shouldSatisfy (s', gId, newGId) $ \_ ->
                           fromJust (s' ^? temp . toTabulatedGroups . ix gId)
                             `hasLessOrEqualPermissionsTo` fromJust (s' ^? temp . toTabulatedGroups . ix newGId)
@@ -443,7 +418,7 @@ updateTests = describe "Update" $ do
     it "doesn't apply" True
 
 setStage
-  :: (MonadState Shared m) => ActorId -> GroupId -> ActorId -> GroupId -> m ()
+  :: (TerseDB n m) => ActorId -> GroupId -> ActorId -> GroupId -> m ()
 setStage adminActor adminGroup aId gId = do
   worked <- storeActor (NE.singleton adminActor) aId
   unless worked $ error $ "Couldn't create actor " <> show aId

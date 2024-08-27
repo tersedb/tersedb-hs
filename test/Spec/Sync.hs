@@ -28,6 +28,7 @@ import Lib.Sync.Types.Store (
   toSpaceOf,
   toSpaces,
  )
+import Lib.Sync.Types.Monad (TerseM)
 import Lib.Sync.Types.Store.Groups (nodes)
 import Lib.Types.Id (ActorId, GroupId)
 import Lib.Types.Permission (
@@ -47,17 +48,20 @@ import Spec.Sync.Test.Safe.Create (createTests)
 import Spec.Sync.Test.Safe.Delete (removeTests)
 import Spec.Sync.Test.Safe.Read (readTests)
 import Spec.Sync.Test.Safe.Update (updateTests)
-import Spec.Sync.Test.Simple (simpleTests)
+import Spec.Sync.Test.Simple (simpleSyncTests)
 import Test.QuickCheck (
   elements,
   forAll,
   property,
  )
 import Test.Syd (Spec, describe, it, shouldBe, shouldSatisfy)
+import Spec.Generic (genericTests)
+import Data.Data (Proxy (..))
 
 syncTests :: Spec
 syncTests = do
-  describe "Simple" simpleTests
+  describe "Generics" (genericTests (Proxy @(TerseM IO)))
+  describe "Simple" simpleSyncTests
   describe "Groups" groupsTests
   describe "Store" $ do
     it "temp data is reproducible from store" $

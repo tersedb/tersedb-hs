@@ -3,13 +3,18 @@ module Lib.Class where
 import Data.List.NonEmpty (NonEmpty)
 import Lib.Types.Id (ActorId, GroupId, SpaceId, EntityId, VersionId)
 import qualified Lib.Async.Types.Monad as Async
+import qualified Lib.Async.Types.Store as Async
 import qualified Lib.Async.Actions.Safe.Verify as Async
+import qualified Lib.Async.Actions.Tabulation as Async
+import qualified Lib.Async.Actions.Unsafe.Read as Async
 import qualified Lib.Async.Actions.Unsafe.Store as Async
 import qualified Lib.Async.Actions.Unsafe.Update as Async
 import qualified Lib.Async.Actions.Unsafe.Update.Group as Async
 import qualified Lib.Async.Actions.Unsafe.Remove as Async
 import qualified Lib.Sync.Types.Monad as Sync
+import qualified Lib.Sync.Types.Store as Sync
 import qualified Lib.Sync.Actions.Safe.Verify as Sync
+import qualified Lib.Sync.Actions.Tabulation as Sync
 import qualified Lib.Sync.Actions.Unsafe.Read as Sync
 import qualified Lib.Sync.Actions.Unsafe.Store as Sync
 import qualified Lib.Sync.Actions.Unsafe.Update as Sync
@@ -30,6 +35,10 @@ import qualified ListT
 import Lib.Types.Permission (CollectionPermissionWithExemption, CollectionPermission, SinglePermission (Exists))
 import qualified Data.List.NonEmpty as NE
 import Data.Maybe (fromMaybe)
+import Control.Monad.State (MonadState(put, get), StateT (runStateT), evalStateT)
+import Lib.Async.Types.Store.Iso (loadSyncStore, loadSyncTemp, genSyncTemp, genSyncStore)
+import Control.Lens ((^.))
+import Control.Monad.Morph (hoist)
 
 generateWithAuthority
   :: ( MonadIO m
@@ -43,6 +52,7 @@ generateWithAuthority perform = do
   pure (toMaybe worked ident)
 
 class Monad m => TerseDBGen m where
+  runTerseDB :: m a -> Sync.Shared -> IO a
   newActor :: NonEmpty ActorId -> m (Maybe ActorId)
   newGroup :: NonEmpty ActorId -> m (Maybe GroupId)
   newSpace :: NonEmpty ActorId -> m (Maybe SpaceId)
@@ -50,6 +60,7 @@ class Monad m => TerseDBGen m where
   newVersion :: NonEmpty ActorId -> EntityId -> m (Maybe VersionId)
 
 instance TerseDBGen (Sync.TerseM IO) where
+  runTerseDB = evalStateT
   newGroup = generateWithAuthority . storeGroup
   newActor = generateWithAuthority . storeActor
   newSpace = generateWithAuthority . storeSpace
@@ -59,6 +70,12 @@ instance TerseDBGen (Sync.TerseM IO) where
     generateWithAuthority (storeNextVersion creator eId)
 
 instance TerseDBGen (Async.TerseM IO) where
+  runTerseDB x s = do
+    emptyS <- atomically Async.newShared
+    let y = do
+          hoist atomically $ loadSyncShared s
+          x
+    runReaderT y emptyS
   newGroup creator = generateWithAuthority $ \gId -> do
     s <- ask
     liftBase . atomically $ runReaderT (storeGroup creator gId) s
@@ -76,7 +93,11 @@ instance TerseDBGen (Async.TerseM IO) where
     liftBase . atomically $ runReaderT (storeNextVersion creator eId vId) s
 
 
-class Monad m => TerseDB m where
+class Monad m => TerseDB n m | m -> n where
+  commit :: m a -> n a
+  loadSyncShared :: Sync.Shared -> m ()
+  genSyncShared :: m Sync.Shared
+  resetTabulation :: m ()
   anyCanReadActor :: NonEmpty ActorId -> m Bool
   anyCanCreateActor :: NonEmpty ActorId -> m Bool
   anyCanUpdateActor :: NonEmpty ActorId -> ActorId -> m Bool
@@ -148,7 +169,11 @@ class Monad m => TerseDB m where
   unsafeRemoveActor :: ActorId -> m ()
   unsafeRemoveGroup :: GroupId -> m ()
 
-instance Monad m => TerseDB (Sync.TerseM m) where
+instance Monad m => TerseDB (Sync.TerseM m) (Sync.TerseM m) where
+  commit = id
+  loadSyncShared = put
+  genSyncShared = get
+  resetTabulation = Sync.resetTabulation
   anyCanReadActor = Sync.anyCanReadActor
   anyCanCreateActor = Sync.anyCanCreateActor
   anyCanUpdateActor = Sync.anyCanUpdateActor
@@ -220,7 +245,13 @@ instance Monad m => TerseDB (Sync.TerseM m) where
   unsafeRemoveActor = Sync.unsafeRemoveActor
   unsafeRemoveGroup = Sync.unsafeRemoveGroup
 
-instance TerseDB (Async.TerseM STM) where
+instance TerseDB (Async.TerseM IO) (Async.TerseM STM) where
+  commit = hoist atomically
+  loadSyncShared s = do
+    loadSyncStore (s ^. Sync.store)
+    loadSyncTemp (s ^. Sync.temp)
+  genSyncShared = Sync.Shared <$> genSyncStore <*> genSyncTemp
+  resetTabulation = Async.resetTabulation
   anyCanReadActor = Async.anyCanReadActor
   anyCanCreateActor = Async.anyCanCreateActor
   anyCanUpdateActor = Async.anyCanUpdateActor
@@ -252,6 +283,16 @@ instance TerseDB (Async.TerseM STM) where
   hasEntityPermission = Async.hasEntityPermission
   hasGroupPermission = Async.hasGroupPermission
   hasMemberPermission = Async.hasMemberPermission
+  unsafeReadReferencesEager = Async.unsafeReadReferencesEager
+  unsafeReadReferencesLazy = Async.unsafeReadReferencesLazy
+  unsafeReadReferencesFromEager = Async.unsafeReadReferencesFromEager
+  unsafeReadReferencesFromLazy = Async.unsafeReadReferencesFromLazy
+  unsafeReadSubscriptionsEager = Async.unsafeReadSubscriptionsEager
+  unsafeReadSubscriptionsLazy = Async.unsafeReadSubscriptionsLazy
+  unsafeReadSubscriptionsFromEager = Async.unsafeReadSubscriptionsFromEager
+  unsafeReadSubscriptionsFromLazy = Async.unsafeReadSubscriptionsFromLazy
+  unsafeReadEntitiesEager = Async.unsafeReadEntitiesEager
+  unsafeReadEntitiesLazy = Async.unsafeReadEntitiesLazy
   unsafeStoreGroup = Async.unsafeStoreGroup
   unsafeStoreActor = Async.unsafeStoreActor
   unsafeAddMember = Async.unsafeAddMember
@@ -285,7 +326,7 @@ instance TerseDB (Async.TerseM STM) where
 -- * Store
 
 storeGroup
-  :: (TerseDB m)
+  :: (TerseDB n m)
   => NonEmpty ActorId
   -- ^ actor storing the group
   -> GroupId
@@ -296,7 +337,7 @@ storeGroup creator gId =
     >>= conditionally (unsafeStoreGroup gId)
 
 storeActor
-  :: (TerseDB m)
+  :: (TerseDB n m)
   => NonEmpty ActorId
   -- ^ actor storing the created actor
   -> ActorId
@@ -307,7 +348,7 @@ storeActor creator aId =
     >>= conditionally (unsafeStoreActor aId)
 
 addMember
-  :: (TerseDB m)
+  :: (TerseDB n m)
   => NonEmpty ActorId
   -- ^ actor creating membership
   -> GroupId
@@ -320,7 +361,7 @@ addMember creator gId aId = do
     >>= conditionally (unsafeAddMember gId aId)
 
 storeSpace
-  :: (TerseDB m)
+  :: (TerseDB n m)
   => NonEmpty ActorId
   -- ^ actor storing the space
   -> SpaceId
@@ -331,7 +372,7 @@ storeSpace creator sId =
     >>= conditionally (unsafeStoreSpace sId)
 
 storeEntity
-  :: (TerseDB m)
+  :: (TerseDB n m)
   => NonEmpty ActorId
   -- ^ actor storing the entity
   -> EntityId
@@ -352,7 +393,7 @@ storeEntity creator eId sId vId mFork = do
   conditionally (unsafeStoreEntity eId sId vId mFork) canAdjust
 
 storeNextVersion
-  :: (TerseDB m)
+  :: (TerseDB n m)
   => NonEmpty ActorId
   -- ^ actor attempting to store a version
   -> EntityId
@@ -367,7 +408,7 @@ storeNextVersion creator eId vId = do
 -- * Update
 
 linkGroups
-  :: (TerseDB m)
+  :: (TerseDB n m)
   => NonEmpty ActorId
   -> GroupId
   -> GroupId
@@ -381,7 +422,7 @@ linkGroups updater gId childId = do
   conditionally (unsafeLinkGroups gId childId) canAdjust
 
 unlinkGroups
-  :: (TerseDB m)
+  :: (TerseDB n m)
   => NonEmpty ActorId
   -> GroupId
   -> GroupId
@@ -396,7 +437,7 @@ unlinkGroups updater gId childId = do
 
 -- | Will only update the group if the actor has same or greater permission
 setUniversePermission
-  :: (TerseDB m)
+  :: (TerseDB n m)
   => NonEmpty ActorId
   -- ^ actor attempting to set permission
   -> CollectionPermissionWithExemption
@@ -415,7 +456,7 @@ setUniversePermission creator p gId = do
     canAdjust
 
 setOrganizationPermission
-  :: (TerseDB m)
+  :: (TerseDB n m)
   => NonEmpty ActorId
   -- ^ actor attempting to set permission
   -> CollectionPermissionWithExemption
@@ -434,7 +475,7 @@ setOrganizationPermission creator p gId = do
     canAdjust
 
 setRecruiterPermission
-  :: (TerseDB m)
+  :: (TerseDB n m)
   => NonEmpty ActorId
   -- ^ actor attempting to set permission
   -> CollectionPermission
@@ -453,7 +494,7 @@ setRecruiterPermission creator p gId = do
     canAdjust
 
 setSpacePermission
-  :: (TerseDB m)
+  :: (TerseDB n m)
   => NonEmpty ActorId
   -- ^ actor attempting to set permission
   -> Maybe SinglePermission
@@ -474,7 +515,7 @@ setSpacePermission creator p gId sId = do
     canAdjust
 
 setEntityPermission
-  :: (TerseDB m)
+  :: (TerseDB n m)
   => NonEmpty ActorId
   -- ^ actor attempting to set permission
   -> CollectionPermission
@@ -495,7 +536,7 @@ setEntityPermission creator p gId sId = do
     canAdjust
 
 setGroupPermission
-  :: (TerseDB m)
+  :: (TerseDB n m)
   => NonEmpty ActorId
   -- ^ actor attempting to set permission
   -> Maybe SinglePermission
@@ -518,7 +559,7 @@ setGroupPermission creator p gId towardGId = do
     canAdjust
 
 setMemberPermission
-  :: (TerseDB m)
+  :: (TerseDB n m)
   => NonEmpty ActorId
   -- ^ actor attempting to set permission
   -> CollectionPermission
@@ -540,7 +581,7 @@ setMemberPermission creator p manipulatorGId manipulatedGId = do
 
 -- | Moving an entity between spaces requires delete authority on the current space, and create authority on the destination space
 moveEntity
-  :: (TerseDB m) => NonEmpty ActorId -> EntityId -> SpaceId -> m Bool
+  :: (TerseDB n m) => NonEmpty ActorId -> EntityId -> SpaceId -> m Bool
 moveEntity updater eId newSId = do
   canAdjust <-
     andM
@@ -550,7 +591,7 @@ moveEntity updater eId newSId = do
   conditionally (unsafeMoveEntity eId newSId) canAdjust
 
 addReference
-  :: (TerseDB m)
+  :: (TerseDB n m)
   => NonEmpty ActorId
   -> VersionId
   -> VersionId
@@ -564,7 +605,7 @@ addReference updater vId refId = do
   conditionally (unsafeAddReference vId refId) canAdjust
 
 removeReference
-  :: (TerseDB m)
+  :: (TerseDB n m)
   => NonEmpty ActorId
   -> VersionId
   -> VersionId
@@ -578,7 +619,7 @@ removeReference updater vId refId = do
   conditionally (unsafeRemoveReference vId refId) canAdjust
 
 addSubscription
-  :: (TerseDB m)
+  :: (TerseDB n m)
   => NonEmpty ActorId
   -> VersionId
   -> EntityId
@@ -592,7 +633,7 @@ addSubscription updater vId subId = do
   conditionally (unsafeAddSubscription vId subId) canAdjust
 
 removeSubscription
-  :: (TerseDB m)
+  :: (TerseDB n m)
   => NonEmpty ActorId
   -> VersionId
   -> EntityId
@@ -606,7 +647,7 @@ removeSubscription updater vId subId = do
   conditionally (unsafeRemoveSubscription vId subId) canAdjust
 
 updateFork
-  :: (TerseDB m)
+  :: (TerseDB n m)
   => NonEmpty ActorId
   -> EntityId
   -> Maybe VersionId
@@ -620,7 +661,7 @@ updateFork updater eId mFork = do
   conditionally (unsafeUpdateFork eId mFork) canAdjust
 
 offsetVersionIndex
-  :: (TerseDB m)
+  :: (TerseDB n m)
   => NonEmpty ActorId
   -> VersionId
   -> Int
@@ -630,7 +671,7 @@ offsetVersionIndex updater vId offset = do
     >>= conditionally (unsafeOffsetVersionIndex vId offset)
 
 setVersionIndex
-  :: (TerseDB m)
+  :: (TerseDB n m)
   => NonEmpty ActorId
   -> VersionId
   -> Int
@@ -642,7 +683,7 @@ setVersionIndex updater vId idx = do
 -- * Remove
 
 removeVersion
-  :: (TerseDB m)
+  :: (TerseDB n m)
   => NonEmpty ActorId
   -> VersionId
   -> m Bool
@@ -657,7 +698,7 @@ removeVersion remover vId = do
   conditionally (unsafeRemoveVersion vId) canAdjust
 
 removeEntity
-  :: (TerseDB m)
+  :: (TerseDB n m)
   => NonEmpty ActorId
   -> EntityId
   -> m Bool
@@ -672,7 +713,7 @@ removeEntity remover eId = do
   conditionally (unsafeRemoveEntity eId) canAdjust
 
 removeSpace
-  :: (TerseDB m)
+  :: (TerseDB n m)
   => NonEmpty ActorId
   -> SpaceId
   -> m Bool
@@ -687,7 +728,7 @@ removeSpace remover sId = do
   conditionally (unsafeRemoveSpace sId) canAdjust
 
 removeMember
-  :: (TerseDB m)
+  :: (TerseDB n m)
   => NonEmpty ActorId
   -> GroupId
   -> ActorId
@@ -696,7 +737,7 @@ removeMember remover gId aId =
   anyCanDeleteMember remover gId >>= conditionally (unsafeRemoveMember gId aId)
 
 removeActor
-  :: (TerseDB m)
+  :: (TerseDB n m)
   => NonEmpty ActorId
   -> ActorId
   -> m Bool
@@ -704,7 +745,7 @@ removeActor remover aId =
   anyCanDeleteActor remover aId >>= conditionally (unsafeRemoveActor aId)
 
 removeGroup
-  :: (TerseDB m)
+  :: (TerseDB n m)
   => NonEmpty ActorId
   -> GroupId
   -> m Bool

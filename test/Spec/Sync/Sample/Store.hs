@@ -17,11 +17,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 You can reach me at athan.clark@gmail.com.
 -}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE NamedFieldPuns #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 
 module Spec.Sync.Sample.Store where
 
@@ -32,20 +27,18 @@ import Spec.Sync.Sample.Tree (
  )
 
 import Lib.Sync.Actions.Safe (emptyShared)
-import Lib.Sync.Actions.Safe.Store (
+import Lib.Class (
   addMember,
   storeActor,
   storeEntity,
   storeNextVersion,
   storeSpace,
+  setEntityPermission,
+  setSpacePermission,
  )
 import Lib.Sync.Actions.Safe.Update (
   updateVersionReferences,
   updateVersionSubscriptions,
- )
-import Lib.Sync.Actions.Safe.Update.Group (
-  setEntityPermission,
-  setSpacePermission,
  )
 import Lib.Sync.Actions.Unsafe.Store (
   unsafeAddMember,
@@ -62,17 +55,16 @@ import Lib.Sync.Actions.Unsafe.Update.Group (
   unsafeAdjustEntityPermission,
   unsafeAdjustSpacePermission,
  )
-import Lib.Sync.Types.Store (Shared, store, temp)
+import Lib.Sync.Types.Store (Shared)
 import Lib.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
 import Lib.Types.Permission (
   CollectionPermission (..),
   SinglePermission,
  )
 
-import Control.Lens (at, (%~), (.~), (^.), _1, _2)
 import Control.Monad (replicateM, void)
 import Control.Monad.Extra (unless)
-import Control.Monad.State (State, execState, get, modify)
+import Control.Monad.State (State, execState, get)
 import Data.Foldable (foldlM, for_, traverse_)
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HM
@@ -80,7 +72,6 @@ import Data.HashSet (HashSet)
 import qualified Data.HashSet as HS
 import Data.List.NonEmpty (NonEmpty, uncons)
 import qualified Data.List.NonEmpty as NE
-import Data.Maybe (fromJust, isNothing, mapMaybe)
 import qualified Data.Text.Lazy as LT
 import Test.QuickCheck (
   Arbitrary (arbitrary, shrink),
@@ -202,40 +193,16 @@ loadSample SampleStore{..} = flip execState (loadSampleTree sampleGroups) $ do
     unsafeStoreSpace sId
   for_ sampleEntities $ \(eId, (sId, vIds, mFork)) -> do
     let ((vId, refIds, subIds), vIdsTail) = uncons vIds
-    case mFork of
-      Nothing -> do
-        eWorked <- unsafeStoreEntity eId sId vId Nothing
-        case eWorked of
-          Left e -> error $ "Error during store genesis entity " <> show e
-          Right () -> pure ()
-      Just fork -> do
-        eWorked <- unsafeStoreEntity eId sId vId (Just fork)
-        case eWorked of
-          Left e -> error $ "Error during store fork entity " <> show e
-          Right () -> pure ()
-    eWorked <- unsafeUpdateVersionReferences vId refIds
-    case eWorked of
-      Left e -> error $ "Error during version references update " <> show e
-      Right () -> pure ()
-    eWorked <- unsafeUpdateVersionSubscriptions vId subIds
-    case eWorked of
-      Left e -> error $ "Error during version subscriptions update " <> show e
-      Right () -> pure ()
+    unsafeStoreEntity eId sId vId mFork
+    unsafeUpdateVersionReferences vId refIds
+    unsafeUpdateVersionSubscriptions vId subIds
     case vIdsTail of
       Nothing -> pure ()
       Just vIdsTail -> void . (\f -> foldlM f vId vIdsTail) $ \prevVId (vId, refIds, subIds) -> do
-        eWorked <- unsafeStoreVersion eId vId
-        case eWorked of
-          Left e -> error $ "Error during store version " <> show e
-          Right () -> do
-            eWorked <- unsafeUpdateVersionReferences vId refIds
-            case eWorked of
-              Left e -> error $ "Error during version references update " <> show e
-              Right () -> do
-                eWorked <- unsafeUpdateVersionSubscriptions vId subIds
-                case eWorked of
-                  Left e -> error $ "Error during version subscriptions update " <> show e
-                  Right () -> pure vId
+        unsafeStoreVersion eId vId
+        unsafeUpdateVersionReferences vId refIds
+        unsafeUpdateVersionSubscriptions vId subIds
+        pure vId
   let loadPermissions
         :: SampleGroupTree
             (HashMap SpaceId SinglePermission, HashMap SpaceId CollectionPermission)
@@ -274,80 +241,59 @@ storeSample SampleStore{..} adminActor adminGroup =
       let ((vId, refIds, subIds), vIdsTail) = uncons vIds
       case mFork of
         Nothing -> do
-          mWorked <- storeEntity (NE.singleton adminActor) eId sId vId Nothing
-          case mWorked of
-            Just (Right ()) -> pure ()
-            _ -> do
-              s <- get
-              error $
-                "Failed to store entity "
-                  <> show (eId, sId, vId)
-                  <> " - "
-                  <> LT.unpack (pShowNoColor s)
+          worked <- storeEntity (NE.singleton adminActor) eId sId vId Nothing
+          unless worked $ do
+            s <- get
+            error $
+              "Failed to store entity "
+                <> show (eId, sId, vId)
+                <> " - "
+                <> LT.unpack (pShowNoColor s)
         Just fork -> do
-          mE <- storeEntity (NE.singleton adminActor) eId sId vId (Just fork)
-          case mE of
-            Just (Right ()) -> pure ()
-            _ -> do
-              s <- get
-              error $
-                "Failed to store forked entity "
-                  <> show (mE, eId, sId, vId, fork)
-                  <> " - "
-                  <> LT.unpack (pShowNoColor s)
-      mE <- updateVersionReferences (NE.singleton adminActor) vId refIds
-      case mE of
-        Just (Right ()) -> pure ()
-        _ -> do
-          s <- get
-          error $
-            "Failed to store version references "
-              <> show (mE, eId, vId)
-              <> " - "
-              <> LT.unpack (pShowNoColor s)
-      mE <- updateVersionSubscriptions (NE.singleton adminActor) vId subIds
-      case mE of
-        Just (Right ()) -> pure ()
-        _ -> do
-          s <- get
-          error $
-            "Failed to store version subscriptions "
-              <> show (mE, eId, vId)
-              <> " - "
-              <> LT.unpack (pShowNoColor s)
+          worked <- storeEntity (NE.singleton adminActor) eId sId vId (Just fork)
+          unless worked $ do
+            s <- get
+            error $
+              "Failed to store forked entity "
+                <> show (eId, sId, vId, fork)
+                <> " - "
+                <> LT.unpack (pShowNoColor s)
+      worked <- updateVersionReferences (NE.singleton adminActor) vId refIds
+      unless worked $ do
+        s <- get
+        error $
+          "Failed to store version references "
+            <> show (eId, vId)
+            <> " - "
+            <> LT.unpack (pShowNoColor s)
+      worked <- updateVersionSubscriptions (NE.singleton adminActor) vId subIds
+      unless worked $ do
+        s <- get
+        error $
+          "Failed to store version subscriptions "
+            <> show (eId, vId)
+            <> " - "
+            <> LT.unpack (pShowNoColor s)
       case vIdsTail of
         Nothing -> pure ()
         Just vIdsTail -> for_ vIdsTail $ \(vId, refIds, subIds) -> do
-          mE <- storeNextVersion (NE.singleton adminActor) eId vId
-          case mE of
-            Just (Right ()) -> pure ()
-            _ -> do
-              s <- get
-              error $
-                "Failed to store version "
-                  <> show (mE, eId, vId)
-                  <> " - "
-                  <> LT.unpack (pShowNoColor s)
-          mE <- updateVersionReferences (NE.singleton adminActor) vId refIds
-          case mE of
-            Just (Right ()) -> pure ()
-            _ -> do
-              s <- get
-              error $
-                "Failed to store version references "
-                  <> show (mE, eId, vId)
-                  <> " - "
-                  <> LT.unpack (pShowNoColor s)
-          mE <- updateVersionSubscriptions (NE.singleton adminActor) vId subIds
-          case mE of
-            Just (Right ()) -> pure ()
-            _ -> do
-              s <- get
-              error $
-                "Failed to store version subscriptions "
-                  <> show (mE, eId, vId)
-                  <> " - "
-                  <> LT.unpack (pShowNoColor s)
+          worked <- storeNextVersion (NE.singleton adminActor) eId vId
+          unless worked $ do
+            s <- get
+            error $
+              "Failed to store version "
+                <> show (eId, vId)
+                <> " - "
+                <> LT.unpack (pShowNoColor s)
+          worked <- updateVersionReferences (NE.singleton adminActor) vId refIds
+          unless worked $ do
+            s <- get
+            error $
+              "Failed to update version references "
+                <> show (vId, refIds)
+                <> " - "
+                <> LT.unpack (pShowNoColor s)
+          updateVersionSubscriptions (NE.singleton adminActor) vId subIds
     let loadPermissions
           :: SampleGroupTree
               (HashMap SpaceId SinglePermission, HashMap SpaceId CollectionPermission)

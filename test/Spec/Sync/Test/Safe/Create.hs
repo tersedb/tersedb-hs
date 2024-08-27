@@ -26,29 +26,25 @@ import Control.Monad.State (MonadState, execState)
 import qualified Data.List.NonEmpty as NE
 import Data.Maybe (isJust, isNothing)
 import Lib.Sync.Actions.Safe (emptyShared)
-import Lib.Sync.Actions.Safe.Store (
+import Lib.Class (
   addMember,
   storeActor,
   storeEntity,
   storeGroup,
   storeNextVersion,
   storeSpace,
- )
-import Lib.Sync.Actions.Safe.Update.Group (
   setEntityPermission,
   setMemberPermission,
   setOrganizationPermission,
   setRecruiterPermission,
-  setUniversePermission,
+  setUniversePermission, TerseDB,
  )
 import Lib.Sync.Types.Store (
   Shared,
   store,
-  temp,
   toActors,
   toEntities,
   toGroups,
-  toReferencesFrom,
   toSpaces,
   toVersions,
  )
@@ -58,12 +54,10 @@ import Lib.Types.Permission (
   CollectionPermission (..),
   CollectionPermissionWithExemption (..),
  )
-import Spec.Sync.Sample.Store (arbitraryEmptyShared, arbitraryShared)
+import Spec.Sync.Sample.Store (arbitraryEmptyShared)
 import Test.QuickCheck (
-  arbitrary,
   forAll,
   property,
-  suchThat,
  )
 import Test.Syd (Spec, describe, it, shouldSatisfy)
 
@@ -109,10 +103,8 @@ createTests = describe "Create" $ do
                     unless worked $ error $ "Couldn't store space " <> show (aId, gId, sId)
                     worked <- setEntityPermission (NE.singleton adminActor) Create gId sId
                     unless worked $ error $ "Couldn't set entity permission " <> show (gId, sId)
-                    mWorked <- storeEntity (NE.singleton aId) eId sId vId Nothing
-                    case mWorked of
-                      Just (Right ()) -> pure ()
-                      _ -> error $ "Couldn't store entity " <> show (eId, vId)
+                    worked <- storeEntity (NE.singleton aId) eId sId vId Nothing
+                    unless worked $ error $ "Couldn't store entity " <> show (eId, vId)
               shouldSatisfy (s' ^. store . toEntities . at eId) isJust
               shouldSatisfy (s' ^. store . toVersions . at vId) isJust
     it "Next Version" $
@@ -139,14 +131,10 @@ createTests = describe "Create" $ do
                     unless worked $ error $ "Couldn't store space " <> show (aId, gId, sId)
                     worked <- setEntityPermission (NE.singleton adminActor) Update gId sId
                     unless worked $ error $ "Couldn't set entity permission " <> show (gId, sId)
-                    mWorked <- storeEntity (NE.singleton aId) eId sId vId Nothing
-                    case mWorked of
-                      Just (Right ()) -> pure ()
-                      _ -> error $ "Couldn't store entity " <> show (eId, vId)
-                    mWorked <- storeNextVersion (NE.singleton aId) eId vId'
-                    case mWorked of
-                      Just (Right ()) -> pure ()
-                      _ -> error $ "Couldn't store version " <> show mWorked
+                    worked <- storeEntity (NE.singleton aId) eId sId vId Nothing
+                    unless worked $ error $ "Couldn't store entity " <> show (eId, vId)
+                    worked <- storeNextVersion (NE.singleton aId) eId vId'
+                    unless worked $ error $ "Couldn't store version " <> show vId
                in shouldSatisfy (s' ^. store . toVersions . at vId') isJust
     it "Group via organization" $
       property $
@@ -255,10 +243,8 @@ createTests = describe "Create" $ do
                       "Couldn't grant universe create permissions " <> show gId
                   worked <- storeSpace (NE.singleton aId) sId
                   unless worked $ error $ "Couldn't store space " <> show (aId, gId, sId)
-                  mWorked <- storeEntity (NE.singleton aId) eId sId vId Nothing
-                  case mWorked of
-                    Just (Right ()) -> error $ "Couldn't store entity " <> show (eId, vId)
-                    _ -> pure ()
+                  worked <- storeEntity (NE.singleton aId) eId sId vId Nothing
+                  when worked $ error $ "Couldn't store entity " <> show (eId, vId)
              in shouldSatisfy s' $ \_ ->
                   isNothing (s' ^. store . toEntities . at eId)
                     && isNothing (s' ^. store . toVersions . at vId)
@@ -289,16 +275,12 @@ createTests = describe "Create" $ do
                   unless worked $ error $ "Couldn't store space " <> show (aId, gId, sId)
                   worked <- setEntityPermission (NE.singleton adminActor) Update gId sId
                   unless worked $ error $ "Couldn't set entity permission " <> show (gId, sId)
-                  mWorked <- storeEntity (NE.singleton aId) eId sId vId Nothing
-                  case mWorked of
-                    Just (Right ()) -> pure ()
-                    _ -> error $ "Couldn't store entity " <> show (eId, vId)
+                  worked <- storeEntity (NE.singleton aId) eId sId vId Nothing
+                  unless worked $ error $ "Couldn't store entity " <> show (eId, vId)
                   worked <- setEntityPermission (NE.singleton adminActor) Read gId sId
                   unless worked $ error $ "Couldn't set entity permission " <> show (gId, sId)
-                  mWorked <- storeNextVersion (NE.singleton aId) eId vId'
-                  case mWorked of
-                    Just (Right ()) -> error $ "Could store version " <> show mWorked
-                    _ -> pure ()
+                  worked <- storeNextVersion (NE.singleton aId) eId vId'
+                  when worked $ error $ "Could store version " <> show vId
              in shouldSatisfy s' $ \_ ->
                   isJust (s' ^. store . toEntities . at eId)
                     && isNothing (s' ^. store . toVersions . at vId')
@@ -363,7 +345,7 @@ createTests = describe "Create" $ do
                     (s' ^. store . toGroups . nodes . at gId' . non emptyGroup . members . at aId')
 
 setStage
-  :: (MonadState Shared m) => ActorId -> GroupId -> ActorId -> GroupId -> m ()
+  :: (TerseDB n m) => ActorId -> GroupId -> ActorId -> GroupId -> m ()
 setStage adminActor adminGroup aId gId = do
   worked <- storeActor (NE.singleton adminActor) aId
   unless worked $ error $ "Couldn't create actor " <> show aId

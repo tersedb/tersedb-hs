@@ -5,15 +5,19 @@ import Control.Lens ((^.))
 import Control.Monad.Reader (ReaderT, runReaderT)
 import qualified Lib.Async.Actions.Tabulation as Async
 import qualified Lib.Async.Types.Store as Async
+import qualified Lib.Async.Types.Monad as Async
 import qualified Lib.Async.Types.Store.Iso as Async
 import qualified Lib.Sync.Actions.Tabulation as Sync
 import qualified Lib.Sync.Types.Store as Sync
 import Spec.Sync.Sample.Store (arbitraryShared)
 import Test.QuickCheck (forAll)
 import Test.Syd (Spec, describe, it, shouldBe)
+import Spec.Generic (genericTests)
+import Data.Data (Proxy (..))
 
 asyncTests :: Spec
 asyncTests = do
+  describe "Generics" (genericTests (Proxy @(Async.TerseM STM)))
   describe "Isomorphisms" $ do
     it "Sync.Store -> Async.Store -> Sync.Store = Sync.Store" $
       forAll arbitraryShared $ \(syncShared, _, _) -> do

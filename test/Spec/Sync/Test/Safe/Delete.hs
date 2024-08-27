@@ -28,15 +28,13 @@ import qualified Data.HashMap.Strict as HM
 import qualified Data.HashSet as HS
 import qualified Data.List.NonEmpty as NE
 import Data.Maybe (fromJust, fromMaybe)
-import Lib.Sync.Actions.Safe.Remove (
+import Lib.Class (
   removeActor,
   removeEntity,
   removeGroup,
   removeMember,
   removeSpace,
   removeVersion,
- )
-import Lib.Sync.Actions.Safe.Update.Group (
   setEntityPermission,
   setMemberPermission,
  )
@@ -56,9 +54,8 @@ import Lib.Sync.Types.Store (
  )
 import Lib.Sync.Types.Store.Entity (fork, versions)
 import Lib.Sync.Types.Store.Groups (edges, members, nodes)
-import Lib.Sync.Types.Store.Tabulation.Group (hasLessOrEqualPermissionsTo)
 import Lib.Sync.Types.Store.Version (references, subscriptions)
-import Lib.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
+import Lib.Types.Id (ActorId)
 import Lib.Types.Permission (
   CollectionPermission (..),
  )
@@ -66,13 +63,9 @@ import Spec.Sync.Sample.Store (
   arbitraryShared,
  )
 import Test.QuickCheck (
-  arbitrary,
-  chooseInt,
   elements,
   forAll,
-  property,
   suchThat,
-  suchThatMap,
  )
 import Test.Syd (Spec, context, describe, it, shouldBe)
 
@@ -89,10 +82,8 @@ removeTests = describe "Remove" $ do
            in forAll (elements $ HM.toList entsWith2OrMoreVersions) $ \(eId, e) ->
                 forAll (elements . NE.toList $ e ^. versions) $ \vId -> do
                   let s' = flip execState s $ do
-                        mE <- removeVersion (NE.singleton adminActor) vId
-                        case mE of
-                          Just (Right ()) -> pure ()
-                          _ -> error $ "Couldn't remove version " <> show (vId, mE)
+                        worked <- removeVersion (NE.singleton adminActor) vId
+                        unless worked $ error $ "Couldn't remove version " <> show (vId)
                   (s' ^? store . toVersions . ix vId) `shouldBe` Nothing
                   ( filter (== vId) . fromMaybe mempty . fmap NE.toList $
                       s' ^? store . toEntities . ix eId . versions
@@ -121,10 +112,8 @@ removeTests = describe "Remove" $ do
                           error $
                             "Couldn't set delete permission for entities "
                               <> show (s ^?! temp . toSpaceOf . ix eId)
-                        eWorked <- removeEntity (NE.singleton adminActor) eId
-                        case eWorked of
-                          Just (Right ()) -> pure ()
-                          _ -> error $ "Couldn't remove entity " <> show (eId, eWorked)
+                        worked <- removeEntity (NE.singleton adminActor) eId
+                        unless worked $ error $ "Couldn't remove entity " <> show (eId)
                   (s' ^. store . toEntities . at eId) `shouldBe` Nothing
                   for_ (e ^. versions) $ \vId ->
                     (s' ^. store . toVersions . at vId) `shouldBe` Nothing
@@ -144,10 +133,8 @@ removeTests = describe "Remove" $ do
                         unless worked $
                           error $
                             "Couldn't set delete permission for entities " <> show sId
-                        eWorked <- removeSpace (NE.singleton adminActor) sId
-                        case eWorked of
-                          Just (Right ()) -> pure ()
-                          _ -> error $ "Couldn't remove space " <> show (sId, eWorked)
+                        worked <- removeSpace (NE.singleton adminActor) sId
+                        unless worked $ error $ "Couldn't remove space " <> show (sId)
                   (s' ^. store . toSpaces . at sId) `shouldBe` Nothing
                   for_ es $ \eId -> do
                     (s' ^. store . toEntities . at eId) `shouldBe` Nothing
@@ -198,10 +185,8 @@ removeTests = describe "Remove" $ do
             let genG = elements . HM.keys $ s ^. store . toGroups . nodes
              in forAll genG $ \gId -> do
                   let s' = flip execState s $ do
-                        eWorked <- removeGroup (NE.singleton adminActor) gId
-                        case eWorked of
-                          Just (Right ()) -> pure ()
-                          _ -> error $ "Couldn't remove group " <> show gId
+                        worked <- removeGroup (NE.singleton adminActor) gId
+                        unless worked $ error $ "Couldn't remove group " <> show gId
                   (s' ^? store . toGroups . nodes . ix gId) `shouldBe` Nothing
                   let (froms, tos) = unzip . HS.toList $ s' ^. store . toGroups . edges
                   filter (== gId) froms `shouldBe` mempty

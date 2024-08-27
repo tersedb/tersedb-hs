@@ -14,6 +14,7 @@ import Data.Maybe (fromMaybe)
 import GHC.Generics (Generic)
 import Control.Monad.Base (MonadBase)
 import Control.Monad.Morph (hoist)
+import Debug.Trace (traceShow)
 
 
 newtype ReadingStateT s m a = ReadingStateT
@@ -35,21 +36,15 @@ unsafeReadReferencesEager vId = UnfoldlM $ \f acc -> do
 
 
 unsafeReadReferencesLazy :: forall m. MonadState Shared m => VersionId -> ListT m VersionId
-unsafeReadReferencesLazy vId = hoist loadRefs $ ListT.unfoldM go ()
+unsafeReadReferencesLazy vId = ListT.unfoldM go 0
   where
-    loadRefs :: forall a. ReadingStateT [VersionId] m a -> m a
-    loadRefs m = do
+    go idx = do
       s <- get
       let refs :: [VersionId]
           refs = HS.toList . fromMaybe mempty $ s ^? store . toVersions . ix vId . references
-      evalStateT (runReadingStateT m) refs
-    go _ = do
-      refs <- get'
-      if null refs
+      if length refs >= idx
       then pure Nothing
-      else do
-        put' (tail refs)
-        pure (Just (head refs, ()))
+      else pure (Just (refs !! idx, idx + 1))
 
 unsafeReadReferencesFromEager :: MonadState Shared m => VersionId -> UnfoldlM m VersionId
 unsafeReadReferencesFromEager vId = UnfoldlM $ \f acc -> do
@@ -59,21 +54,15 @@ unsafeReadReferencesFromEager vId = UnfoldlM $ \f acc -> do
 
 
 unsafeReadReferencesFromLazy :: forall m. MonadState Shared m => VersionId -> ListT m VersionId
-unsafeReadReferencesFromLazy vId = hoist loadRefs $ ListT.unfoldM go ()
+unsafeReadReferencesFromLazy vId = ListT.unfoldM go 0
   where
-    loadRefs :: forall a. ReadingStateT [VersionId] m a -> m a
-    loadRefs m = do
+    go idx = do
       s <- get
       let refs :: [VersionId]
           refs = HS.toList $ s ^. temp . toReferencesFrom . at vId . non mempty
-      evalStateT (runReadingStateT m) refs
-    go _ = do
-      refs <- get'
-      if null refs
+      if length refs >= idx
       then pure Nothing
-      else do
-        put' (tail refs)
-        pure (Just (head refs, ()))
+      else pure (Just (refs !! idx, idx + 1))
 
 unsafeReadSubscriptionsEager :: MonadState Shared m => VersionId -> UnfoldlM m EntityId
 unsafeReadSubscriptionsEager vId = UnfoldlM $ \f acc -> do
@@ -83,21 +72,15 @@ unsafeReadSubscriptionsEager vId = UnfoldlM $ \f acc -> do
 
 
 unsafeReadSubscriptionsLazy :: forall m. MonadState Shared m => VersionId -> ListT m EntityId
-unsafeReadSubscriptionsLazy vId = hoist loadSubs $ ListT.unfoldM go ()
+unsafeReadSubscriptionsLazy vId = ListT.unfoldM go 0
   where
-    loadSubs :: forall a. ReadingStateT [EntityId] m a -> m a
-    loadSubs m = do
+    go idx = do
       s <- get
       let subs :: [EntityId]
           subs = HS.toList . fromMaybe mempty $ s ^? store . toVersions . ix vId . subscriptions
-      evalStateT (runReadingStateT m) subs
-    go _ = do
-      subs <- get'
-      if null subs
+      if length subs >= idx
       then pure Nothing
-      else do
-        put' (tail subs)
-        pure (Just (head subs, ()))
+      else pure (Just (subs !! idx, idx + 1))
 
 unsafeReadSubscriptionsFromEager :: MonadState Shared m => EntityId -> UnfoldlM m VersionId
 unsafeReadSubscriptionsFromEager eId = UnfoldlM $ \f acc -> do
@@ -107,21 +90,15 @@ unsafeReadSubscriptionsFromEager eId = UnfoldlM $ \f acc -> do
 
 
 unsafeReadSubscriptionsFromLazy :: forall m. MonadState Shared m => EntityId -> ListT m VersionId
-unsafeReadSubscriptionsFromLazy eId = hoist loadSubs $ ListT.unfoldM go ()
+unsafeReadSubscriptionsFromLazy eId = ListT.unfoldM go 0
   where
-    loadSubs :: forall a. ReadingStateT [VersionId] m a -> m a
-    loadSubs m = do
+    go idx = do
       s <- get
       let subs :: [VersionId]
           subs = HS.toList $ s ^. temp . toSubscriptionsFrom . at eId . non mempty
-      evalStateT (runReadingStateT m) subs
-    go _ = do
-      subs <- get'
-      if null subs
+      if length subs >= idx
       then pure Nothing
-      else do
-        put' (tail subs)
-        pure (Just (head subs, ()))
+      else pure (Just (subs !! idx, idx + 1))
 
 unsafeReadEntitiesEager :: MonadState Shared m => SpaceId -> UnfoldlM m EntityId
 unsafeReadEntitiesEager sId = UnfoldlM $ \f acc -> do
@@ -130,18 +107,12 @@ unsafeReadEntitiesEager sId = UnfoldlM $ \f acc -> do
   foldlM f acc es
 
 unsafeReadEntitiesLazy :: forall m. MonadState Shared m => SpaceId -> ListT m EntityId
-unsafeReadEntitiesLazy sId = hoist loadEs $ ListT.unfoldM go ()
+unsafeReadEntitiesLazy sId = ListT.unfoldM go 0
   where
-    loadEs :: forall a. ReadingStateT [EntityId] m a -> m a
-    loadEs m = do
+    go idx = do
       s <- get
       let es :: [EntityId]
           es = HS.toList $ s ^. store . toSpaces . at sId . non mempty
-      evalStateT (runReadingStateT m) es
-    go _ = do
-      es <- get'
-      if null es
+      if length es >= idx
       then pure Nothing
-      else do
-        put' (tail es)
-        pure (Just (head es, ()))
+      else pure (Just (es !! idx, idx + 1))

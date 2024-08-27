@@ -24,15 +24,13 @@ import Control.Lens (ix, (^?))
 import Control.Monad.Extra (unless)
 import Control.Monad.State (execState)
 import qualified Data.List.NonEmpty as NE
-import Lib.Sync.Actions.Safe.Store (
+import Lib.Class (
   addMember,
   storeActor,
   storeEntity,
   storeGroup,
   storeSpace,
- )
-import Lib.Sync.Actions.Safe.Update (updateEntitySpace)
-import Lib.Sync.Actions.Safe.Update.Group (
+  moveEntity,
   setEntityPermission,
   setMemberPermission,
   setSpacePermission,
@@ -142,12 +140,10 @@ jointTests = describe "Joint" $ do
                     error $
                       "Couldn't set space permission " <> show spaceB
 
-                  eWorked <- storeEntity (NE.singleton actorA) eId spaceA vId Nothing
-                  case eWorked of
-                    Just (Right ()) -> pure ()
-                    _ -> error $ "Couldn't store entity " <> show eId
+                  worked <- storeEntity (NE.singleton actorA) eId spaceA vId Nothing
+                  unless worked $ error $ "Couldn't store entity " <> show eId
 
-                  worked <- updateEntitySpace (NE.fromList [actorA, actorB]) eId spaceB
+                  worked <- moveEntity (NE.fromList [actorA, actorB]) eId spaceB
                   unless worked $
                     error $
                       "Couldn't move entity " <> show eId
@@ -244,12 +240,10 @@ jointTests = describe "Joint" $ do
                       error $
                         "Couldn't set space permission " <> show spaceA
 
-                    eWorked <- storeEntity (NE.singleton actorA) eId spaceA vId Nothing
-                    case eWorked of
-                      Just (Right ()) -> pure ()
-                      _ -> error $ "Couldn't store entity " <> show eId
+                    worked <- storeEntity (NE.singleton actorA) eId spaceA vId Nothing
+                    unless worked $ error $ "Couldn't store entity " <> show eId
 
-                    worked <- updateEntitySpace (NE.fromList [actorA, actorB]) eId spaceB
+                    worked <- moveEntity (NE.fromList [actorA, actorB]) eId spaceB
                     unless worked $
                       error $
                         "Couldn't move entity " <> show eId

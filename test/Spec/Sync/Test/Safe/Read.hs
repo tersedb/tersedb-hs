@@ -20,21 +20,19 @@ You can reach me at athan.clark@gmail.com.
 
 module Spec.Sync.Test.Safe.Read where
 
-import Control.Lens (at, ix, (^.), (^?), (^?!))
+import Control.Lens (ix, (^.), (^?), (^?!))
 import Control.Monad.Extra (unless)
 import Control.Monad.State (State, evalState, execState)
 import qualified Data.HashMap.Strict as HM
 import qualified Data.HashSet as HS
 import qualified Data.List.NonEmpty as NE
 import Lib.Sync.Actions.Safe (emptyShared)
-import Lib.Sync.Actions.Safe.Store (
+import Lib.Class (
   addMember,
   storeActor,
   storeEntity,
   storeGroup,
   storeSpace,
- )
-import Lib.Sync.Actions.Safe.Update.Group (
   setEntityPermission,
   setGroupPermission,
   setMemberPermission,
@@ -169,10 +167,8 @@ readTests = describe "Read" $ do
                   unless worked $ error $ "Couldn't make space " <> show sId
                   worked <- setEntityPermission (NE.singleton adminActor) Create adminGroup sId
                   unless worked $ error $ "Couldn't grant entity permissions " <> show sId
-                  mWorked <- storeEntity (NE.singleton adminActor) eId sId vId Nothing
-                  case mWorked of
-                    Just (Right ()) -> pure ()
-                    _ -> error $ "Couldn't store entity " <> show (eId, vId)
+                  worked <- storeEntity (NE.singleton adminActor) eId sId vId Nothing
+                  unless worked $ error $ "Couldn't store entity " <> show (eId, vId)
                   worked <-
                     setUniversePermission
                       (NE.singleton adminActor)
@@ -202,10 +198,8 @@ readTests = describe "Read" $ do
                   unless worked $ error $ "Couldn't make space " <> show sId
                   worked <- setEntityPermission (NE.singleton adminActor) Create adminGroup sId
                   unless worked $ error $ "Couldn't grant entity permissions " <> show sId
-                  mWorked <- storeEntity (NE.singleton adminActor) eId sId vId Nothing
-                  case mWorked of
-                    Just (Right ()) -> pure ()
-                    _ -> error $ "Couldn't store entity " <> show (eId, vId)
+                  worked <- storeEntity (NE.singleton adminActor) eId sId vId Nothing
+                  unless worked $ error $ "Couldn't store entity " <> show (eId, vId)
                   worked <-
                     setUniversePermission
                       (NE.singleton adminActor)
@@ -386,10 +380,8 @@ readTests = describe "Read" $ do
                   unless worked $ error $ "Couldn't make space " <> show sId
                   worked <- setEntityPermission (NE.singleton adminActor) Create adminGroup sId
                   unless worked $ error $ "Couldn't grant entity permissions " <> show sId
-                  mWorked <- storeEntity (NE.singleton adminActor) eId sId vId Nothing
-                  case mWorked of
-                    Just (Right ()) -> pure ()
-                    _ -> error $ "Couldn't make entity " <> show (eId, vId)
+                  worked <- storeEntity (NE.singleton adminActor) eId sId vId Nothing
+                  unless worked $ error $ "Couldn't make entity " <> show (eId, vId)
                   worked <-
                     setUniversePermission
                       (NE.singleton adminActor)
@@ -442,10 +434,8 @@ readTests = describe "Read" $ do
                   unless worked $ error $ "Couldn't make space " <> show sId
                   worked <- setEntityPermission (NE.singleton adminActor) Create adminGroup sId
                   unless worked $ error $ "Couldn't grant entity permissions " <> show sId
-                  mWorked <- storeEntity (NE.singleton adminActor) eId sId vId Nothing
-                  case mWorked of
-                    Just (Right ()) -> pure ()
-                    _ -> error $ "Couldn't make entity " <> show (eId, vId)
+                  worked <- storeEntity (NE.singleton adminActor) eId sId vId Nothing
+                  unless worked $ error $ "Couldn't make entity " <> show (eId, vId)
                   worked <-
                     setUniversePermission
                       (NE.singleton adminActor)

@@ -25,9 +25,11 @@ default-extensions:
   - DeriveGeneric
   - FlexibleContexts
   - FlexibleInstances
+  - FunctionalDependencies
   - GeneralizedNewtypeDeriving
   - InstanceSigs
   - KindSignatures
+  - MultiParamTypeClasses
   - NamedFieldPuns
   - OverloadedStrings
   - RankNTypes
@@ -35,7 +37,9 @@ default-extensions:
   - ScopedTypeVariables
   - StandaloneDeriving
   - TemplateHaskell
+  - TypeApplications
   - TypeFamilies
+  - UndecidableInstances
 
 dependencies:
   - base >= 4.7 && < 5

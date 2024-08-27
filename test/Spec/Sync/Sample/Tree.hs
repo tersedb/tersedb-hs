@@ -21,8 +21,8 @@ You can reach me at athan.clark@gmail.com.
 module Spec.Sync.Sample.Tree where
 
 import Lib.Sync.Actions.Safe (emptyShared)
-import Lib.Sync.Actions.Safe.Store (storeGroup)
-import Lib.Sync.Actions.Safe.Update.Group (
+import Lib.Class (
+  storeGroup,
   setGroupPermission,
   setMemberPermission,
   setOrganizationPermission,
@@ -191,13 +191,7 @@ storeSampleTree xs adminActor adminGroup = flip execState (emptyShared adminActo
     -- loads all nodes
     let linkChild (SampleGroupTree child univChild orgChild recrChild _ _) = do
           setupNode child univChild orgChild recrChild
-          mE <- unsafeLinkGroups current child -- FIXME
-          case mE of
-            Left e -> do
-              s <- get
-              error $
-                "Error detected " <> show e <> " - store: " <> LT.unpack (pShowNoColor s)
-            Right _ -> pure ()
+          unsafeLinkGroups current child -- FIXME
     traverse_ linkChild children
     traverse_ go children
 
@@ -222,31 +216,25 @@ loadSampleTree xs = flip execState unsafeEmptyShared $ do
     -- loads all nodes
     let linkChild (SampleGroupTree child univChild orgChild recrChild _ _) = do
           setupNode child univChild orgChild recrChild
-          mE <- unsafeLinkGroups current child
-          case mE of
-            Left e -> do
-              s <- get
-              error $
-                "Error detected " <> show e <> " - store: " <> LT.unpack (pShowNoColor s)
-            Right _ -> pure ()
+          unsafeLinkGroups current child
     traverse_ linkChild children
     traverse_ go children
 
 loadSampleTreeNoTab :: SampleGroupTree a -> Shared
 loadSampleTreeNoTab xs = flip execState unsafeEmptyShared $ do
-  modify $ store . toGroups . roots . at (current xs) .~ Just ()
+  modify $ store . toGroups . roots . at (current xs) ?~ ()
   go xs
  where
   addLink :: GroupId -> GroupId -> State Shared ()
   addLink from to = do
     let adjustGroups groups =
           groups
-            & edges . at (from, to) .~ Just ()
-            & outs . at to .~ Just ()
+            & edges . at (from, to) ?~ ()
+            & outs . at to ?~ ()
             & outs . at from .~ Nothing
             & roots . at to .~ Nothing
-            & nodes . ix from . next . at to .~ Just ()
-            & nodes . ix to . prev .~ Just from
+            & nodes . ix from . next . at to ?~ ()
+            & nodes . ix to . prev ?~ from
     modify $ store . toGroups %~ adjustGroups
 
   setupNode current univ org recr = do
