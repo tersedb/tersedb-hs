@@ -1,25 +1,34 @@
 module Spec.Generic.Delete where
 
-import Test.Syd (Spec, it, shouldBe, context, shouldSatisfy, describe)
-import Test.QuickCheck (suchThat, elements, forAll)
-import Spec.Sync.Sample.Store (arbitraryShared)
-import qualified Lib.Sync.Types.Store as Sync
-import qualified Lib.Sync.Types.Store.Groups as Sync
-import qualified Lib.Sync.Types.Store.Entity as Sync
-import qualified Lib.Sync.Types.Store.Version as Sync
-import Control.Lens ((^.), (^?), Ixed (ix), (^?!), At (at))
-import qualified Data.HashMap.Strict as HM
-import qualified Data.List.NonEmpty as NE
-import Data.Maybe (fromMaybe, fromJust)
-import Data.Foldable (for_)
+import Control.Lens (At (at), Ixed (ix), (^.), (^?), (^?!))
 import Control.Monad (unless)
-import Lib.Class (TerseDB(genSyncShared, commit), TerseDBGen (runTerseDB), removeVersion, setEntityPermission, removeEntity, removeSpace, removeGroup, removeActor, removeMember, setMemberPermission)
 import Data.Data (Proxy (Proxy))
-import Lib.Types.Permission (CollectionPermission(Delete))
-import Lib.Types.Id (ActorId)
+import Data.Foldable (fold, for_)
+import qualified Data.HashMap.Strict as HM
 import qualified Data.HashSet as HS
-import Data.Foldable (fold)
-
+import qualified Data.List.NonEmpty as NE
+import Data.Maybe (fromJust, fromMaybe)
+import Lib.Class (
+  TerseDB (commit, genSyncShared),
+  TerseDBGen (runTerseDB),
+  removeActor,
+  removeEntity,
+  removeGroup,
+  removeMember,
+  removeSpace,
+  removeVersion,
+  setEntityPermission,
+  setMemberPermission,
+ )
+import qualified Lib.Sync.Types.Store as Sync
+import qualified Lib.Sync.Types.Store.Entity as Sync
+import qualified Lib.Sync.Types.Store.Groups as Sync
+import qualified Lib.Sync.Types.Store.Version as Sync
+import Lib.Types.Id (ActorId)
+import Lib.Types.Permission (CollectionPermission (Delete))
+import Spec.Sync.Sample.Store (arbitraryShared)
+import Test.QuickCheck (elements, forAll, suchThat)
+import Test.Syd (Spec, context, describe, it, shouldBe, shouldSatisfy)
 
 removeTests :: forall n m. (TerseDB n m, TerseDBGen n) => Proxy m -> Spec
 removeTests Proxy = do
@@ -45,14 +54,16 @@ removeTests Proxy = do
                   context "Version shouldn't be in its entity" $
                     ( filter (== vId) . fromMaybe mempty . fmap NE.toList $
                         s' ^? Sync.store . Sync.toEntities . ix eId . Sync.versions
-                      )
+                    )
                       `shouldBe` mempty
                   context "References are removed" $
                     for_ (fromJust (s ^? Sync.store . Sync.toVersions . ix vId . Sync.references)) $ \refId ->
                       (s' ^? Sync.temp . Sync.toReferencesFrom . ix refId . ix vId) `shouldBe` Nothing
                   context "Subscriptions are removed" $
-                    for_ (fromJust (s ^? Sync.store . Sync.toVersions . ix vId . Sync.subscriptions)) $ \subId ->
-                      (s' ^? Sync.temp . Sync.toSubscriptionsFrom . ix subId . ix vId) `shouldBe` Nothing
+                    for_
+                      (fromJust (s ^? Sync.store . Sync.toVersions . ix vId . Sync.subscriptions)) $ \subId ->
+                      (s' ^? Sync.temp . Sync.toSubscriptionsFrom . ix subId . ix vId)
+                        `shouldBe` Nothing
                   context "Doesn't exist as a reference" $
                     (s' ^? Sync.temp . Sync.toReferencesFrom . ix vId) `shouldBe` Nothing
   describe "Entity" $
@@ -116,7 +127,8 @@ removeTests Proxy = do
       let gen = suchThat arbitraryShared $ \(s, _, _) ->
             not . null . fold $ s ^. Sync.temp . Sync.toMemberOf
        in forAll gen $ \(s, adminActor, adminGroup) ->
-            let genG = elements . HM.toList . HM.filter (not . null) $ s ^. Sync.temp . Sync.toMemberOf
+            let genG =
+                  elements . HM.toList . HM.filter (not . null) $ s ^. Sync.temp . Sync.toMemberOf
              in forAll genG $ \(aId :: ActorId, gs) ->
                   forAll (elements $ HS.toList gs) $ \gId -> do
                     let go :: m Sync.Shared
@@ -132,7 +144,8 @@ removeTests Proxy = do
                           genSyncShared
                     s' <- runTerseDB (commit go) s
                     context "Actor in Group" $
-                      (s' ^? Sync.store . Sync.toGroups . Sync.nodes . ix gId . Sync.members . ix aId) `shouldBe` Nothing
+                      (s' ^? Sync.store . Sync.toGroups . Sync.nodes . ix gId . Sync.members . ix aId)
+                        `shouldBe` Nothing
                     context "Group in Actor" $
                       (s' ^? Sync.temp . Sync.toMemberOf . ix aId . ix gId) `shouldBe` Nothing
   describe "Actor" $
@@ -151,7 +164,9 @@ removeTests Proxy = do
                         genSyncShared
                   s' <- runTerseDB (commit go) s
                   (s' ^? Sync.temp . Sync.toMemberOf . ix aId) `shouldBe` Nothing
-                  (foldMap (^. Sync.members) (s' ^. Sync.store . Sync.toGroups . Sync.nodes) ^. at aId)
+                  ( foldMap (^. Sync.members) (s' ^. Sync.store . Sync.toGroups . Sync.nodes)
+                      ^. at aId
+                    )
                     `shouldBe` Nothing
   describe "Group" $
     it "should remove member from group" $

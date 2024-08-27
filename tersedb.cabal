@@ -192,6 +192,7 @@ test-suite tersedb-test
       Spec.Generic.Create
       Spec.Generic.Delete
       Spec.Generic.Group
+      Spec.Generic.Joint
       Spec.Generic.Read
       Spec.Generic.Update
       Spec.Simple

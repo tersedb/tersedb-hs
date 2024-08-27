@@ -1,7 +1,7 @@
 module Lib.Class where
 
 import Control.Concurrent.STM (STM, atomically)
-import Control.Lens ((^.), (^?), _Just, ix)
+import Control.Lens (ix, (^.), (^?), _Just)
 import Control.Monad.Base (MonadBase (liftBase))
 import Control.Monad.Extra (andM, anyM)
 import Control.Monad.IO.Class (MonadIO)
@@ -52,8 +52,8 @@ import Lib.Types.Permission (
  )
 import ListT (ListT)
 import qualified ListT
-import System.Random.Stateful (Uniform (uniformM), globalStdGen)
 import qualified StmContainers.Map as Map
+import System.Random.Stateful (Uniform (uniformM), globalStdGen)
 
 generateWithAuthority
   :: ( MonadIO m
@@ -493,20 +493,20 @@ updateGroupParent updater gId mPrevId = do
           Just prevId -> anyCanUpdateGroup updater prevId
       ]
   if not canAdjust
-  then pure False
-  else do
-    mOldPrevId <- unsafeReadPrevGroup gId
-    if mOldPrevId == mPrevId
-    then pure True
+    then pure False
     else do
-      worked <- case mOldPrevId of
-        Nothing -> pure True
-        Just prevId -> unlinkGroups updater prevId gId
-      if not worked
-      then pure False
-      else case mPrevId of
-        Nothing -> pure True
-        Just prevId -> linkGroups updater prevId gId
+      mOldPrevId <- unsafeReadPrevGroup gId
+      if mOldPrevId == mPrevId
+        then pure True
+        else do
+          worked <- case mOldPrevId of
+            Nothing -> pure True
+            Just prevId -> unlinkGroups updater prevId gId
+          if not worked
+            then pure False
+            else case mPrevId of
+              Nothing -> pure True
+              Just prevId -> linkGroups updater prevId gId
 
 -- | Will only update the group if the actor has same or greater permission
 setUniversePermission

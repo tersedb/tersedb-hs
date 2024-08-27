@@ -44,7 +44,8 @@ unsafeReadReferencesEager vId = UnfoldlM $ \f acc -> do
       reducer = flip runReaderT s
   UnfoldlM.foldlM' f acc . UnfoldlM.hoist lifter reducer $ refs
 
-unsafeReadReferencesLazy :: VersionId -> TerseM STM (ListT (TerseM STM) VersionId)
+unsafeReadReferencesLazy
+  :: VersionId -> TerseM STM (ListT (TerseM STM) VersionId)
 unsafeReadReferencesLazy vId = do
   s <- ask
   let refs = Multimap.listTByKey vId (s ^. store . toReferences)
@@ -61,7 +62,8 @@ unsafeReadReferencesFromEager vId = UnfoldlM $ \f acc -> do
       reducer = flip runReaderT s
   UnfoldlM.foldlM' f acc . UnfoldlM.hoist lifter reducer $ refs
 
-unsafeReadReferencesFromLazy :: VersionId -> TerseM STM (ListT (TerseM STM) VersionId)
+unsafeReadReferencesFromLazy
+  :: VersionId -> TerseM STM (ListT (TerseM STM) VersionId)
 unsafeReadReferencesFromLazy vId = do
   s <- ask
   let refs = Multimap.listTByKey vId (s ^. temp . toReferencesFrom)
@@ -78,7 +80,8 @@ unsafeReadSubscriptionsEager vId = UnfoldlM $ \f acc -> do
       reducer = flip runReaderT s
   UnfoldlM.foldlM' f acc . UnfoldlM.hoist lifter reducer $ subs
 
-unsafeReadSubscriptionsLazy :: VersionId -> TerseM STM (ListT (TerseM STM) EntityId)
+unsafeReadSubscriptionsLazy
+  :: VersionId -> TerseM STM (ListT (TerseM STM) EntityId)
 unsafeReadSubscriptionsLazy vId = do
   s <- ask
   let subs = Multimap.listTByKey vId (s ^. store . toSubscriptions)
@@ -95,7 +98,8 @@ unsafeReadSubscriptionsFromEager eId = UnfoldlM $ \f acc -> do
       reducer = flip runReaderT s
   UnfoldlM.foldlM' f acc . UnfoldlM.hoist lifter reducer $ subs
 
-unsafeReadSubscriptionsFromLazy :: EntityId -> TerseM STM (ListT (TerseM STM) VersionId)
+unsafeReadSubscriptionsFromLazy
+  :: EntityId -> TerseM STM (ListT (TerseM STM) VersionId)
 unsafeReadSubscriptionsFromLazy eId = do
   s <- ask
   let subs = Multimap.listTByKey eId (s ^. temp . toSubscriptionsFrom)

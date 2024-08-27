@@ -1,25 +1,57 @@
 module Spec.Generic.Update where
 
-import Test.Syd (Spec, describe, it, shouldBe, shouldSatisfy)
-import Lib.Types.Id (ActorId, GroupId, SpaceId, EntityId, VersionId)
-import Lib.Types.Permission (CollectionPermission (..), CollectionPermissionWithExemption (..))
-import Test.QuickCheck (forAll, Testable (property), suchThat, elements, suchThatMap, chooseInt, Arbitrary (arbitrary))
-import Spec.Sync.Sample.Store (arbitraryEmptyShared, arbitraryShared)
-import Lib.Class (TerseDB (genSyncShared, commit), storeActor, storeGroup, setMemberPermission, addMember, setUniversePermission, storeSpace, setEntityPermission, storeEntity, moveEntity, TerseDBGen (runTerseDB), addReference, removeReference, addSubscription, removeSubscription, updateFork, offsetVersionIndex, setVersionIndex, updateGroupParent, unlinkGroups, linkGroups)
+import Control.Lens (Ixed (ix), (^.), (^?), (^?!), _Just)
 import Control.Monad (unless)
-import qualified Data.List.NonEmpty as NE
-import Control.Lens ((^?), Ixed (ix), (^.), _Just, (^?!))
-import Data.Data (Proxy(Proxy))
-import qualified Lib.Sync.Types.Store as Sync
-import qualified Lib.Sync.Types.Store.Version as Sync
-import qualified Lib.Sync.Types.Store.Entity as Sync
-import qualified Lib.Sync.Types.Store.Groups as Sync
+import Data.Data (Proxy (Proxy))
 import qualified Data.HashMap.Strict as HM
 import qualified Data.HashSet as HS
-import Data.Maybe (fromJust, isJust)
 import Data.List (elemIndex)
+import qualified Data.List.NonEmpty as NE
+import Data.Maybe (fromJust, isJust)
+import Lib.Class (
+  TerseDB (commit, genSyncShared),
+  TerseDBGen (runTerseDB),
+  addMember,
+  addReference,
+  addSubscription,
+  linkGroups,
+  moveEntity,
+  offsetVersionIndex,
+  removeReference,
+  removeSubscription,
+  setEntityPermission,
+  setMemberPermission,
+  setUniversePermission,
+  setVersionIndex,
+  storeActor,
+  storeEntity,
+  storeGroup,
+  storeSpace,
+  unlinkGroups,
+  updateFork,
+  updateGroupParent,
+ )
+import qualified Lib.Sync.Types.Store as Sync
+import qualified Lib.Sync.Types.Store.Entity as Sync
+import qualified Lib.Sync.Types.Store.Groups as Sync
 import Lib.Sync.Types.Store.Tabulation.Group (hasLessOrEqualPermissionsTo)
-
+import qualified Lib.Sync.Types.Store.Version as Sync
+import Lib.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
+import Lib.Types.Permission (
+  CollectionPermission (..),
+  CollectionPermissionWithExemption (..),
+ )
+import Spec.Sync.Sample.Store (arbitraryEmptyShared, arbitraryShared)
+import Test.QuickCheck (
+  Arbitrary (arbitrary),
+  Testable (property),
+  chooseInt,
+  elements,
+  forAll,
+  suchThat,
+  suchThatMap,
+ )
+import Test.Syd (Spec, describe, it, shouldBe, shouldSatisfy)
 
 updateTests :: forall m n. (TerseDBGen n, TerseDB n m) => Proxy m -> Spec
 updateTests Proxy = do
@@ -99,7 +131,7 @@ updateTests Proxy = do
                       unless worked $ error $ "Couldn't set entity permission " <> show sId'
                       res <- moveEntity (NE.singleton aId) eId sId'
                       s' <- genSyncShared
-                      pure (res,s')
+                      pure (res, s')
                 (res, s') <- runTerseDB (commit go) s
                 res `shouldBe` False
                 (s' ^? Sync.store . Sync.toSpaces . ix sId . ix eId)
@@ -138,7 +170,7 @@ updateTests Proxy = do
                       unless worked $ error $ "Couldn't set entity permission " <> show sId
                       res <- moveEntity (NE.singleton aId) eId sId'
                       s' <- genSyncShared
-                      pure (res,s')
+                      pure (res, s')
                 (res, s') <- runTerseDB (commit go) s
                 res `shouldBe` False
                 (s' ^? Sync.store . Sync.toSpaces . ix sId . ix eId)
@@ -161,7 +193,8 @@ updateTests Proxy = do
                             unless worked $ error $ "Couldn't add reference " <> show (vId, refId)
                             genSyncShared
                       s' <- runTerseDB (commit go) s
-                      (s' ^? Sync.store . Sync.toVersions . ix vId . Sync.references . ix refId) `shouldBe` Just ()
+                      (s' ^? Sync.store . Sync.toVersions . ix vId . Sync.references . ix refId)
+                        `shouldBe` Just ()
                       (s' ^? Sync.temp . Sync.toReferencesFrom . ix refId . ix vId) `shouldBe` Just ()
       it "Remove Reference" $
         let gen = suchThat arbitraryShared $ \(s, _, _) ->
@@ -176,7 +209,8 @@ updateTests Proxy = do
                             unless worked $ error $ "Couldn't remove reference " <> show (vId, refId)
                             genSyncShared
                       s' <- runTerseDB (commit go) s
-                      (s' ^? Sync.store . Sync.toVersions . ix vId . Sync.references . ix refId) `shouldBe` Nothing
+                      (s' ^? Sync.store . Sync.toVersions . ix vId . Sync.references . ix refId)
+                        `shouldBe` Nothing
                       (s' ^? Sync.temp . Sync.toReferencesFrom . ix refId . ix vId) `shouldBe` Nothing
       it "Add Subscription" $
         let gen = suchThat arbitraryShared $ \(s, _, _) ->
@@ -197,7 +231,8 @@ updateTests Proxy = do
                       s' <- runTerseDB (commit go) s
                       (s' ^? Sync.store . Sync.toVersions . ix vId . Sync.subscriptions . ix subId)
                         `shouldBe` Just ()
-                      (s' ^? Sync.temp . Sync.toSubscriptionsFrom . ix subId . ix vId) `shouldBe` Just ()
+                      (s' ^? Sync.temp . Sync.toSubscriptionsFrom . ix subId . ix vId)
+                        `shouldBe` Just ()
       it "Remove Subscription" $
         let gen = suchThat arbitraryShared $ \(s, _, _) ->
               not . null $ s ^. Sync.temp . Sync.toSubscriptionsFrom
@@ -213,7 +248,8 @@ updateTests Proxy = do
                       s' <- runTerseDB (commit go) s
                       (s' ^? Sync.store . Sync.toVersions . ix vId . Sync.subscriptions . ix subId)
                         `shouldBe` Nothing
-                      (s' ^? Sync.temp . Sync.toSubscriptionsFrom . ix subId . ix vId) `shouldBe` Nothing
+                      (s' ^? Sync.temp . Sync.toSubscriptionsFrom . ix subId . ix vId)
+                        `shouldBe` Nothing
       it "Re-Fork an Entity" $
         let gen = do
               let genSharedAndEnt = do
@@ -226,7 +262,8 @@ updateTests Proxy = do
                     pure (shared, eId, e, aA, aG)
               (s, eId, notForked, adminA, adminG) <- suchThatMap genSharedAndEnt $ \(shared, eId, e, aA, aG) ->
                 let notForked =
-                      filter (\vId -> e ^. Sync.fork /= Just vId) . HM.keys $ shared ^. Sync.store . Sync.toVersions
+                      filter (\vId -> e ^. Sync.fork /= Just vId) . HM.keys $
+                        shared ^. Sync.store . Sync.toVersions
                  in if null notForked then Nothing else Just (shared, eId, notForked, aA, aG)
               newFork <- elements notForked
               pure (s, eId, newFork, adminA, adminG)
@@ -237,11 +274,13 @@ updateTests Proxy = do
                     unless worked $ error $ "Couldn't remove version " <> show (newFork)
                     genSyncShared
               s' <- runTerseDB (commit go) s
-              (s' ^? Sync.store . Sync.toEntities . ix eId . Sync.fork . _Just) `shouldBe` Just newFork
+              (s' ^? Sync.store . Sync.toEntities . ix eId . Sync.fork . _Just)
+                `shouldBe` Just newFork
               (s' ^? Sync.temp . Sync.toForksFrom . ix newFork . ix eId) `shouldBe` Just ()
       it "Move an Entity" $
         let gen = suchThat arbitraryShared $ \(s, _, _) ->
-              not (null $ s ^. Sync.store . Sync.toEntities) && length (s ^. Sync.store . Sync.toSpaces) >= 2
+              not (null $ s ^. Sync.store . Sync.toEntities)
+                && length (s ^. Sync.store . Sync.toSpaces) >= 2
          in forAll gen $ \(s, adminActor, adminGroup) ->
               forAll (elements . HM.toList $ s ^. Sync.store . Sync.toEntities) $ \(eId, e) ->
                 forAll
@@ -269,7 +308,12 @@ updateTests Proxy = do
                     s' <- runTerseDB (commit go) s
                     (s' ^? Sync.temp . Sync.toSpaceOf . ix eId) `shouldBe` Just newSId
                     (s' ^? Sync.store . Sync.toSpaces . ix newSId . ix eId) `shouldBe` Just ()
-                    (s' ^? Sync.store . Sync.toSpaces . ix (s ^?! Sync.temp . Sync.toSpaceOf . ix eId) . ix eId)
+                    ( s'
+                        ^? Sync.store
+                          . Sync.toSpaces
+                          . ix (s ^?! Sync.temp . Sync.toSpaceOf . ix eId)
+                          . ix eId
+                      )
                       `shouldBe` Nothing
       it "Offset a Version" $
         let gen = suchThat arbitraryShared $ \(s, _, _) ->
@@ -325,7 +369,8 @@ updateTests Proxy = do
                                 unless worked $ error $ "Couldn't set version index " <> show (eId, vId)
                                 genSyncShared
                           s' <- runTerseDB (commit go) s
-                          (s' ^? Sync.store . Sync.toEntities . ix eId . Sync.versions . ix idx) `shouldBe` Just vId
+                          (s' ^? Sync.store . Sync.toEntities . ix eId . Sync.versions . ix idx)
+                            `shouldBe` Just vId
   describe "Group" $ do
     -- updating what it inherits from / who it inherits to
     describe "Should Succeed" $ do
@@ -334,8 +379,9 @@ updateTests Proxy = do
               not . null . HM.filter (\g -> isJust (g ^. Sync.prev)) $
                 s ^. Sync.store . Sync.toGroups . Sync.nodes
          in forAll gen $ \(s, adminActor, adminGroup) ->
-              let gsWithParent = HM.filter (\g -> isJust (g ^. Sync.prev)) $
-                    s ^. Sync.store . Sync.toGroups . Sync.nodes
+              let gsWithParent =
+                    HM.filter (\g -> isJust (g ^. Sync.prev)) $
+                      s ^. Sync.store . Sync.toGroups . Sync.nodes
                in forAll (elements (HM.toList gsWithParent)) $ \(gId :: GroupId, g) -> do
                     let go :: m Sync.Shared
                         go = do
@@ -344,15 +390,19 @@ updateTests Proxy = do
                           genSyncShared
                         parentId = fromJust $ g ^. Sync.prev
                     s' <- runTerseDB (commit go) s
-                    (s' ^? Sync.store . Sync.toGroups . Sync.nodes . ix gId . Sync.prev . _Just) `shouldBe` Nothing
-                    (s' ^? Sync.store . Sync.toGroups . Sync.nodes . ix parentId . Sync.next . ix gId)
+                    (s' ^? Sync.store . Sync.toGroups . Sync.nodes . ix gId . Sync.prev . _Just)
+                      `shouldBe` Nothing
+                    ( s' ^? Sync.store . Sync.toGroups . Sync.nodes . ix parentId . Sync.next . ix gId
+                      )
                       `shouldBe` Nothing
       it "deleting child relationship should affect both nodes, and unrelate them" $
         let gen = suchThat arbitraryShared $ \(s, _, _) ->
               not . null . HM.filter (\g -> isJust (g ^. Sync.prev)) $
                 s ^. Sync.store . Sync.toGroups . Sync.nodes
          in forAll gen $ \(s, adminActor, adminGroup) ->
-              let gsWithParent = HM.filter (\g -> isJust (g ^. Sync.prev)) $ s ^. Sync.store . Sync.toGroups . Sync.nodes
+              let gsWithParent =
+                    HM.filter (\g -> isJust (g ^. Sync.prev)) $
+                      s ^. Sync.store . Sync.toGroups . Sync.nodes
                in forAll (elements (HM.toList gsWithParent)) $ \(gId :: GroupId, g) -> do
                     let go :: m Sync.Shared
                         go = do
@@ -361,8 +411,10 @@ updateTests Proxy = do
                           genSyncShared
                         parentId = fromJust $ g ^. Sync.prev
                     s' <- runTerseDB (commit go) s
-                    (s' ^? Sync.store . Sync.toGroups . Sync.nodes . ix gId . Sync.prev . _Just) `shouldBe` Nothing
-                    (s' ^? Sync.store . Sync.toGroups . Sync.nodes . ix parentId . Sync.next . ix gId)
+                    (s' ^? Sync.store . Sync.toGroups . Sync.nodes . ix gId . Sync.prev . _Just)
+                      `shouldBe` Nothing
+                    ( s' ^? Sync.store . Sync.toGroups . Sync.nodes . ix parentId . Sync.next . ix gId
+                      )
                       `shouldBe` Nothing
       it "adding child relationship should cause inheritance" $
         let gen = do
@@ -372,7 +424,9 @@ updateTests Proxy = do
               nG <- arbitrary
               pure (s', aA, aG, nG)
          in forAll gen $ \(s, adminActor, adminGroup, newGId) ->
-              let gsWithParent = HM.filter (\g -> isJust (g ^. Sync.prev)) $ s ^. Sync.store . Sync.toGroups . Sync.nodes
+              let gsWithParent =
+                    HM.filter (\g -> isJust (g ^. Sync.prev)) $
+                      s ^. Sync.store . Sync.toGroups . Sync.nodes
                in forAll (elements (HM.toList gsWithParent)) $ \(gId :: GroupId, _) -> do
                     let go :: m Sync.Shared
                         go = do
