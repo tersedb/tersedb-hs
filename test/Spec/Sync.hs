@@ -46,7 +46,6 @@ import Spec.Sync.Sample.Store (
 import Spec.Sync.Sample.Tree (SampleGroupTree (..))
 import Spec.Sync.Test.Groups (groupsTests, testPermissionInheritance)
 import Spec.Sync.Test.Joint (jointTests)
-import Spec.Sync.Test.Safe.Create (createTests)
 import Spec.Sync.Test.Safe.Delete (removeTests)
 import Spec.Sync.Test.Safe.Update (updateTests)
 import Spec.Sync.Test.Simple (simpleSyncTests)
@@ -118,7 +117,6 @@ syncTests = do
 --               resetTabulation
 --          in safeStore `shouldBe` unsafeStore
 --     describe "Permissions" $ do
---       createTests
 --       updateTests
 --       removeTests
 --   jointTests
