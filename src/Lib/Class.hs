@@ -1,44 +1,57 @@
 module Lib.Class where
 
+import Control.Concurrent.STM (STM, atomically)
+import Control.Lens ((^.))
+import Control.Monad.Base (MonadBase (liftBase))
+import Control.Monad.Extra (andM, anyM)
+import Control.Monad.IO.Class (MonadIO)
+import Control.Monad.Morph (hoist)
+import Control.Monad.Reader (MonadReader (ask), ReaderT (runReaderT))
+import Control.Monad.State (
+  MonadState (get, put),
+  StateT (runStateT),
+  evalStateT,
+ )
+import Control.Monad.Trans.Control (MonadBaseControl (liftBaseWith))
 import Data.List.NonEmpty (NonEmpty)
-import Lib.Types.Id (ActorId, GroupId, SpaceId, EntityId, VersionId)
-import qualified Lib.Async.Types.Monad as Async
-import qualified Lib.Async.Types.Store as Async
+import qualified Data.List.NonEmpty as NE
+import Data.Maybe (fromMaybe)
+import Data.Maybe.HT (toMaybe)
+import DeferredFolds.UnfoldlM (UnfoldlM)
+import Lib.Actions.Safe.Utils (conditionally)
 import qualified Lib.Async.Actions.Safe.Verify as Async
 import qualified Lib.Async.Actions.Tabulation as Async
 import qualified Lib.Async.Actions.Unsafe.Read as Async
+import qualified Lib.Async.Actions.Unsafe.Remove as Async
 import qualified Lib.Async.Actions.Unsafe.Store as Async
 import qualified Lib.Async.Actions.Unsafe.Update as Async
 import qualified Lib.Async.Actions.Unsafe.Update.Group as Async
-import qualified Lib.Async.Actions.Unsafe.Remove as Async
-import qualified Lib.Sync.Types.Monad as Sync
-import qualified Lib.Sync.Types.Store as Sync
+import qualified Lib.Async.Types.Monad as Async
+import qualified Lib.Async.Types.Store as Async
+import Lib.Async.Types.Store.Iso (
+  genSyncStore,
+  genSyncTemp,
+  loadSyncStore,
+  loadSyncTemp,
+ )
 import qualified Lib.Sync.Actions.Safe.Verify as Sync
 import qualified Lib.Sync.Actions.Tabulation as Sync
 import qualified Lib.Sync.Actions.Unsafe.Read as Sync
+import qualified Lib.Sync.Actions.Unsafe.Remove as Sync
 import qualified Lib.Sync.Actions.Unsafe.Store as Sync
 import qualified Lib.Sync.Actions.Unsafe.Update as Sync
 import qualified Lib.Sync.Actions.Unsafe.Update.Group as Sync
-import qualified Lib.Sync.Actions.Unsafe.Remove as Sync
-import Control.Concurrent.STM (STM, atomically)
-import Lib.Actions.Safe.Utils (conditionally)
-import Control.Monad.Extra (andM, anyM)
-import Control.Monad.IO.Class (MonadIO)
-import System.Random.Stateful (Uniform(uniformM), globalStdGen)
-import Data.Maybe.HT (toMaybe)
-import Control.Monad.Trans.Control (MonadBaseControl(liftBaseWith))
-import Control.Monad.Reader (MonadReader(ask), ReaderT (runReaderT))
-import Control.Monad.Base (MonadBase(liftBase))
-import DeferredFolds.UnfoldlM (UnfoldlM)
+import qualified Lib.Sync.Types.Monad as Sync
+import qualified Lib.Sync.Types.Store as Sync
+import Lib.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
+import Lib.Types.Permission (
+  CollectionPermission,
+  CollectionPermissionWithExemption,
+  SinglePermission (Exists),
+ )
 import ListT (ListT)
 import qualified ListT
-import Lib.Types.Permission (CollectionPermissionWithExemption, CollectionPermission, SinglePermission (Exists))
-import qualified Data.List.NonEmpty as NE
-import Data.Maybe (fromMaybe)
-import Control.Monad.State (MonadState(put, get), StateT (runStateT), evalStateT)
-import Lib.Async.Types.Store.Iso (loadSyncStore, loadSyncTemp, genSyncTemp, genSyncStore)
-import Control.Lens ((^.))
-import Control.Monad.Morph (hoist)
+import System.Random.Stateful (Uniform (uniformM), globalStdGen)
 
 generateWithAuthority
   :: ( MonadIO m
@@ -51,12 +64,16 @@ generateWithAuthority perform = do
   worked <- perform ident
   pure (toMaybe worked ident)
 
-class Monad m => TerseDBGen m where
+class (Monad m) => TerseDBGen m where
   runTerseDB :: m a -> Sync.Shared -> IO a
   newActor :: NonEmpty ActorId -> m (Maybe ActorId)
   newGroup :: NonEmpty ActorId -> m (Maybe GroupId)
   newSpace :: NonEmpty ActorId -> m (Maybe SpaceId)
-  newEntity :: NonEmpty ActorId -> SpaceId -> Maybe VersionId -> m (Maybe (EntityId, VersionId))
+  newEntity
+    :: NonEmpty ActorId
+    -> SpaceId
+    -> Maybe VersionId
+    -> m (Maybe (EntityId, VersionId))
   newVersion :: NonEmpty ActorId -> EntityId -> m (Maybe VersionId)
 
 instance TerseDBGen (Sync.TerseM IO) where
@@ -92,8 +109,7 @@ instance TerseDBGen (Async.TerseM IO) where
     s <- ask
     liftBase . atomically $ runReaderT (storeNextVersion creator eId vId) s
 
-
-class Monad m => TerseDB n m | m -> n where
+class (Monad m) => TerseDB n m | m -> n where
   commit :: m a -> n a
   loadSyncShared :: Sync.Shared -> m ()
   genSyncShared :: m Sync.Shared
@@ -125,7 +141,8 @@ class Monad m => TerseDB n m | m -> n where
   anyCanUpdateVersion :: NonEmpty ActorId -> VersionId -> m Bool
   anyCanDeleteVersion :: NonEmpty ActorId -> VersionId -> m Bool
   hasUniversePermission :: ActorId -> CollectionPermissionWithExemption -> m Bool
-  hasOrganizationPermission :: ActorId -> CollectionPermissionWithExemption -> m Bool
+  hasOrganizationPermission
+    :: ActorId -> CollectionPermissionWithExemption -> m Bool
   hasRecruiterPermission :: ActorId -> CollectionPermission -> m Bool
   hasSpacePermission :: ActorId -> SpaceId -> SinglePermission -> m Bool
   hasEntityPermission :: ActorId -> SpaceId -> CollectionPermission -> m Bool
@@ -149,13 +166,24 @@ class Monad m => TerseDB n m | m -> n where
   unsafeStoreVersion :: EntityId -> VersionId -> m ()
   unsafeLinkGroups :: GroupId -> GroupId -> m ()
   unsafeUnlinkGroups :: GroupId -> GroupId -> m ()
-  unsafeAdjustUniversePermission :: (CollectionPermissionWithExemption -> CollectionPermissionWithExemption) -> GroupId -> m ()
-  unsafeAdjustOrganizationPermission :: (CollectionPermissionWithExemption -> CollectionPermissionWithExemption) -> GroupId -> m ()
-  unsafeAdjustRecruiterPermission :: (CollectionPermission -> CollectionPermission) -> GroupId -> m ()
-  unsafeAdjustSpacePermission :: (Maybe SinglePermission -> Maybe SinglePermission) -> GroupId -> SpaceId -> m ()
-  unsafeAdjustEntityPermission :: (CollectionPermission -> CollectionPermission) -> GroupId -> SpaceId -> m ()
-  unsafeAdjustGroupPermission :: (Maybe SinglePermission -> Maybe SinglePermission) -> GroupId -> GroupId -> m ()
-  unsafeAdjustMemberPermission :: (CollectionPermission -> CollectionPermission) -> GroupId -> GroupId -> m ()
+  unsafeAdjustUniversePermission
+    :: (CollectionPermissionWithExemption -> CollectionPermissionWithExemption)
+    -> GroupId
+    -> m ()
+  unsafeAdjustOrganizationPermission
+    :: (CollectionPermissionWithExemption -> CollectionPermissionWithExemption)
+    -> GroupId
+    -> m ()
+  unsafeAdjustRecruiterPermission
+    :: (CollectionPermission -> CollectionPermission) -> GroupId -> m ()
+  unsafeAdjustSpacePermission
+    :: (Maybe SinglePermission -> Maybe SinglePermission) -> GroupId -> SpaceId -> m ()
+  unsafeAdjustEntityPermission
+    :: (CollectionPermission -> CollectionPermission) -> GroupId -> SpaceId -> m ()
+  unsafeAdjustGroupPermission
+    :: (Maybe SinglePermission -> Maybe SinglePermission) -> GroupId -> GroupId -> m ()
+  unsafeAdjustMemberPermission
+    :: (CollectionPermission -> CollectionPermission) -> GroupId -> GroupId -> m ()
   unsafeAddReference :: VersionId -> VersionId -> m ()
   unsafeRemoveReference :: VersionId -> VersionId -> m ()
   unsafeAddSubscription :: VersionId -> EntityId -> m ()
@@ -171,7 +199,7 @@ class Monad m => TerseDB n m | m -> n where
   unsafeRemoveActor :: ActorId -> m ()
   unsafeRemoveGroup :: GroupId -> m ()
 
-instance Monad m => TerseDB (Sync.TerseM m) (Sync.TerseM m) where
+instance (Monad m) => TerseDB (Sync.TerseM m) (Sync.TerseM m) where
   commit = id
   loadSyncShared = put
   genSyncShared = get
@@ -601,7 +629,7 @@ addReference
   => NonEmpty ActorId
   -> VersionId
   -> VersionId
-  -> m Bool 
+  -> m Bool
 addReference updater vId refId = do
   canAdjust <-
     andM
@@ -699,7 +727,7 @@ removeVersion remover vId = do
       [ anyCanDeleteVersion remover vId
       , let go False _ = pure Nothing
             go True referrerId = Just <$> anyCanUpdateVersion remover referrerId
-        in  ListT.foldMaybe go True (unsafeReadReferencesFromLazy vId)
+         in ListT.foldMaybe go True (unsafeReadReferencesFromLazy vId)
       ]
   conditionally (unsafeRemoveVersion vId) canAdjust
 
@@ -714,7 +742,7 @@ removeEntity remover eId = do
       [ anyCanDeleteEntity remover eId
       , let go False _ = pure Nothing
             go True subscriberId = Just <$> anyCanUpdateVersion remover subscriberId
-        in  ListT.foldMaybe go True (unsafeReadSubscriptionsFromLazy eId)
+         in ListT.foldMaybe go True (unsafeReadSubscriptionsFromLazy eId)
       ]
   conditionally (unsafeRemoveEntity eId) canAdjust
 
@@ -729,7 +757,7 @@ removeSpace remover sId = do
       [ anyCanDeleteSpace remover sId
       , let go False _ = pure Nothing
             go True eId = Just <$> anyCanDeleteEntity remover eId
-        in  ListT.foldMaybe go True (unsafeReadEntitiesLazy sId)
+         in ListT.foldMaybe go True (unsafeReadEntitiesLazy sId)
       ]
   conditionally (unsafeRemoveSpace sId) canAdjust
 

@@ -12,6 +12,7 @@ import Data.Maybe (fromJust, fromMaybe)
 import DeferredFolds.UnfoldlM (forM_)
 import Focus (Focus)
 import qualified Focus
+import Lib.Actions.Safe.Utils (deriveCollectionPermission)
 import Lib.Async.Types.Monad (TerseM)
 import Lib.Async.Types.Store (
   Shared,
@@ -69,7 +70,6 @@ import StmContainers.Map (Map)
 import qualified StmContainers.Map as Map
 import qualified StmContainers.Multimap as Multimap
 import qualified StmContainers.Set as Set
-import Lib.Actions.Safe.Utils (deriveCollectionPermission)
 
 setInitTabulatedPermissions
   :: GroupId -> TerseM STM ()

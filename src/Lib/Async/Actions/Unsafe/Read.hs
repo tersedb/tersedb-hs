@@ -1,26 +1,36 @@
 module Lib.Async.Actions.Unsafe.Read where
 
-import Lib.Types.Id (VersionId, EntityId, SpaceId)
-import Lib.Async.Types.Monad (TerseM)
-import Control.Concurrent.STM (STM, TVar, newTVar, writeTVar, readTVar)
-import DeferredFolds.UnfoldlM (UnfoldlM (UnfoldlM))
-import Lib.Async.Types.Store (toReferences, store, temp, toReferencesFrom, toSubscriptions, toSubscriptionsFrom, toEntities, toSpaceEntities)
-import qualified StmContainers.Multimap as Multimap
+import Control.Concurrent.STM (STM, TVar, newTVar, readTVar, writeTVar)
 import Control.Lens ((^.))
+import Control.Monad.Base (MonadBase (liftBase))
+import Control.Monad.Morph (hoist)
+import Control.Monad.Reader (MonadIO, MonadReader (ask), ReaderT (runReaderT))
+import DeferredFolds.UnfoldlM (UnfoldlM (UnfoldlM))
 import qualified DeferredFolds.UnfoldlM as UnfoldlM
-import Control.Monad.Reader (MonadReader(ask), ReaderT (runReaderT), MonadIO)
-import Control.Monad.Base (MonadBase(liftBase))
+import GHC.Generics (Generic)
+import Lib.Async.Types.Monad (TerseM)
+import Lib.Async.Types.Store (
+  store,
+  temp,
+  toEntities,
+  toReferences,
+  toReferencesFrom,
+  toSpaceEntities,
+  toSubscriptions,
+  toSubscriptionsFrom,
+ )
+import Lib.Types.Id (EntityId, SpaceId, VersionId)
 import ListT (ListT)
 import qualified ListT
-import GHC.Generics (Generic)
-import Control.Monad.Morph (hoist)
+import qualified StmContainers.Multimap as Multimap
 
 newtype ReadingStateT s m a = ReadingStateT
   { runReadingStateT :: ReaderT s m a
-  } deriving (Generic, Functor, Applicative, Monad)
-deriving instance MonadBase b m => MonadBase b (ReadingStateT s m)
+  }
+  deriving (Generic, Functor, Applicative, Monad)
+deriving instance (MonadBase b m) => MonadBase b (ReadingStateT s m)
 
-ask' :: Monad m => ReadingStateT s m s
+ask' :: (Monad m) => ReadingStateT s m s
 ask' = ReadingStateT ask
 
 unsafeReadReferencesEager :: VersionId -> UnfoldlM (TerseM STM) VersionId
@@ -36,23 +46,29 @@ unsafeReadReferencesEager vId = UnfoldlM $ \f acc -> do
 
 unsafeReadReferencesLazy :: VersionId -> ListT (TerseM STM) VersionId
 unsafeReadReferencesLazy vId = hoist loadRefs $ ListT.unfoldM go ()
-  where
-    loadRefs :: forall a. ReadingStateT (TVar (ListT STM VersionId)) (TerseM STM) a -> TerseM STM a
-    loadRefs m = do
-      s <- ask
-      refsVar <- liftBase . newTVar $ Multimap.listTByKey vId (s ^. store . toReferences)
-      runReaderT (runReadingStateT m) refsVar
-    go :: () -> ReadingStateT (TVar (ListT STM VersionId)) (TerseM STM) (Maybe (VersionId, ()))
-    go _ = do
-      refsVar <- ask'
-      liftBase $ do
-        refs <- readTVar refsVar
-        mNext <- ListT.uncons refs
-        case mNext of
-          Nothing -> pure Nothing
-          Just (x, next) -> do
-            writeTVar refsVar next
-            pure (Just (x, ()))
+ where
+  loadRefs
+    :: forall a
+     . ReadingStateT (TVar (ListT STM VersionId)) (TerseM STM) a
+    -> TerseM STM a
+  loadRefs m = do
+    s <- ask
+    refsVar <-
+      liftBase . newTVar $ Multimap.listTByKey vId (s ^. store . toReferences)
+    runReaderT (runReadingStateT m) refsVar
+  go
+    :: ()
+    -> ReadingStateT (TVar (ListT STM VersionId)) (TerseM STM) (Maybe (VersionId, ()))
+  go _ = do
+    refsVar <- ask'
+    liftBase $ do
+      refs <- readTVar refsVar
+      mNext <- ListT.uncons refs
+      case mNext of
+        Nothing -> pure Nothing
+        Just (x, next) -> do
+          writeTVar refsVar next
+          pure (Just (x, ()))
 
 unsafeReadReferencesFromEager :: VersionId -> UnfoldlM (TerseM STM) VersionId
 unsafeReadReferencesFromEager vId = UnfoldlM $ \f acc -> do
@@ -67,23 +83,29 @@ unsafeReadReferencesFromEager vId = UnfoldlM $ \f acc -> do
 
 unsafeReadReferencesFromLazy :: VersionId -> ListT (TerseM STM) VersionId
 unsafeReadReferencesFromLazy vId = hoist loadRefs $ ListT.unfoldM go ()
-  where
-    loadRefs :: forall a. ReadingStateT (TVar (ListT STM VersionId)) (TerseM STM) a -> TerseM STM a
-    loadRefs m = do
-      s <- ask
-      refsVar <- liftBase . newTVar $ Multimap.listTByKey vId (s ^. temp . toReferencesFrom)
-      runReaderT (runReadingStateT m) refsVar
-    go :: () -> ReadingStateT (TVar (ListT STM VersionId)) (TerseM STM) (Maybe (VersionId, ()))
-    go _ = do
-      refsVar <- ask'
-      liftBase $ do
-        refs <- readTVar refsVar
-        mNext <- ListT.uncons refs
-        case mNext of
-          Nothing -> pure Nothing
-          Just (x, next) -> do
-            writeTVar refsVar next
-            pure (Just (x, ()))
+ where
+  loadRefs
+    :: forall a
+     . ReadingStateT (TVar (ListT STM VersionId)) (TerseM STM) a
+    -> TerseM STM a
+  loadRefs m = do
+    s <- ask
+    refsVar <-
+      liftBase . newTVar $ Multimap.listTByKey vId (s ^. temp . toReferencesFrom)
+    runReaderT (runReadingStateT m) refsVar
+  go
+    :: ()
+    -> ReadingStateT (TVar (ListT STM VersionId)) (TerseM STM) (Maybe (VersionId, ()))
+  go _ = do
+    refsVar <- ask'
+    liftBase $ do
+      refs <- readTVar refsVar
+      mNext <- ListT.uncons refs
+      case mNext of
+        Nothing -> pure Nothing
+        Just (x, next) -> do
+          writeTVar refsVar next
+          pure (Just (x, ()))
 
 unsafeReadSubscriptionsEager :: VersionId -> UnfoldlM (TerseM STM) EntityId
 unsafeReadSubscriptionsEager vId = UnfoldlM $ \f acc -> do
@@ -98,23 +120,29 @@ unsafeReadSubscriptionsEager vId = UnfoldlM $ \f acc -> do
 
 unsafeReadSubscriptionsLazy :: VersionId -> ListT (TerseM STM) EntityId
 unsafeReadSubscriptionsLazy vId = hoist loadsubs $ ListT.unfoldM go ()
-  where
-    loadsubs :: forall a. ReadingStateT (TVar (ListT STM EntityId)) (TerseM STM) a -> TerseM STM a
-    loadsubs m = do
-      s <- ask
-      subsVar <- liftBase . newTVar $ Multimap.listTByKey vId (s ^. store . toSubscriptions)
-      runReaderT (runReadingStateT m) subsVar
-    go :: () -> ReadingStateT (TVar (ListT STM EntityId)) (TerseM STM) (Maybe (EntityId, ()))
-    go _ = do
-      subsVar <- ask'
-      liftBase $ do
-        subs <- readTVar subsVar
-        mNext <- ListT.uncons subs
-        case mNext of
-          Nothing -> pure Nothing
-          Just (x, next) -> do
-            writeTVar subsVar next
-            pure (Just (x, ()))
+ where
+  loadsubs
+    :: forall a
+     . ReadingStateT (TVar (ListT STM EntityId)) (TerseM STM) a
+    -> TerseM STM a
+  loadsubs m = do
+    s <- ask
+    subsVar <-
+      liftBase . newTVar $ Multimap.listTByKey vId (s ^. store . toSubscriptions)
+    runReaderT (runReadingStateT m) subsVar
+  go
+    :: ()
+    -> ReadingStateT (TVar (ListT STM EntityId)) (TerseM STM) (Maybe (EntityId, ()))
+  go _ = do
+    subsVar <- ask'
+    liftBase $ do
+      subs <- readTVar subsVar
+      mNext <- ListT.uncons subs
+      case mNext of
+        Nothing -> pure Nothing
+        Just (x, next) -> do
+          writeTVar subsVar next
+          pure (Just (x, ()))
 
 unsafeReadSubscriptionsFromEager :: EntityId -> UnfoldlM (TerseM STM) VersionId
 unsafeReadSubscriptionsFromEager eId = UnfoldlM $ \f acc -> do
@@ -129,23 +157,29 @@ unsafeReadSubscriptionsFromEager eId = UnfoldlM $ \f acc -> do
 
 unsafeReadSubscriptionsFromLazy :: EntityId -> ListT (TerseM STM) VersionId
 unsafeReadSubscriptionsFromLazy eId = hoist loadsubs $ ListT.unfoldM go ()
-  where
-    loadsubs :: forall a. ReadingStateT (TVar (ListT STM VersionId)) (TerseM STM) a -> TerseM STM a
-    loadsubs m = do
-      s <- ask
-      subsVar <- liftBase . newTVar $ Multimap.listTByKey eId (s ^. temp . toSubscriptionsFrom)
-      runReaderT (runReadingStateT m) subsVar
-    go :: () -> ReadingStateT (TVar (ListT STM VersionId)) (TerseM STM) (Maybe (VersionId, ()))
-    go _ = do
-      subsVar <- ask'
-      liftBase $ do
-        subs <- readTVar subsVar
-        mNext <- ListT.uncons subs
-        case mNext of
-          Nothing -> pure Nothing
-          Just (x, next) -> do
-            writeTVar subsVar next
-            pure (Just (x, ()))
+ where
+  loadsubs
+    :: forall a
+     . ReadingStateT (TVar (ListT STM VersionId)) (TerseM STM) a
+    -> TerseM STM a
+  loadsubs m = do
+    s <- ask
+    subsVar <-
+      liftBase . newTVar $ Multimap.listTByKey eId (s ^. temp . toSubscriptionsFrom)
+    runReaderT (runReadingStateT m) subsVar
+  go
+    :: ()
+    -> ReadingStateT (TVar (ListT STM VersionId)) (TerseM STM) (Maybe (VersionId, ()))
+  go _ = do
+    subsVar <- ask'
+    liftBase $ do
+      subs <- readTVar subsVar
+      mNext <- ListT.uncons subs
+      case mNext of
+        Nothing -> pure Nothing
+        Just (x, next) -> do
+          writeTVar subsVar next
+          pure (Just (x, ()))
 
 unsafeReadEntitiesEager :: SpaceId -> UnfoldlM (TerseM STM) EntityId
 unsafeReadEntitiesEager sId = UnfoldlM $ \f acc -> do
@@ -160,20 +194,26 @@ unsafeReadEntitiesEager sId = UnfoldlM $ \f acc -> do
 
 unsafeReadEntitiesLazy :: SpaceId -> ListT (TerseM STM) EntityId
 unsafeReadEntitiesLazy sId = hoist loadsubs $ ListT.unfoldM go ()
-  where
-    loadsubs :: forall a. ReadingStateT (TVar (ListT STM EntityId)) (TerseM STM) a -> TerseM STM a
-    loadsubs m = do
-      s <- ask
-      subsVar <- liftBase . newTVar $ Multimap.listTByKey sId (s ^. store . toSpaceEntities)
-      runReaderT (runReadingStateT m) subsVar
-    go :: () -> ReadingStateT (TVar (ListT STM EntityId)) (TerseM STM) (Maybe (EntityId, ()))
-    go _ = do
-      subsVar <- ask'
-      liftBase $ do
-        subs <- readTVar subsVar
-        mNext <- ListT.uncons subs
-        case mNext of
-          Nothing -> pure Nothing
-          Just (x, next) -> do
-            writeTVar subsVar next
-            pure (Just (x, ()))
+ where
+  loadsubs
+    :: forall a
+     . ReadingStateT (TVar (ListT STM EntityId)) (TerseM STM) a
+    -> TerseM STM a
+  loadsubs m = do
+    s <- ask
+    subsVar <-
+      liftBase . newTVar $ Multimap.listTByKey sId (s ^. store . toSpaceEntities)
+    runReaderT (runReadingStateT m) subsVar
+  go
+    :: ()
+    -> ReadingStateT (TVar (ListT STM EntityId)) (TerseM STM) (Maybe (EntityId, ()))
+  go _ = do
+    subsVar <- ask'
+    liftBase $ do
+      subs <- readTVar subsVar
+      mNext <- ListT.uncons subs
+      case mNext of
+        Nothing -> pure Nothing
+        Just (x, next) -> do
+          writeTVar subsVar next
+          pure (Just (x, ()))

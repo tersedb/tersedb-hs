@@ -25,20 +25,21 @@ import Control.Monad.Extra (unless, when)
 import Control.Monad.State (MonadState, execState)
 import qualified Data.List.NonEmpty as NE
 import Data.Maybe (isJust, isNothing)
-import Lib.Sync.Actions.Safe (emptyShared)
 import Lib.Class (
+  TerseDB,
   addMember,
+  setEntityPermission,
+  setMemberPermission,
+  setOrganizationPermission,
+  setRecruiterPermission,
+  setUniversePermission,
   storeActor,
   storeEntity,
   storeGroup,
   storeNextVersion,
   storeSpace,
-  setEntityPermission,
-  setMemberPermission,
-  setOrganizationPermission,
-  setRecruiterPermission,
-  setUniversePermission, TerseDB,
  )
+import Lib.Sync.Actions.Safe (emptyShared)
 import Lib.Sync.Types.Store (
   Shared,
   store,

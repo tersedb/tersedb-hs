@@ -26,15 +26,15 @@ import Control.Monad.State (execState)
 import qualified Data.List.NonEmpty as NE
 import Lib.Class (
   addMember,
-  storeActor,
-  storeEntity,
-  storeGroup,
-  storeSpace,
   moveEntity,
   setEntityPermission,
   setMemberPermission,
   setSpacePermission,
   setUniversePermission,
+  storeActor,
+  storeEntity,
+  storeGroup,
+  storeSpace,
  )
 import Lib.Sync.Types.Store (
   store,

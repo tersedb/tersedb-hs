@@ -20,11 +20,6 @@ You can reach me at athan.clark@gmail.com.
 
 module Spec.Sync.Test.Groups where
 
-import Spec.Sync.Sample.Tree (
-  SampleGroupTree (..),
-  loadSampleTree,
-  loadSampleTreeNoTab,
- )
 import Lib.Sync.Actions.Tabulation (resetTabulation)
 import Lib.Sync.Actions.Unsafe.Update.Group (unsafeUnlinkGroups)
 import Lib.Sync.Types.Store (
@@ -47,6 +42,11 @@ import Lib.Sync.Types.Store.Groups (
  )
 import Lib.Sync.Types.Store.Tabulation.Group (hasLessOrEqualPermissionsTo)
 import Lib.Types.Id (GroupId)
+import Spec.Sync.Sample.Tree (
+  SampleGroupTree (..),
+  loadSampleTree,
+  loadSampleTreeNoTab,
+ )
 
 import Control.Lens (at, ix, (?~), (^.))
 import Control.Monad.State (State, execState, modify)

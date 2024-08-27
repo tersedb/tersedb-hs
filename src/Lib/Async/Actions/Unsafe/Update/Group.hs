@@ -1,27 +1,46 @@
 module Lib.Async.Actions.Unsafe.Update.Group where
 
-import Lib.Types.Id (GroupId, SpaceId)
-import Lib.Async.Types.Monad (TerseM)
-import Control.Concurrent.STM (STM, newTVar, readTVar, writeTVar, modifyTVar)
-import Control.Monad.Reader (MonadReader(ask))
-import Control.Monad.Base (MonadBase(liftBase))
-import Lib.Async.Types.Store (store, toEdges, toOuts, toRoots, toGroupsNext, toGroupsPrev, toPermUniverse, toPermOrganization, toPermRecruiter, spacePermission, toPermOther, groupPermission, entityPermission, memberPermission)
+import Control.Concurrent.STM (STM, modifyTVar, newTVar, readTVar, writeTVar)
+import Control.Exception (Exception)
 import Control.Lens ((^.))
 import Control.Monad (unless)
-import qualified StmContainers.Set as Set
-import qualified StmContainers.Map as Map
-import qualified StmContainers.Multimap as Multimap
+import Control.Monad.Base (MonadBase (liftBase))
+import Control.Monad.Catch (throwM)
+import Control.Monad.Reader (MonadReader (ask))
+import Control.Monad.Trans.Control (MonadBaseControl (liftBaseWith))
+import Data.List (uncons)
+import Data.Maybe (fromMaybe)
 import Data.Monoid (First (..))
 import DeferredFolds.UnfoldlM (forM_)
-import Data.List (uncons)
-import GHC.Generics (Generic)
-import Control.Exception (Exception)
-import Lib.Async.Actions.Tabulation (updateTabulatedPermissionsStartingAt)
-import Control.Monad.Catch (throwM)
-import Control.Monad.Trans.Control (MonadBaseControl(liftBaseWith))
-import Lib.Types.Permission (CollectionPermissionWithExemption, CollectionPermission (Blind), SinglePermission)
 import qualified Focus
-import Data.Maybe (fromMaybe)
+import GHC.Generics (Generic)
+import Lib.Async.Actions.Tabulation (updateTabulatedPermissionsStartingAt)
+import Lib.Async.Types.Monad (TerseM)
+import Lib.Async.Types.Store (
+  entityPermission,
+  groupPermission,
+  memberPermission,
+  spacePermission,
+  store,
+  toEdges,
+  toGroupsNext,
+  toGroupsPrev,
+  toOuts,
+  toPermOrganization,
+  toPermOther,
+  toPermRecruiter,
+  toPermUniverse,
+  toRoots,
+ )
+import Lib.Types.Id (GroupId, SpaceId)
+import Lib.Types.Permission (
+  CollectionPermission (Blind),
+  CollectionPermissionWithExemption,
+  SinglePermission,
+ )
+import qualified StmContainers.Map as Map
+import qualified StmContainers.Multimap as Multimap
+import qualified StmContainers.Set as Set
 
 hasCycle :: TerseM STM (Maybe [GroupId])
 hasCycle = do
@@ -45,21 +64,19 @@ hasCycle = do
     forM_ (Set.unfoldlM (s ^. store . toRoots)) dfs
     getFirst <$> readTVar resultVar
 
-
 newtype CycleDetected = CycleDetected [GroupId]
   deriving (Generic, Show, Eq)
 instance Exception CycleDetected
-
 
 unsafeLinkGroups :: GroupId -> GroupId -> TerseM STM ()
 unsafeLinkGroups from to = do
   s <- ask
   liftBaseWith $ \runInBase -> do
-    edgeExists <- Set.lookup (from,to) (s ^. store . toEdges)
+    edgeExists <- Set.lookup (from, to) (s ^. store . toEdges)
     unless edgeExists $ do
       wouldCauseCycle <- Set.lookup to (s ^. store . toOuts)
       unless wouldCauseCycle $ do
-        Set.insert (from,to) (s ^. store . toEdges)
+        Set.insert (from, to) (s ^. store . toEdges)
         Set.insert to (s ^. store . toOuts)
         Set.delete from (s ^. store . toOuts)
         Set.delete to (s ^. store . toRoots)
@@ -74,7 +91,7 @@ unsafeUnlinkGroups :: GroupId -> GroupId -> TerseM STM ()
 unsafeUnlinkGroups from to = do
   s <- ask
   liftBaseWith $ \runInBase -> do
-    Set.delete (from,to) (s ^. store . toEdges)
+    Set.delete (from, to) (s ^. store . toEdges)
     Set.delete to (s ^. store . toOuts)
     Set.insert from (s ^. store . toOuts)
     Set.insert to (s ^. store . toRoots)
@@ -82,25 +99,36 @@ unsafeUnlinkGroups from to = do
     Map.delete to (s ^. store . toGroupsPrev)
     runInBase $ updateTabulatedPermissionsStartingAt to
 
-unsafeAdjustUniversePermission :: (CollectionPermissionWithExemption -> CollectionPermissionWithExemption) -> GroupId -> TerseM STM ()
+unsafeAdjustUniversePermission
+  :: (CollectionPermissionWithExemption -> CollectionPermissionWithExemption)
+  -> GroupId
+  -> TerseM STM ()
 unsafeAdjustUniversePermission f gId = do
   s <- ask
   liftBase $ Map.focus (Focus.adjust f) gId (s ^. store . toPermUniverse)
   updateTabulatedPermissionsStartingAt gId
 
-unsafeAdjustOrganizationPermission :: (CollectionPermissionWithExemption -> CollectionPermissionWithExemption) -> GroupId -> TerseM STM ()
+unsafeAdjustOrganizationPermission
+  :: (CollectionPermissionWithExemption -> CollectionPermissionWithExemption)
+  -> GroupId
+  -> TerseM STM ()
 unsafeAdjustOrganizationPermission f gId = do
   s <- ask
   liftBase $ Map.focus (Focus.adjust f) gId (s ^. store . toPermOrganization)
   updateTabulatedPermissionsStartingAt gId
 
-unsafeAdjustRecruiterPermission :: (CollectionPermission -> CollectionPermission) -> GroupId -> TerseM STM ()
+unsafeAdjustRecruiterPermission
+  :: (CollectionPermission -> CollectionPermission) -> GroupId -> TerseM STM ()
 unsafeAdjustRecruiterPermission f gId = do
   s <- ask
   liftBase $ Map.focus (Focus.adjust f) gId (s ^. store . toPermRecruiter)
   updateTabulatedPermissionsStartingAt gId
 
-unsafeAdjustSpacePermission :: (Maybe SinglePermission -> Maybe SinglePermission) -> GroupId -> SpaceId -> TerseM STM ()
+unsafeAdjustSpacePermission
+  :: (Maybe SinglePermission -> Maybe SinglePermission)
+  -> GroupId
+  -> SpaceId
+  -> TerseM STM ()
 unsafeAdjustSpacePermission f gId sId = do
   s <- ask
   liftBaseWith $ \runInBase -> do
@@ -111,7 +139,11 @@ unsafeAdjustSpacePermission f gId sId = do
         Map.focus (Focus.alter f) sId (permOther ^. spacePermission)
         runInBase $ updateTabulatedPermissionsStartingAt gId
 
-unsafeAdjustEntityPermission :: (CollectionPermission -> CollectionPermission) -> GroupId -> SpaceId -> TerseM STM ()
+unsafeAdjustEntityPermission
+  :: (CollectionPermission -> CollectionPermission)
+  -> GroupId
+  -> SpaceId
+  -> TerseM STM ()
 unsafeAdjustEntityPermission f gId sId = do
   s <- ask
   liftBaseWith $ \runInBase -> do
@@ -119,10 +151,17 @@ unsafeAdjustEntityPermission f gId sId = do
     case mPermOther of
       Nothing -> pure ()
       Just permOther -> do
-        Map.focus (Focus.alter (Just . f . fromMaybe Blind)) sId (permOther ^. entityPermission)
+        Map.focus
+          (Focus.alter (Just . f . fromMaybe Blind))
+          sId
+          (permOther ^. entityPermission)
         runInBase $ updateTabulatedPermissionsStartingAt gId
 
-unsafeAdjustGroupPermission :: (Maybe SinglePermission -> Maybe SinglePermission) -> GroupId -> GroupId -> TerseM STM ()
+unsafeAdjustGroupPermission
+  :: (Maybe SinglePermission -> Maybe SinglePermission)
+  -> GroupId
+  -> GroupId
+  -> TerseM STM ()
 unsafeAdjustGroupPermission f gId sId = do
   s <- ask
   liftBaseWith $ \runInBase -> do
@@ -133,7 +172,11 @@ unsafeAdjustGroupPermission f gId sId = do
         Map.focus (Focus.alter f) sId (permOther ^. groupPermission)
         runInBase $ updateTabulatedPermissionsStartingAt gId
 
-unsafeAdjustMemberPermission :: (CollectionPermission -> CollectionPermission) -> GroupId -> GroupId -> TerseM STM ()
+unsafeAdjustMemberPermission
+  :: (CollectionPermission -> CollectionPermission)
+  -> GroupId
+  -> GroupId
+  -> TerseM STM ()
 unsafeAdjustMemberPermission f gId sId = do
   s <- ask
   liftBaseWith $ \runInBase -> do
@@ -141,5 +184,8 @@ unsafeAdjustMemberPermission f gId sId = do
     case mPermOther of
       Nothing -> pure ()
       Just permOther -> do
-        Map.focus (Focus.alter (Just . f . fromMaybe Blind)) sId (permOther ^. memberPermission)
+        Map.focus
+          (Focus.alter (Just . f . fromMaybe Blind))
+          sId
+          (permOther ^. memberPermission)
         runInBase $ updateTabulatedPermissionsStartingAt gId

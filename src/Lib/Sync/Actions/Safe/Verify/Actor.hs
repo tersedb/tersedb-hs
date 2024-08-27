@@ -18,13 +18,13 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 You can reach me at athan.clark@gmail.com.
 -}
 
-module Lib.Sync.Actions.Safe.Verify.Actor
-  ( anyCanReadActor
-  , anyCanCreateActor
-  , anyCanUpdateActor
-  , anyCanDeleteActor
-  , hasRecruiterPermission
-  ) where
+module Lib.Sync.Actions.Safe.Verify.Actor (
+  anyCanReadActor,
+  anyCanCreateActor,
+  anyCanUpdateActor,
+  anyCanDeleteActor,
+  hasRecruiterPermission,
+) where
 
 import Control.Lens ((^.))
 import Control.Monad.Extra (anyM, orM)

@@ -1,10 +1,10 @@
 module Spec.Generic where
+
+import Data.Data (Proxy)
 import Lib.Class (TerseDB, TerseDBGen)
-import Test.Syd (Spec, describe)
 import Spec.Generic.Group (groupTests)
 import Spec.Generic.Read (readTests)
-import Data.Data (Proxy)
-
+import Test.Syd (Spec, describe)
 
 genericTests :: (TerseDB n m, TerseDBGen n) => Proxy m -> Spec
 genericTests p = do

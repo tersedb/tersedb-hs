@@ -1,53 +1,74 @@
-module Lib.Async.Actions.Safe.Verify.SpaceAndEntity
-  ( anyCanReadSpace
-  , anyCanReadSpaceOld
-  , anyCanCreateSpace
-  , anyCanUpdateSpace
-  , anyCanDeleteSpace
-  , anyCanReadAllEntities
-  , anyCanReadEntity
-  , anyCanCreateEntity
-  , anyCanUpdateAllEntities
-  , anyCanUpdateEntity
-  , anyCanDeleteEntity
-  , anyCanReadVersion
-  , anyCanCreateVersion
-  , anyCanUpdateVersion
-  , anyCanDeleteVersion
-  , anyCanDeleteVersionAndEntity
-  , hasUniversePermission
-  , hasSpacePermission
-  , hasEntityPermission
-  ) where
+module Lib.Async.Actions.Safe.Verify.SpaceAndEntity (
+  anyCanReadSpace,
+  anyCanReadSpaceOld,
+  anyCanCreateSpace,
+  anyCanUpdateSpace,
+  anyCanDeleteSpace,
+  anyCanReadAllEntities,
+  anyCanReadEntity,
+  anyCanCreateEntity,
+  anyCanUpdateAllEntities,
+  anyCanUpdateEntity,
+  anyCanDeleteEntity,
+  anyCanReadVersion,
+  anyCanCreateVersion,
+  anyCanUpdateVersion,
+  anyCanDeleteVersion,
+  anyCanDeleteVersionAndEntity,
+  hasUniversePermission,
+  hasSpacePermission,
+  hasEntityPermission,
+) where
 
-import Lib.Types.Id (ActorId, SpaceId, GroupId, EntityId, VersionId)
-import Lib.Async.Types.Monad (TerseM)
 import Control.Concurrent.STM (STM)
-import ListT (foldMaybe)
-import qualified StmContainers.Multimap as Multimap
-import Lib.Async.Types.Store (toSpacesHiddenTo, temp, toMemberOf, toTabUniverse, toTabOther, toSpaceEntities, store, toForksFrom, toEntities, toReferencesFrom, toSubscriptionsFrom, toSpaceOf, toEntityOf)
-import Lib.Types.Permission (CollectionPermissionWithExemption (..), CollectionPermission (..), collectionPermission, SinglePermission, escalate)
-import Lib.Async.Actions.Safe.Verify.Utils (canDo, canDoWithTab)
 import Control.Lens ((^.))
-import Control.Monad.Base (MonadBase(liftBase))
-import Data.Maybe (fromMaybe, fromJust)
-import Control.Monad.Trans.Control (MonadBaseControl(liftBaseWith))
-import qualified StmContainers.Map as Map
-import Control.Monad.Reader (MonadReader(ask))
+import Control.Monad.Base (MonadBase (liftBase))
+import Control.Monad.Extra (allM, andM, anyM, orM)
+import Control.Monad.Reader (MonadReader (ask))
+import Control.Monad.Trans.Control (MonadBaseControl (liftBaseWith))
 import Data.List.NonEmpty (NonEmpty)
-import Control.Monad.Extra (anyM, andM, allM, orM)
 import qualified Data.List.NonEmpty as NE
-import Lib.Async.Types.Tabulation (forSpaces, forEntities)
-import Lib.Actions.Safe.Utils (deriveCollectionPermission)
+import Data.Maybe (fromJust, fromMaybe)
 import DeferredFolds.UnfoldlM (forM_)
+import Lib.Actions.Safe.Utils (deriveCollectionPermission)
+import Lib.Async.Actions.Safe.Verify.Utils (canDo, canDoWithTab)
+import Lib.Async.Types.Monad (TerseM)
+import Lib.Async.Types.Store (
+  store,
+  temp,
+  toEntities,
+  toEntityOf,
+  toForksFrom,
+  toMemberOf,
+  toReferencesFrom,
+  toSpaceEntities,
+  toSpaceOf,
+  toSpacesHiddenTo,
+  toSubscriptionsFrom,
+  toTabOther,
+  toTabUniverse,
+ )
+import Lib.Async.Types.Tabulation (forEntities, forSpaces)
+import Lib.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
+import Lib.Types.Permission (
+  CollectionPermission (..),
+  CollectionPermissionWithExemption (..),
+  SinglePermission,
+  collectionPermission,
+  escalate,
+ )
+import ListT (foldMaybe)
+import qualified StmContainers.Map as Map
+import qualified StmContainers.Multimap as Multimap
 
-hasUniversePermission :: ActorId -> CollectionPermissionWithExemption -> TerseM STM Bool
+hasUniversePermission
+  :: ActorId -> CollectionPermissionWithExemption -> TerseM STM Bool
 hasUniversePermission aId p =
   canDo getCheckedPerm aId p
-  where
-    getCheckedPerm gId = do
-      s <- ask
-      liftBase $ fromMaybe minBound <$> Map.lookup gId (s ^. temp . toTabUniverse)
+ where
+  getCheckedPerm gId = do
+    s <- ask
+    liftBase $ fromMaybe minBound <$> Map.lookup gId (s ^. temp . toTabUniverse)
 
 canReadSpace :: ActorId -> SpaceId -> TerseM STM Bool
 canReadSpace reader sId = do
@@ -58,11 +79,14 @@ canReadSpace reader sId = do
         go False gId = do
           isHidden <- Multimap.lookup gId sId (s ^. temp . toSpacesHiddenTo)
           if isHidden
-            then Just <$> runInBase (canDo getPerm reader (CollectionPermissionWithExemption Read True))
+            then
+              Just
+                <$> runInBase (canDo getPerm reader (CollectionPermissionWithExemption Read True))
             else pure (Just True)
-          where
-            getPerm readerGId =
-              liftBase $ fromMaybe minBound <$> Map.lookup readerGId (s ^. temp . toTabUniverse)
+         where
+          getPerm readerGId =
+            liftBase $
+              fromMaybe minBound <$> Map.lookup readerGId (s ^. temp . toTabUniverse)
     foldMaybe go False (Multimap.listTByKey reader (s ^. temp . toMemberOf))
 
 anyCanReadSpace :: NonEmpty ActorId -> SpaceId -> TerseM STM Bool
@@ -71,28 +95,29 @@ anyCanReadSpace readers sId = anyM (`canReadSpace` sId) (NE.toList readers)
 canReadSpaceOld :: ActorId -> SpaceId -> TerseM STM Bool
 canReadSpaceOld reader sId =
   canDo getPerm reader Read
-  where
-    getPerm readerGId = do
-      s <- ask
-      liftBase $ do
-        major <- fromMaybe minBound <$> Map.lookup readerGId (s ^. temp . toTabUniverse)
-        minor <- do
-          mTabOther <- Map.lookup readerGId (s ^. temp . toTabOther)
-          case mTabOther of
-            Nothing -> pure Nothing
-            Just tabOther -> Map.lookup sId (tabOther ^. forSpaces)
-        pure (deriveCollectionPermission major minor)
+ where
+  getPerm readerGId = do
+    s <- ask
+    liftBase $ do
+      major <- fromMaybe minBound <$> Map.lookup readerGId (s ^. temp . toTabUniverse)
+      minor <- do
+        mTabOther <- Map.lookup readerGId (s ^. temp . toTabOther)
+        case mTabOther of
+          Nothing -> pure Nothing
+          Just tabOther -> Map.lookup sId (tabOther ^. forSpaces)
+      pure (deriveCollectionPermission major minor)
 
 anyCanReadSpaceOld :: NonEmpty ActorId -> SpaceId -> TerseM STM Bool
 anyCanReadSpaceOld readers sId = anyM (`canReadSpaceOld` sId) (NE.toList readers)
 
 canCreateSpace :: ActorId -> TerseM STM Bool
-canCreateSpace creater = 
+canCreateSpace creater =
   canDo getPerm creater Create
-  where
-    getPerm createrGId = do
-      s <- ask
-      liftBase $ maybe minBound (^. collectionPermission)
+ where
+  getPerm createrGId = do
+    s <- ask
+    liftBase $
+      maybe minBound (^. collectionPermission)
         <$> Map.lookup createrGId (s ^. temp . toTabUniverse)
 
 anyCanCreateSpace :: NonEmpty ActorId -> TerseM STM Bool
@@ -101,17 +126,18 @@ anyCanCreateSpace = anyM canCreateSpace . NE.toList
 canUpdateSpace :: ActorId -> SpaceId -> TerseM STM Bool
 canUpdateSpace updater sId =
   canDo getPerm updater Update
-  where
-    getPerm updaterGId = do
-      s <- ask
-      liftBase $ do
-        mTabOther <- Map.lookup updaterGId (s ^. temp . toTabOther)
-        case mTabOther of
-          Nothing -> pure Blind
-          Just tabOther -> do
-            major <- fromMaybe minBound <$> Map.lookup updaterGId (s ^. temp . toTabUniverse)
-            minor <- Map.lookup sId (tabOther ^. forSpaces)
-            pure (deriveCollectionPermission major minor)
+ where
+  getPerm updaterGId = do
+    s <- ask
+    liftBase $ do
+      mTabOther <- Map.lookup updaterGId (s ^. temp . toTabOther)
+      case mTabOther of
+        Nothing -> pure Blind
+        Just tabOther -> do
+          major <-
+            fromMaybe minBound <$> Map.lookup updaterGId (s ^. temp . toTabUniverse)
+          minor <- Map.lookup sId (tabOther ^. forSpaces)
+          pure (deriveCollectionPermission major minor)
 
 anyCanUpdateSpace :: NonEmpty ActorId -> SpaceId -> TerseM STM Bool
 anyCanUpdateSpace updaters sId = anyM (`canUpdateSpace` sId) (NE.toList updaters)
@@ -125,41 +151,54 @@ canDeleteSpace deleter sId = do
         let checkEntity :: Bool -> EntityId -> STM (Maybe Bool)
             checkEntity False _ = pure Nothing
             checkEntity True eId = do
-              Just <$> andM
-                [ let checkSubscriber :: Bool -> VersionId -> STM (Maybe Bool)
-                      checkSubscriber False _ = pure Nothing
-                      checkSubscriber True subscriberId =
-                        Just <$> runInBase (canUpdateVersion deleter subscriberId)
-                  in  foldMaybe checkSubscriber True (Multimap.listTByKey eId (s ^. temp . toSubscriptionsFrom))
-                , do  vs <- fromJust <$> Map.lookup eId (s ^. store . toEntities)
+              Just
+                <$> andM
+                  [ let checkSubscriber :: Bool -> VersionId -> STM (Maybe Bool)
+                        checkSubscriber False _ = pure Nothing
+                        checkSubscriber True subscriberId =
+                          Just <$> runInBase (canUpdateVersion deleter subscriberId)
+                     in foldMaybe
+                          checkSubscriber
+                          True
+                          (Multimap.listTByKey eId (s ^. temp . toSubscriptionsFrom))
+                  , do
+                      vs <- fromJust <$> Map.lookup eId (s ^. store . toEntities)
                       let checkVersion :: VersionId -> STM Bool
-                          checkVersion vId = andM
+                          checkVersion vId =
+                            andM
                               [ let checkReferrer :: Bool -> VersionId -> STM (Maybe Bool)
                                     checkReferrer False _ = pure Nothing
                                     checkReferrer True referrerId =
                                       Just <$> runInBase (canUpdateVersion deleter referrerId)
-                                in  foldMaybe checkReferrer True (Multimap.listTByKey vId (s ^. temp . toReferencesFrom))
+                                 in foldMaybe
+                                      checkReferrer
+                                      True
+                                      (Multimap.listTByKey vId (s ^. temp . toReferencesFrom))
                               , let checkForker :: Bool -> EntityId -> STM (Maybe Bool)
                                     checkForker False _ = pure Nothing
                                     checkForker True forkerId =
                                       Just <$> runInBase (canUpdateEntity deleter forkerId)
-                                in  foldMaybe checkForker True (Multimap.listTByKey vId (s ^. temp . toForksFrom))
+                                 in foldMaybe checkForker True (Multimap.listTByKey vId (s ^. temp . toForksFrom))
                               ]
                       allM checkVersion (NE.toList vs)
-                ]
-        in  foldMaybe checkEntity True (Multimap.listTByKey sId (s ^. store . toSpaceEntities))
+                  ]
+         in foldMaybe
+              checkEntity
+              True
+              (Multimap.listTByKey sId (s ^. store . toSpaceEntities))
     ]
-  where
-    getPerm deleterGId = do
-      s <- ask
-      liftBase $ do
-        mTabOther <- Map.lookup deleterGId (s ^. temp . toTabOther)
-        case mTabOther of
-          Nothing -> pure Blind
-          Just tabOther -> do
-            major <- fromMaybe minBound <$> Map.lookup deleterGId (s ^. temp . toTabUniverse)
-            minor <- Map.lookup sId (tabOther ^. forSpaces)
-            pure (deriveCollectionPermission major minor)
+ where
+  getPerm deleterGId = do
+    s <- ask
+    liftBase $ do
+      mTabOther <- Map.lookup deleterGId (s ^. temp . toTabOther)
+      case mTabOther of
+        Nothing -> pure Blind
+        Just tabOther -> do
+          major <-
+            fromMaybe minBound <$> Map.lookup deleterGId (s ^. temp . toTabUniverse)
+          minor <- Map.lookup sId (tabOther ^. forSpaces)
+          pure (deriveCollectionPermission major minor)
 
 anyCanDeleteSpace :: NonEmpty ActorId -> SpaceId -> TerseM STM Bool
 anyCanDeleteSpace deleters sId = anyM (`canDeleteSpace` sId) (NE.toList deleters)
@@ -167,37 +206,38 @@ anyCanDeleteSpace deleters sId = anyM (`canDeleteSpace` sId) (NE.toList deleters
 hasSpacePermission :: ActorId -> SpaceId -> SinglePermission -> TerseM STM Bool
 hasSpacePermission aId sId p =
   canDoWithTab getCheckedPerm aId getRefPerm
-  where
-    getCheckedPerm gId = do
-      s <- ask
-      liftBase $ do
-        mTabOther <- Map.lookup gId (s ^. temp . toTabOther)
-        case mTabOther of
-          Nothing -> pure Blind
-          Just tabOther -> do
-            major <- fromMaybe minBound <$> Map.lookup gId (s ^. temp . toTabUniverse)
-            minor <- Map.lookup sId (tabOther ^. forSpaces)
-            pure (deriveCollectionPermission major minor)
+ where
+  getCheckedPerm gId = do
+    s <- ask
+    liftBase $ do
+      mTabOther <- Map.lookup gId (s ^. temp . toTabOther)
+      case mTabOther of
+        Nothing -> pure Blind
+        Just tabOther -> do
+          major <- fromMaybe minBound <$> Map.lookup gId (s ^. temp . toTabUniverse)
+          minor <- Map.lookup sId (tabOther ^. forSpaces)
+          pure (deriveCollectionPermission major minor)
 
-    getRefPerm gId = do
-      s <- ask
-      liftBase $ do
-        major <- fromMaybe minBound <$> Map.lookup gId (s ^. temp . toTabUniverse)
-        pure (escalate major p)
+  getRefPerm gId = do
+    s <- ask
+    liftBase $ do
+      major <- fromMaybe minBound <$> Map.lookup gId (s ^. temp . toTabUniverse)
+      pure (escalate major p)
 
 canReadAllEntities :: ActorId -> SpaceId -> TerseM STM Bool
-canReadAllEntities reader sId = andM
-  [ canDo getPerm reader Read
-  , canReadSpace reader sId
-  ]
-  where
-    getPerm readerGId = do
-      s <- ask
-      liftBase $ do
-        mTabOther <- Map.lookup readerGId (s ^. temp . toTabOther)
-        case mTabOther of
-          Nothing -> pure Blind
-          Just tabOther -> fromMaybe Blind <$> Map.lookup sId (tabOther ^. forEntities)
+canReadAllEntities reader sId =
+  andM
+    [ canDo getPerm reader Read
+    , canReadSpace reader sId
+    ]
+ where
+  getPerm readerGId = do
+    s <- ask
+    liftBase $ do
+      mTabOther <- Map.lookup readerGId (s ^. temp . toTabOther)
+      case mTabOther of
+        Nothing -> pure Blind
+        Just tabOther -> fromMaybe Blind <$> Map.lookup sId (tabOther ^. forEntities)
 
 anyCanReadAllEntities :: NonEmpty ActorId -> SpaceId -> TerseM STM Bool
 anyCanReadAllEntities readers sId =
@@ -216,36 +256,38 @@ anyCanReadEntity readers eId =
   anyM (`canReadEntity` eId) (NE.toList readers)
 
 canCreateEntity :: ActorId -> SpaceId -> TerseM STM Bool
-canCreateEntity creater sId = andM
-  [ canDo getPerm creater Create
-  , canReadSpace creater sId
-  ]
-  where
-    getPerm createrGId = do
-      s <- ask
-      liftBase $ do
-        mTabOther <- Map.lookup createrGId (s ^. temp . toTabOther)
-        case mTabOther of
-          Nothing -> pure Blind
-          Just tabOther -> fromMaybe Blind <$> Map.lookup sId (tabOther ^. forEntities)
+canCreateEntity creater sId =
+  andM
+    [ canDo getPerm creater Create
+    , canReadSpace creater sId
+    ]
+ where
+  getPerm createrGId = do
+    s <- ask
+    liftBase $ do
+      mTabOther <- Map.lookup createrGId (s ^. temp . toTabOther)
+      case mTabOther of
+        Nothing -> pure Blind
+        Just tabOther -> fromMaybe Blind <$> Map.lookup sId (tabOther ^. forEntities)
 
 anyCanCreateEntity :: NonEmpty ActorId -> SpaceId -> TerseM STM Bool
 anyCanCreateEntity creaters sId =
   anyM (`canCreateEntity` sId) (NE.toList creaters)
 
 canUpdateAllEntities :: ActorId -> SpaceId -> TerseM STM Bool
-canUpdateAllEntities updater sId = andM
-  [ canDo getPerm updater Update
-  , canUpdateSpace updater sId
-  ]
-  where
-    getPerm updaterGId = do
-      s <- ask
-      liftBase $ do
-        mTabOther <- Map.lookup updaterGId (s ^. temp . toTabOther)
-        case mTabOther of
-          Nothing -> pure Blind
-          Just tabOther -> fromMaybe Blind <$> Map.lookup sId (tabOther ^. forEntities)
+canUpdateAllEntities updater sId =
+  andM
+    [ canDo getPerm updater Update
+    , canUpdateSpace updater sId
+    ]
+ where
+  getPerm updaterGId = do
+    s <- ask
+    liftBase $ do
+      mTabOther <- Map.lookup updaterGId (s ^. temp . toTabOther)
+      case mTabOther of
+        Nothing -> pure Blind
+        Just tabOther -> fromMaybe Blind <$> Map.lookup sId (tabOther ^. forEntities)
 
 anyCanUpdateAllEntities :: NonEmpty ActorId -> SpaceId -> TerseM STM Bool
 anyCanUpdateAllEntities updaters sId =
@@ -269,61 +311,75 @@ canDeleteEntity deleter eId = do
   mSId <- liftBase $ Map.lookup eId (s ^. temp . toSpaceOf)
   case mSId of
     Nothing -> pure False
-    Just sId -> andM
-      [ canReadSpace deleter sId
-      , let getPerm deleterGId = do
-              s <- ask
-              liftBase $ do
-                mTabOther <- Map.lookup deleterGId (s ^. temp . toTabOther)
-                case mTabOther of
-                  Nothing -> pure Blind
-                  Just tabOther -> fromMaybe Blind <$> Map.lookup sId (tabOther ^. forEntities)
-        in  canDo getPerm deleter Delete
-      , liftBaseWith $ \runInBase -> andM
-          [ let checkSubscriber :: Bool -> VersionId -> STM (Maybe Bool)
-                checkSubscriber False _ = pure Nothing
-                checkSubscriber True subscriberId =
-                  Just <$> runInBase (canUpdateVersion deleter subscriberId)
-            in  foldMaybe checkSubscriber True (Multimap.listTByKey eId (s ^. temp . toSubscriptionsFrom))
-          , do  vs <- fromJust <$> Map.lookup eId (s ^. store . toEntities)
-                let checkVersion :: VersionId -> STM Bool
-                    checkVersion vId = andM
-                        [ let checkReferrer :: Bool -> VersionId -> STM (Maybe Bool)
-                              checkReferrer False _ = pure Nothing
-                              checkReferrer True referrerId =
-                                Just <$> runInBase (canUpdateVersion deleter referrerId)
-                          in  foldMaybe checkReferrer True (Multimap.listTByKey vId (s ^. temp . toReferencesFrom))
-                        , let checkForker :: Bool -> EntityId -> STM (Maybe Bool)
-                              checkForker False _ = pure Nothing
-                              checkForker True forkerId =
-                                Just <$> runInBase (canUpdateEntity deleter forkerId)
-                          in  foldMaybe checkForker True (Multimap.listTByKey vId (s ^. temp . toForksFrom))
-                        ]
-                allM checkVersion (NE.toList vs)
-          ]
-      ]
+    Just sId ->
+      andM
+        [ canReadSpace deleter sId
+        , let getPerm deleterGId = do
+                s <- ask
+                liftBase $ do
+                  mTabOther <- Map.lookup deleterGId (s ^. temp . toTabOther)
+                  case mTabOther of
+                    Nothing -> pure Blind
+                    Just tabOther -> fromMaybe Blind <$> Map.lookup sId (tabOther ^. forEntities)
+           in canDo getPerm deleter Delete
+        , liftBaseWith $ \runInBase ->
+            andM
+              [ let checkSubscriber :: Bool -> VersionId -> STM (Maybe Bool)
+                    checkSubscriber False _ = pure Nothing
+                    checkSubscriber True subscriberId =
+                      Just <$> runInBase (canUpdateVersion deleter subscriberId)
+                 in foldMaybe
+                      checkSubscriber
+                      True
+                      (Multimap.listTByKey eId (s ^. temp . toSubscriptionsFrom))
+              , do
+                  vs <- fromJust <$> Map.lookup eId (s ^. store . toEntities)
+                  let checkVersion :: VersionId -> STM Bool
+                      checkVersion vId =
+                        andM
+                          [ let checkReferrer :: Bool -> VersionId -> STM (Maybe Bool)
+                                checkReferrer False _ = pure Nothing
+                                checkReferrer True referrerId =
+                                  Just <$> runInBase (canUpdateVersion deleter referrerId)
+                             in foldMaybe
+                                  checkReferrer
+                                  True
+                                  (Multimap.listTByKey vId (s ^. temp . toReferencesFrom))
+                          , let checkForker :: Bool -> EntityId -> STM (Maybe Bool)
+                                checkForker False _ = pure Nothing
+                                checkForker True forkerId =
+                                  Just <$> runInBase (canUpdateEntity deleter forkerId)
+                             in foldMaybe checkForker True (Multimap.listTByKey vId (s ^. temp . toForksFrom))
+                          ]
+                  allM checkVersion (NE.toList vs)
+              ]
+        ]
 
 anyCanDeleteEntity :: NonEmpty ActorId -> EntityId -> TerseM STM Bool
 anyCanDeleteEntity deleters eId = anyM (`canDeleteEntity` eId) (NE.toList deleters)
 
-hasEntityPermission :: ActorId -> SpaceId -> CollectionPermission -> TerseM STM Bool
-hasEntityPermission aId sId p = andM
-  [ canReadSpace aId sId
-  , orM
-    [ let getPerm gId = do
-            s <- ask
-            liftBase $ do
-              mTabOther <- Map.lookup gId (s ^. temp . toTabOther)
-              case mTabOther of
-                Nothing -> pure Blind
-                Just tabOther -> fromMaybe Blind <$> Map.lookup sId (tabOther ^. forEntities)
-      in  canDo getPerm aId p
-    , let getPerm gId = do
-            s <- ask
-            liftBase $ maybe Blind (^. collectionPermission) <$> Map.lookup gId (s ^. temp . toTabUniverse)
-      in  canDo getPerm aId Update
+hasEntityPermission
+  :: ActorId -> SpaceId -> CollectionPermission -> TerseM STM Bool
+hasEntityPermission aId sId p =
+  andM
+    [ canReadSpace aId sId
+    , orM
+        [ let getPerm gId = do
+                s <- ask
+                liftBase $ do
+                  mTabOther <- Map.lookup gId (s ^. temp . toTabOther)
+                  case mTabOther of
+                    Nothing -> pure Blind
+                    Just tabOther -> fromMaybe Blind <$> Map.lookup sId (tabOther ^. forEntities)
+           in canDo getPerm aId p
+        , let getPerm gId = do
+                s <- ask
+                liftBase $
+                  maybe Blind (^. collectionPermission)
+                    <$> Map.lookup gId (s ^. temp . toTabUniverse)
+           in canDo getPerm aId Update
+        ]
     ]
-  ]
 
 canReadVersion :: ActorId -> VersionId -> TerseM STM Bool
 canReadVersion reader vId = do
@@ -352,7 +408,7 @@ canUpdateVersion updater vId = do
     Just eId -> canUpdateEntity updater eId
 
 anyCanUpdateVersion :: NonEmpty ActorId -> VersionId -> TerseM STM Bool
-anyCanUpdateVersion updaters vId = 
+anyCanUpdateVersion updaters vId =
   anyM (`canUpdateVersion` vId) (NE.toList updaters)
 
 canDeleteVersion :: ActorId -> VersionId -> TerseM STM Bool

@@ -72,4 +72,3 @@ updateGroupChildren updater gId newChildren = do
           anyCanUpdateGroup updater gId
             : map (anyCanUpdateGroup updater) (HS.toList (newChildren <> oldChildren))
       conditionally (unsafeUpdateGroupChildren gId newChildren) canAdjust
-

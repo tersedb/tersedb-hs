@@ -26,16 +26,16 @@ import Spec.Sync.Sample.Tree (
   storeSampleTree,
  )
 
-import Lib.Sync.Actions.Safe (emptyShared)
 import Lib.Class (
   addMember,
+  setEntityPermission,
+  setSpacePermission,
   storeActor,
   storeEntity,
   storeNextVersion,
   storeSpace,
-  setEntityPermission,
-  setSpacePermission,
  )
+import Lib.Sync.Actions.Safe (emptyShared)
 import Lib.Sync.Actions.Safe.Update (
   updateVersionReferences,
   updateVersionSubscriptions,

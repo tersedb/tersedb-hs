@@ -1,28 +1,41 @@
 module Lib.Async.Actions.Unsafe.Update where
 
-import Lib.Types.Id (VersionId, EntityId, SpaceId)
-import Lib.Async.Types.Monad (TerseM)
 import Control.Concurrent.STM (STM)
-import Control.Monad.Reader (MonadReader(ask))
-import Control.Monad.Base (MonadBase(liftBase))
-import qualified StmContainers.Multimap as Multimap
-import qualified StmContainers.Map as Map
-import Lib.Async.Types.Store (toReferences, store, toReferencesFrom, temp, toSubscriptionsFrom, toSubscriptions, toForks, toForksFrom, toSpaceOf, toSpaceEntities, toEntityOf, toEntities)
 import Control.Lens ((^.))
 import Control.Monad (unless)
-import Data.Maybe (fromJust)
-import qualified Data.List.NonEmpty as NE
+import Control.Monad.Base (MonadBase (liftBase))
+import Control.Monad.Reader (MonadReader (ask))
 import Data.List (elemIndex)
+import qualified Data.List.NonEmpty as NE
+import Data.Maybe (fromJust)
 import qualified Focus
+import Lib.Async.Types.Monad (TerseM)
+import Lib.Async.Types.Store (
+  store,
+  temp,
+  toEntities,
+  toEntityOf,
+  toForks,
+  toForksFrom,
+  toReferences,
+  toReferencesFrom,
+  toSpaceEntities,
+  toSpaceOf,
+  toSubscriptions,
+  toSubscriptionsFrom,
+ )
+import Lib.Types.Id (EntityId, SpaceId, VersionId)
+import qualified StmContainers.Map as Map
+import qualified StmContainers.Multimap as Multimap
 
 unsafeAddReference :: VersionId -> VersionId -> TerseM STM ()
 unsafeAddReference vId refId
   | vId == refId = pure ()
   | otherwise = do
-  s <- ask
-  liftBase $ do
-    Multimap.insert refId vId (s ^. store . toReferences)
-    Multimap.insert vId refId (s ^. temp . toReferencesFrom)
+      s <- ask
+      liftBase $ do
+        Multimap.insert refId vId (s ^. store . toReferences)
+        Multimap.insert vId refId (s ^. temp . toReferencesFrom)
 
 unsafeRemoveReference :: VersionId -> VersionId -> TerseM STM ()
 unsafeRemoveReference vId refId = do
@@ -70,16 +83,16 @@ unsafeUpdateFork eId mNewFork = do
 
 unsafeMoveEntity :: EntityId -> SpaceId -> TerseM STM ()
 unsafeMoveEntity eId newSId = do
- s <- ask
- liftBase $ do
-   mOldSId <- Map.lookup eId (s ^. temp . toSpaceOf)
-   case mOldSId of
-     Nothing -> pure ()
-     Just oldSId ->
-      unless (oldSId == newSId) $ do
-        Multimap.delete eId oldSId (s ^. store . toSpaceEntities)
-        Multimap.insert eId newSId (s ^. store . toSpaceEntities)
-        Map.insert newSId eId (s ^. temp . toSpaceOf)
+  s <- ask
+  liftBase $ do
+    mOldSId <- Map.lookup eId (s ^. temp . toSpaceOf)
+    case mOldSId of
+      Nothing -> pure ()
+      Just oldSId ->
+        unless (oldSId == newSId) $ do
+          Multimap.delete eId oldSId (s ^. store . toSpaceEntities)
+          Multimap.insert eId newSId (s ^. store . toSpaceEntities)
+          Map.insert newSId eId (s ^. temp . toSpaceOf)
 
 unsafeOffsetVersionIndex :: VersionId -> Int -> TerseM STM ()
 unsafeOffsetVersionIndex _ 0 = pure ()
@@ -90,14 +103,14 @@ unsafeOffsetVersionIndex vId offset = do
     case mEId of
       Nothing -> pure ()
       Just eId -> Map.focus (Focus.adjust go) eId (s ^. store . toEntities)
-  where
-    go vs =
-      let vs' = NE.toList vs
-          oldIdx = fromJust $ elemIndex vId vs'
-          newIdx = oldIdx + offset
-          vs'' = filter (/= vId) vs'
-          vs''' = take newIdx vs'' <> (vId : drop newIdx vs'')
-      in NE.fromList vs'''
+ where
+  go vs =
+    let vs' = NE.toList vs
+        oldIdx = fromJust $ elemIndex vId vs'
+        newIdx = oldIdx + offset
+        vs'' = filter (/= vId) vs'
+        vs''' = take newIdx vs'' <> (vId : drop newIdx vs'')
+     in NE.fromList vs'''
 
 unsafeSetVersionIndex :: VersionId -> Int -> TerseM STM ()
 unsafeSetVersionIndex vId newIdx = do

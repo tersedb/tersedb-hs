@@ -3,7 +3,7 @@ module Lib.Async.Actions.Safe.Verify.Actor (
   anyCanCreateActor,
   anyCanUpdateActor,
   anyCanDeleteActor,
-  hasRecruiterPermission
+  hasRecruiterPermission,
 ) where
 
 import Control.Concurrent.STM (STM)
@@ -21,14 +21,13 @@ import Lib.Types.Id (ActorId)
 import Lib.Types.Permission (CollectionPermission (..))
 import qualified StmContainers.Map as Map
 
-
 hasRecruiterPermission :: ActorId -> CollectionPermission -> TerseM STM Bool
 hasRecruiterPermission aId p =
   canDo getCheckedPerm aId p
-  where
-    getCheckedPerm gId = do
-      s <- ask
-      liftBase $ fromMaybe minBound <$> Map.lookup gId (s ^. temp . toTabRecruiter)
+ where
+  getCheckedPerm gId = do
+    s <- ask
+    liftBase $ fromMaybe minBound <$> Map.lookup gId (s ^. temp . toTabRecruiter)
 
 canReadActor :: ActorId -> TerseM STM Bool
 canReadActor reader =

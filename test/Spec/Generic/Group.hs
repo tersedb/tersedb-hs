@@ -1,15 +1,17 @@
 module Spec.Generic.Group where
 
-import Test.Syd (Spec, it, shouldBe, shouldSatisfy)
-import Lib.Class (TerseDB (resetTabulation, genSyncShared, commit), TerseDBGen (runTerseDB), unsafeUnlinkGroups)
-import Lib.Types.Id (GroupId)
-import Test.QuickCheck (Testable(property), forAll, suchThatMap, elements, arbitrary)
-import Spec.Sync.Sample.Tree (SampleGroupTree, loadSampleTreeNoTab, loadSampleTree)
-import qualified Lib.Sync.Types.Store as Sync
+import Control.Lens ((^.))
 import Data.Data (Proxy (Proxy))
+import qualified Data.HashMap.Strict as HM
 import Data.HashSet (HashSet)
 import qualified Data.HashSet as HS
-import qualified Data.HashMap.Strict as HM
+import Data.Maybe (fromJust)
+import Lib.Class (
+  TerseDB (commit, genSyncShared, resetTabulation),
+  TerseDBGen (runTerseDB),
+  unsafeUnlinkGroups,
+ )
+import qualified Lib.Sync.Types.Store as Sync
 import Lib.Sync.Types.Store.Groups (
   Groups,
   edges,
@@ -21,9 +23,20 @@ import Lib.Sync.Types.Store.Groups (
   prev,
   roots,
  )
-import Control.Lens ((^.))
-import Data.Maybe (fromJust)
-
+import Lib.Types.Id (GroupId)
+import Spec.Sync.Sample.Tree (
+  SampleGroupTree,
+  loadSampleTree,
+  loadSampleTreeNoTab,
+ )
+import Test.QuickCheck (
+  Testable (property),
+  arbitrary,
+  elements,
+  forAll,
+  suchThatMap,
+ )
+import Test.Syd (Spec, it, shouldBe, shouldSatisfy)
 
 groupTests :: forall m n. (TerseDB n m, TerseDBGen n) => Proxy m -> Spec
 groupTests Proxy = do
@@ -31,17 +44,17 @@ groupTests Proxy = do
     property $ \(xs :: SampleGroupTree ()) -> do
       let whileLoading :: IO Sync.Shared
           whileLoading = runTerseDB (commit go) (loadSampleTree xs)
-            where
-              go :: m Sync.Shared
-              go = do
-                genSyncShared
+           where
+            go :: m Sync.Shared
+            go = do
+              genSyncShared
           afterLoading :: IO Sync.Shared
           afterLoading = runTerseDB (commit go) (loadSampleTreeNoTab xs)
-            where
-              go :: m Sync.Shared
-              go = do
-                resetTabulation
-                genSyncShared
+           where
+            go :: m Sync.Shared
+            go = do
+              resetTabulation
+              genSyncShared
       x <- whileLoading
       y <- afterLoading
       x `shouldBe` y
@@ -49,19 +62,19 @@ groupTests Proxy = do
     property $ \(xs :: SampleGroupTree ()) -> do
       let resetOnce :: IO Sync.Shared
           resetOnce = runTerseDB (commit go) (loadSampleTreeNoTab xs)
-            where
-              go :: m Sync.Shared
-              go = do
-                resetTabulation
-                genSyncShared
+           where
+            go :: m Sync.Shared
+            go = do
+              resetTabulation
+              genSyncShared
           resetTwice :: IO Sync.Shared
           resetTwice = runTerseDB (commit go) (loadSampleTreeNoTab xs)
-            where
-              go :: m Sync.Shared
-              go = do
-                resetTabulation
-                resetTabulation
-                genSyncShared
+           where
+            go :: m Sync.Shared
+            go = do
+              resetTabulation
+              resetTabulation
+              genSyncShared
       x <- resetOnce
       y <- resetTwice
       x `shouldBe` y
@@ -71,11 +84,10 @@ groupTests Proxy = do
               go xs
                 | null $ s ^. Sync.store . Sync.toGroups . edges = Nothing
                 | otherwise = Just s
-                where
-                  s = loadSampleTree xs
-          in  suchThatMap arbitrary go
-
-    in  forAll gen $ \(s) ->
+               where
+                s = loadSampleTree xs
+           in suchThatMap arbitrary go
+     in forAll gen $ \(s) ->
           forAll (elements (HS.toList (s ^. Sync.store . Sync.toGroups . edges))) $ \(from, to) -> do
             let go :: m Sync.Shared
                 go = do
@@ -87,7 +99,7 @@ groupTests Proxy = do
                 descendants :: GroupId -> HashSet GroupId
                 descendants gId =
                   let children = fromJust (HM.lookup gId (newGroups ^. nodes)) ^. next
-                  in  HS.insert gId (HS.unions (map descendants (HS.toList children)))
+                   in HS.insert gId (HS.unions (map descendants (HS.toList children)))
             shouldSatisfy (newS, from, to) $ \_ ->
               to `HS.member` (newS ^. Sync.store . Sync.toGroups . roots)
             shouldSatisfy (newS, from, to) $ \_ ->

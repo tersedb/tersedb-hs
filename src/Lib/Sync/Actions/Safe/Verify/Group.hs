@@ -43,9 +43,10 @@ import Lib.Sync.Types.Store.Tabulation.Group (forGroups, forOrganization)
 import Lib.Types.Id (ActorId, GroupId)
 import Lib.Types.Permission (
   CollectionPermission (..),
+  CollectionPermissionWithExemption,
   SinglePermission,
   collectionPermission,
-  escalate, CollectionPermissionWithExemption,
+  escalate,
  )
 
 hasOrganizationPermission

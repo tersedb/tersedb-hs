@@ -1,23 +1,48 @@
 module Lib.Async.Actions.Unsafe.Remove where
 
-import Lib.Types.Id (VersionId, EntityId, SpaceId, GroupId, ActorId)
-import Lib.Async.Types.Monad (TerseM)
 import Control.Concurrent.STM (STM)
-import Control.Monad.Reader (MonadReader(ask))
-import Control.Monad.Base (MonadBase(liftBase))
-import qualified StmContainers.Set as Set
+import Control.Lens ((^.))
+import Control.Monad (unless)
+import Control.Monad.Base (MonadBase (liftBase))
+import Control.Monad.Reader (MonadReader (ask))
+import Control.Monad.Trans.Control (MonadBaseControl (liftBaseWith))
+import Data.Foldable (for_)
+import qualified Data.List.NonEmpty as NE
+import DeferredFolds.UnfoldlM (forM_)
+import qualified Focus
+import Lib.Async.Actions.Unsafe.Update (
+  unsafeRemoveSubscription,
+  unsafeUpdateFork,
+ )
+import Lib.Async.Actions.Unsafe.Update.Group (unsafeUnlinkGroups)
+import Lib.Async.Types.Monad (TerseM)
+import Lib.Async.Types.Store (
+  store,
+  temp,
+  toActors,
+  toEntities,
+  toEntityOf,
+  toForks,
+  toForksFrom,
+  toGroupsNext,
+  toGroupsPrev,
+  toMemberOf,
+  toMembers,
+  toOuts,
+  toReferences,
+  toReferencesFrom,
+  toRoots,
+  toSpaceEntities,
+  toSpaceOf,
+  toSpaces,
+  toSubscriptions,
+  toSubscriptionsFrom,
+  toVersions,
+ )
+import Lib.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
 import qualified StmContainers.Map as Map
 import qualified StmContainers.Multimap as Multimap
-import Lib.Async.Types.Store (store, toVersions, temp, toEntityOf, toEntities, toReferences, toReferencesFrom, toSubscriptions, toSubscriptionsFrom, toForks, toForksFrom, toSpaceOf, toSpaceEntities, toSpaces, toMembers, toMemberOf, toActors, toGroupsPrev, toGroupsNext, toRoots, toOuts)
-import Control.Lens ((^.))
-import qualified Data.List.NonEmpty as NE
-import qualified Focus
-import Control.Monad (unless)
-import DeferredFolds.UnfoldlM (forM_)
-import Control.Monad.Trans.Control (MonadBaseControl(liftBaseWith))
-import Data.Foldable (for_)
-import Lib.Async.Actions.Unsafe.Update (unsafeRemoveSubscription, unsafeUpdateFork)
-import Lib.Async.Actions.Unsafe.Update.Group (unsafeUnlinkGroups)
+import qualified StmContainers.Set as Set
 
 unsafeRemoveVersion :: VersionId -> TerseM STM ()
 unsafeRemoveVersion vId = do
@@ -29,7 +54,10 @@ unsafeRemoveVersion vId = do
       Just eId -> do
         vs <- Map.lookup eId (s ^. store . toEntities)
         unless (length vs == 1) $ do
-          Map.focus (Focus.adjust (NE.fromList . NE.filter (/= vId))) eId (s ^. store . toEntities)
+          Map.focus
+            (Focus.adjust (NE.fromList . NE.filter (/= vId)))
+            eId
+            (s ^. store . toEntities)
           Set.delete vId (s ^. store . toVersions)
           forM_ (Multimap.unfoldlMByKey vId (s ^. store . toReferences)) $ \refId ->
             Multimap.delete vId refId (s ^. temp . toReferencesFrom)

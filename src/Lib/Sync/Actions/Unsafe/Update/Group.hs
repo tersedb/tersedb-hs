@@ -32,8 +32,21 @@ module Lib.Sync.Actions.Unsafe.Update.Group (
   unsafeAdjustMemberPermission,
 ) where
 
-import Control.Lens (Lens', at, ix, non, (%~), (&), (.~), (^.), (^?), _Just, (?~))
-import Control.Monad.State (MonadState (get, put), modify, runState, execState)
+import Control.Lens (
+  Lens',
+  at,
+  ix,
+  non,
+  (%~),
+  (&),
+  (.~),
+  (?~),
+  (^.),
+  (^?),
+  _Just,
+ )
+import Control.Monad (unless)
+import Control.Monad.State (MonadState (get, put), execState, modify, runState)
 import Data.Foldable (foldlM, for_)
 import Data.HashSet (HashSet)
 import qualified Data.HashSet as HS
@@ -67,7 +80,6 @@ import Lib.Types.Permission (
   CollectionPermissionWithExemption,
   SinglePermission,
  )
-import Control.Monad (unless)
 
 -- | Loads the parent's untabulated permissions if it's not already tabulated!
 unsafeLinkGroups
@@ -85,7 +97,7 @@ unsafeLinkGroups from to = do
               & roots . at to .~ Nothing
               & nodes . ix from . next . at to ?~ ()
               & nodes . ix to . prev ?~ from
-        in case hasCycle newGroups of
+       in case hasCycle newGroups of
             Just cycle -> pure ()
             Nothing -> do
               modify $ store . toGroups .~ newGroups

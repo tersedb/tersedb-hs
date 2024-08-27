@@ -20,15 +20,15 @@ You can reach me at athan.clark@gmail.com.
 
 module Spec.Sync.Sample.Tree where
 
-import Lib.Sync.Actions.Safe (emptyShared)
 import Lib.Class (
-  storeGroup,
   setGroupPermission,
   setMemberPermission,
   setOrganizationPermission,
   setRecruiterPermission,
   setUniversePermission,
+  storeGroup,
  )
+import Lib.Sync.Actions.Safe (emptyShared)
 import Lib.Sync.Actions.Tabulation (initTabulatedPermissionsForGroup)
 import Lib.Sync.Actions.Unsafe (unsafeEmptyShared)
 import Lib.Sync.Actions.Unsafe.Update.Group (

@@ -26,8 +26,8 @@ module Lib.Sync.Actions.Safe.Verify (
   module Lib.Actions.Safe.Utils,
 ) where
 
+import Lib.Actions.Safe.Utils (conditionally)
 import Lib.Sync.Actions.Safe.Verify.Actor
 import Lib.Sync.Actions.Safe.Verify.Group
 import Lib.Sync.Actions.Safe.Verify.Member
 import Lib.Sync.Actions.Safe.Verify.SpaceAndEntity
-import Lib.Actions.Safe.Utils (conditionally)

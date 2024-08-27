@@ -21,7 +21,7 @@ You can reach me at athan.clark@gmail.com.
 module Lib.Sync.Actions.Unsafe.Remove where
 
 import Control.Lens (at, ix, non, (%~), (.~), (^.), (^?!), _Left)
-import Control.Monad.State (MonadState (get, put), modify, runState, execState)
+import Control.Monad.State (MonadState (get, put), execState, modify, runState)
 import Data.Foldable (foldlM, for_)
 import qualified Data.List.NonEmpty as NE
 import Lib.Sync.Actions.Unsafe.Update (
@@ -69,12 +69,18 @@ unsafeRemoveVersion vId = do
     Nothing -> pure ()
     Just v -> do
       let eId :: EntityId = s ^?! temp . toEntityOf . ix vId
-          s' = foldr removeFork
-               (foldr removeSub
-                (foldr removeReferred
-                 (foldr removeRef s (v ^. references))
-                (s ^. temp . toReferencesFrom . at vId . non mempty))
-               (v ^. subscriptions))
+          s' =
+            foldr
+              removeFork
+              ( foldr
+                  removeSub
+                  ( foldr
+                      removeReferred
+                      (foldr removeRef s (v ^. references))
+                      (s ^. temp . toReferencesFrom . at vId . non mempty)
+                  )
+                  (v ^. subscriptions)
+              )
               (s ^. temp . toForksFrom . at vId . non mempty)
       put s'
       modify $ store . toVersions . at vId .~ Nothing
@@ -100,10 +106,13 @@ unsafeRemoveEntity eId = do
   case s ^. store . toEntities . at eId of
     Nothing -> pure ()
     Just e -> do
-      let s' = rmFork
-            (foldr rmSubscription
-              (foldr rmVersion s (e ^. versions))
-            (s ^. temp . toSubscriptionsFrom . at eId . non mempty))
+      let s' =
+            rmFork
+              ( foldr
+                  rmSubscription
+                  (foldr rmVersion s (e ^. versions))
+                  (s ^. temp . toSubscriptionsFrom . at eId . non mempty)
+              )
       put s'
       modify $ store . toEntities . at eId .~ Nothing
  where

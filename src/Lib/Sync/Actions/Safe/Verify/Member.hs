@@ -96,8 +96,8 @@ hasMemberPermission aId gId p =
     [ canReadGroup aId gId
     , orM
         [ canDo (\t -> t ^. forMembers . at gId . non Blind) aId p
-        -- Grants those with Organization/Update powers (whether or not exempt from
-        -- restriction) the ability to add anyone to groups they have visibility to
-        , canDo (\t -> t ^. forOrganization . collectionPermission) aId Update
+        , -- Grants those with Organization/Update powers (whether or not exempt from
+          -- restriction) the ability to add anyone to groups they have visibility to
+          canDo (\t -> t ^. forOrganization . collectionPermission) aId Update
         ]
     ]

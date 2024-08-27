@@ -29,24 +29,25 @@ import Data.List (elemIndex)
 import qualified Data.List.NonEmpty as NE
 import Data.Maybe (fromJust, isJust)
 import Lib.Class (
+  TerseDB,
   addMember,
-  storeActor,
-  storeEntity,
-  storeGroup,
-  storeSpace,
   addReference,
   addSubscription,
+  linkGroups,
   moveEntity,
   offsetVersionIndex,
   removeReference,
   removeSubscription,
-  setVersionIndex,
-  updateFork,
-  linkGroups,
   setEntityPermission,
   setMemberPermission,
   setUniversePermission,
-  unlinkGroups, TerseDB,
+  setVersionIndex,
+  storeActor,
+  storeEntity,
+  storeGroup,
+  storeSpace,
+  unlinkGroups,
+  updateFork,
  )
 import Lib.Sync.Actions.Safe.Update.Group (
   updateGroupParent,
@@ -301,7 +302,12 @@ updateTests = describe "Update" $ do
                   )
                   $ \newSId -> do
                     let s' = flip execState s $ do
-                          worked <- setEntityPermission (NE.singleton adminActor) Delete adminGroup (s ^?! temp . toSpaceOf . ix eId)
+                          worked <-
+                            setEntityPermission
+                              (NE.singleton adminActor)
+                              Delete
+                              adminGroup
+                              (s ^?! temp . toSpaceOf . ix eId)
                           unless worked $ error "Couldn't set delete entity permission"
                           worked <- setEntityPermission (NE.singleton adminActor) Update adminGroup newSId
                           unless worked $ error "Couldn't set create entity permission"
