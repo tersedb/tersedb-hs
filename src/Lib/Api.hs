@@ -8,7 +8,7 @@ import Lib.Types.Permission (
   SinglePermission,
  )
 import Data.List.NonEmpty (NonEmpty)
-import Lib.Class (TerseDB (anyCanReadActor), readEntities, actorExists, readReferences, readSubscriptions, readSubscriptionsFrom, readReferencesFrom, readPrevGroup)
+import Lib.Class (TerseDB (anyCanReadActor), readEntities, actorExists, readReferences, readSubscriptions, readSubscriptionsFrom, readReferencesFrom, readPrevGroup, groupExists, memberExists, spaceExists, entityExists, versionExists, readActors, readGroups, readMembersOf, readMembers, readSpaces, readVersions, readNextGroups, readForkOf, readForkedBy)
 import qualified Data.Vector as V
 import qualified DeferredFolds.UnfoldlM as UnfoldlM
 
@@ -17,8 +17,8 @@ data ReadAction
   | ReadActor ActorId
   | ReadAllGroups
   | ReadGroup GroupId
-  | ReadAllMembers ActorId
-  | ReadAllMemberOf GroupId
+  | ReadAllMembers GroupId
+  | ReadAllMemberOf ActorId
   | ReadMember GroupId ActorId
   | ReadPrevGroup GroupId
   | ReadNextGroups GroupId
@@ -32,8 +32,8 @@ data ReadAction
   | ReadReferencesOf VersionId
   | ReadSubscriptions VersionId
   | ReadSubscriptionsOf EntityId
-  | ReadFork EntityId
-  | ReadForksOf VersionId
+  | ReadForkOf EntityId
+  | ReadForkedBy VersionId
   deriving (Eq, Show, Read)
 
 data CreateAction
@@ -95,8 +95,8 @@ data ReadResponse
   | ReferencesOf (Vector VersionId)
   | Subscriptions (Vector EntityId)
   | SubscriptionsOf (Vector VersionId)
-  | Fork (Maybe VersionId)
-  | ForksOf (Vector EntityId)
+  | ForkOf (Maybe VersionId)
+  | ForkedBy (Vector EntityId)
   deriving (Eq, Show, Read)
 
 data CreateResponse
@@ -124,33 +124,81 @@ act actors = traverse go
       UpdateAction x -> goUpdate x
       DeleteAction x -> goDelete x
     goRead x = case x of
-      ReadAllActors -> undefined
+      ReadAllActors -> do
+        mXs <- readActors actors
+        case mXs of
+          Nothing -> pure Unauthorized
+          Just xs -> ReadResponse . Actors <$> unfoldlMToVector xs
       ReadActor aId -> do
         mExists <- actorExists actors aId
         pure $ case mExists of
           Nothing -> Unauthorized
           Just y -> ReadResponse $ if y then DoesExist else DoesNotExist
-      ReadAllGroups -> undefined
-      ReadGroup gId -> undefined
-      ReadAllMembers aId -> undefined
-      ReadAllMemberOf gId -> undefined
-      ReadMember gId aId -> undefined
+      ReadAllGroups -> do
+        mXs <- readGroups actors
+        case mXs of
+          Nothing -> pure Unauthorized
+          Just xs -> ReadResponse . Groups <$> unfoldlMToVector xs
+      ReadGroup gId -> do
+        mExists <- groupExists actors gId
+        pure $ case mExists of
+          Nothing -> Unauthorized
+          Just y -> ReadResponse $ if y then DoesExist else DoesNotExist
+      ReadAllMembers gId -> do
+        mXs <- readMembers actors gId
+        case mXs of
+          Nothing -> pure Unauthorized
+          Just xs -> ReadResponse . Members <$> unfoldlMToVector xs
+      ReadAllMemberOf aId -> do
+        mXs <- readMembersOf actors aId
+        case mXs of
+          Nothing -> pure Unauthorized
+          Just xs -> ReadResponse . MemberOf <$> unfoldlMToVector xs
+      ReadMember gId aId -> do
+        mExists <- memberExists actors gId aId
+        pure $ case mExists of
+          Nothing -> Unauthorized
+          Just y -> ReadResponse $ if y then DoesExist else DoesNotExist
       ReadPrevGroup gId -> do
         mMPrev <- readPrevGroup actors gId
         pure $ case mMPrev of
           Nothing -> Unauthorized
           Just mPrev -> ReadResponse (PrevGroup mPrev)
-      ReadNextGroups gId -> undefined
-      ReadAllSpaces -> undefined
-      ReadSpace sId -> undefined
+      ReadNextGroups gId -> do
+        mXs <- readNextGroups actors gId
+        case mXs of
+          Nothing -> pure Unauthorized
+          Just xs -> ReadResponse . NextGroups <$> unfoldlMToVector xs
+      ReadAllSpaces -> do
+        mXs <- readSpaces actors
+        case mXs of
+          Nothing -> pure Unauthorized
+          Just xs -> ReadResponse . Spaces <$> unfoldlMToVector xs
+      ReadSpace sId -> do
+        mExists <- spaceExists actors sId
+        pure $ case mExists of
+          Nothing -> Unauthorized
+          Just y -> ReadResponse $ if y then DoesExist else DoesNotExist
       ReadAllEntities sId -> do
         mY <- readEntities actors sId
         case mY of
           Nothing -> pure Unauthorized
           Just y -> ReadResponse . Entities <$> unfoldlMToVector y
-      ReadEntity eId -> undefined
-      ReadAllVersions eId -> undefined
-      ReadVersion vId -> undefined
+      ReadEntity eId -> do
+        mExists <- entityExists actors eId
+        pure $ case mExists of
+          Nothing -> Unauthorized
+          Just y -> ReadResponse $ if y then DoesExist else DoesNotExist
+      ReadAllVersions eId -> do
+        mY <- readVersions actors eId
+        case mY of
+          Nothing -> pure Unauthorized
+          Just y -> ReadResponse . Versions <$> unfoldlMToVector y
+      ReadVersion vId -> do
+        mExists <- versionExists actors vId
+        pure $ case mExists of
+          Nothing -> Unauthorized
+          Just y -> ReadResponse $ if y then DoesExist else DoesNotExist
       ReadReferences vId -> do
         mY <- readReferences actors vId
         case mY of
@@ -171,8 +219,16 @@ act actors = traverse go
         case mY of
           Nothing -> pure Unauthorized
           Just y -> ReadResponse . SubscriptionsOf <$> unfoldlMToVector y
-      ReadFork eId -> undefined
-      ReadForksOf vId -> undefined
+      ReadForkOf eId -> do
+        mY <- readForkOf actors eId
+        case mY of
+          Nothing -> pure Unauthorized
+          Just y -> pure . ReadResponse $ ForkOf y
+      ReadForkedBy vId -> do
+        mY <- readForkedBy actors vId
+        case mY of
+          Nothing -> pure Unauthorized
+          Just y -> ReadResponse . ForkedBy <$> unfoldlMToVector y
     goCreate = undefined
     goUpdate = undefined
     goDelete = undefined

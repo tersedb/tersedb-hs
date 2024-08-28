@@ -16,20 +16,34 @@ import Lib.Async.Types.Store (
   toReferencesFrom,
   toSpaceEntities,
   toSubscriptions,
-  toSubscriptionsFrom,
+  toSubscriptionsFrom, toActors, toGroups,
+  toMemberOf, toMembers, toEntities, toSpaces, toGroupsNext, toForksFrom
  )
-import Lib.Types.Id (EntityId, SpaceId, VersionId)
+import Lib.Types.Id (EntityId, SpaceId, VersionId, ActorId, GroupId)
 import ListT (ListT)
+import qualified ListT
 import qualified StmContainers.Multimap as Multimap
+import qualified StmContainers.Set as Set
+import qualified StmContainers.Map as Map
+import qualified Data.List.NonEmpty as NE
 
-newtype ReadingStateT s m a = ReadingStateT
-  { runReadingStateT :: ReaderT s m a
-  }
-  deriving (Generic, Functor, Applicative, Monad)
-deriving instance (MonadBase b m) => MonadBase b (ReadingStateT s m)
 
-ask' :: (Monad m) => ReadingStateT s m s
-ask' = ReadingStateT ask
+unsafeReadNextGroupsEager :: GroupId -> TerseM STM (UnfoldlM (TerseM STM) GroupId)
+unsafeReadNextGroupsEager gId = do
+  s <- ask
+  let ns = Multimap.unfoldlMByKey gId (s ^. store . toGroupsNext)
+      lifter :: forall a. STM a -> TerseM STM a
+      lifter = liftBase
+      reducer :: forall a. TerseM STM a -> STM a
+      reducer = flip runReaderT s
+  pure $ UnfoldlM.hoist lifter reducer ns
+
+unsafeReadNextGroupsLazy
+  :: GroupId -> TerseM STM (ListT (TerseM STM) GroupId)
+unsafeReadNextGroupsLazy gId = do
+  s <- ask
+  let refs = Multimap.listTByKey gId (s ^. store . toGroupsNext)
+  pure (hoist liftBase refs)
 
 unsafeReadReferencesEager :: VersionId -> TerseM STM (UnfoldlM (TerseM STM) VersionId)
 unsafeReadReferencesEager vId = do
@@ -103,19 +117,137 @@ unsafeReadSubscriptionsFromLazy eId = do
   let subs = Multimap.listTByKey eId (s ^. temp . toSubscriptionsFrom)
   pure (hoist liftBase subs)
 
-unsafeReadEntitiesEager :: SpaceId -> TerseM STM (UnfoldlM (TerseM STM) EntityId)
-unsafeReadEntitiesEager sId = do
+unsafeReadForkedByEager
+  :: VersionId -> TerseM STM (UnfoldlM (TerseM STM) EntityId)
+unsafeReadForkedByEager vId = do
   s <- ask
-  let subs :: UnfoldlM STM EntityId
-      subs = Multimap.unfoldlMByKey sId (s ^. store . toSpaceEntities)
+  let forks = Multimap.unfoldlMByKey vId (s ^. temp . toForksFrom)
       lifter :: forall a. STM a -> TerseM STM a
       lifter = liftBase
       reducer :: forall a. TerseM STM a -> STM a
       reducer = flip runReaderT s
-  pure . UnfoldlM.hoist lifter reducer $ subs
+  pure $ UnfoldlM.hoist lifter reducer forks
+
+unsafeReadForkedByLazy
+  :: VersionId -> TerseM STM (ListT (TerseM STM) EntityId)
+unsafeReadForkedByLazy eId = do
+  s <- ask
+  let subs = Multimap.listTByKey eId (s ^. temp . toForksFrom)
+  pure (hoist liftBase subs)
+
+
+-- * Collections
+
+unsafeReadActorsEager :: TerseM STM (UnfoldlM (TerseM STM) ActorId)
+unsafeReadActorsEager = do
+  s <- ask
+  let as :: UnfoldlM STM ActorId
+      as = Set.unfoldlM (s ^. store . toActors)
+      lifter :: forall a. STM a -> TerseM STM a
+      lifter = liftBase
+      reducer :: forall a. TerseM STM a -> STM a
+      reducer = flip runReaderT s
+  pure . UnfoldlM.hoist lifter reducer $ as
+
+unsafeReadActorsLazy :: TerseM STM (ListT (TerseM STM) ActorId)
+unsafeReadActorsLazy = do
+  s <- ask
+  let as = Set.listT (s ^. store . toActors)
+  pure (hoist liftBase as)
+
+unsafeReadGroupsEager :: TerseM STM (UnfoldlM (TerseM STM) GroupId)
+unsafeReadGroupsEager = do
+  s <- ask
+  let gs :: UnfoldlM STM GroupId
+      gs = Set.unfoldlM (s ^. store . toGroups)
+      lifter :: forall a. STM a -> TerseM STM a
+      lifter = liftBase
+      reducer :: forall a. TerseM STM a -> STM a
+      reducer = flip runReaderT s
+  pure . UnfoldlM.hoist lifter reducer $ gs
+
+unsafeReadGroupsLazy :: TerseM STM (ListT (TerseM STM) GroupId)
+unsafeReadGroupsLazy = do
+  s <- ask
+  let gs = Set.listT (s ^. store . toGroups)
+  pure (hoist liftBase gs)
+
+unsafeReadMembersEager :: GroupId -> TerseM STM (UnfoldlM (TerseM STM) ActorId)
+unsafeReadMembersEager gId = do
+  s <- ask
+  let as :: UnfoldlM STM ActorId
+      as = Multimap.unfoldlMByKey gId (s ^. store . toMembers)
+      lifter :: forall a. STM a -> TerseM STM a
+      lifter = liftBase
+      reducer :: forall a. TerseM STM a -> STM a
+      reducer = flip runReaderT s
+  pure . UnfoldlM.hoist lifter reducer $ as
+
+unsafeReadMembersLazy :: GroupId -> TerseM STM (ListT (TerseM STM) ActorId)
+unsafeReadMembersLazy gId = do
+  s <- ask
+  let as = Multimap.listTByKey gId (s ^. store . toMembers)
+  pure (hoist liftBase as)
+
+unsafeReadMembersOfEager :: ActorId -> TerseM STM (UnfoldlM (TerseM STM) GroupId)
+unsafeReadMembersOfEager aId = do
+  s <- ask
+  let gs :: UnfoldlM STM GroupId
+      gs = Multimap.unfoldlMByKey aId (s ^. temp . toMemberOf)
+      lifter :: forall a. STM a -> TerseM STM a
+      lifter = liftBase
+      reducer :: forall a. TerseM STM a -> STM a
+      reducer = flip runReaderT s
+  pure . UnfoldlM.hoist lifter reducer $ gs
+
+unsafeReadMembersOfLazy :: ActorId -> TerseM STM (ListT (TerseM STM) GroupId)
+unsafeReadMembersOfLazy aId = do
+  s <- ask
+  let gs = Multimap.listTByKey aId (s ^. temp . toMemberOf)
+  pure (hoist liftBase gs)
+
+unsafeReadSpacesEager :: TerseM STM (UnfoldlM (TerseM STM) SpaceId)
+unsafeReadSpacesEager = do
+  s <- ask
+  let ss :: UnfoldlM STM SpaceId
+      ss = Set.unfoldlM (s ^. store . toSpaces)
+      lifter :: forall a. STM a -> TerseM STM a
+      lifter = liftBase
+      reducer :: forall a. TerseM STM a -> STM a
+      reducer = flip runReaderT s
+  pure . UnfoldlM.hoist lifter reducer $ ss
+
+unsafeReadSpacesLazy :: TerseM STM (ListT (TerseM STM) SpaceId)
+unsafeReadSpacesLazy = do
+  s <- ask
+  let ss = Set.listT (s ^. store . toSpaces)
+  pure (hoist liftBase ss)
+
+unsafeReadEntitiesEager :: SpaceId -> TerseM STM (UnfoldlM (TerseM STM) EntityId)
+unsafeReadEntitiesEager sId = do
+  s <- ask
+  let es :: UnfoldlM STM EntityId
+      es = Multimap.unfoldlMByKey sId (s ^. store . toSpaceEntities)
+      lifter :: forall a. STM a -> TerseM STM a
+      lifter = liftBase
+      reducer :: forall a. TerseM STM a -> STM a
+      reducer = flip runReaderT s
+  pure . UnfoldlM.hoist lifter reducer $ es
 
 unsafeReadEntitiesLazy :: SpaceId -> TerseM STM (ListT (TerseM STM) EntityId)
 unsafeReadEntitiesLazy sId = do
   s <- ask
-  let subs = Multimap.listTByKey sId (s ^. store . toSpaceEntities)
-  pure (hoist liftBase subs)
+  let es = Multimap.listTByKey sId (s ^. store . toSpaceEntities)
+  pure (hoist liftBase es)
+
+unsafeReadVersionsEager :: EntityId -> TerseM STM (UnfoldlM (TerseM STM) VersionId)
+unsafeReadVersionsEager eId = do
+  s <- ask
+  vs <- liftBase $ maybe [] NE.toList <$> Map.lookup eId (s ^. store . toEntities)
+  pure $ UnfoldlM.foldable vs
+
+unsafeReadVersionsLazy :: EntityId -> TerseM STM (ListT (TerseM STM) VersionId)
+unsafeReadVersionsLazy eId = do
+  s <- ask
+  vs <- liftBase $ maybe [] NE.toList <$> Map.lookup eId (s ^. store . toEntities)
+  pure $ ListT.fromFoldable vs
