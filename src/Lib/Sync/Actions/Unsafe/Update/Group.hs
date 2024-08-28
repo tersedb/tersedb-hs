@@ -80,10 +80,13 @@ import Lib.Types.Permission (
   CollectionPermissionWithExemption,
   SinglePermission,
  )
+import Lib.Types.Errors (CycleDetected (..))
+import Control.Monad.Catch (MonadThrow(throwM))
+
 
 -- | Loads the parent's untabulated permissions if it's not already tabulated!
 unsafeLinkGroups
-  :: (MonadState Shared m) => GroupId -> GroupId -> m ()
+  :: (MonadState Shared m, MonadThrow m) => GroupId -> GroupId -> m ()
 unsafeLinkGroups from to = do
   s <- get
   let groups = s ^. store . toGroups
@@ -98,7 +101,7 @@ unsafeLinkGroups from to = do
               & nodes . ix from . next . at to ?~ ()
               & nodes . ix to . prev ?~ from
        in case hasCycle newGroups of
-            Just cycle -> pure ()
+            Just cycle -> throwM (CycleDetected cycle)
             Nothing -> do
               modify $ store . toGroups .~ newGroups
               updateTabulationStartingAt to
@@ -121,7 +124,7 @@ unsafeUnlinkGroups from to = do
   updateTabulationStartingAt to
 
 unsafeUpdateGroupParent
-  :: (MonadState Shared m)
+  :: (MonadState Shared m, MonadThrow m)
   => GroupId
   -> Maybe GroupId
   -> m ()
@@ -137,7 +140,7 @@ unsafeUpdateGroupParent gId mParent = do
         Just newParent -> unsafeLinkGroups newParent gId
 
 unsafeUpdateGroupChildren
-  :: (MonadState Shared m)
+  :: (MonadState Shared m, MonadThrow m)
   => GroupId
   -> HashSet GroupId
   -> m ()
@@ -149,10 +152,7 @@ unsafeUpdateGroupChildren gId children = do
     Just oldChildren -> do
       let toAdd = newChildren `HS.difference` oldChildren
           toRemove = oldChildren `HS.difference` newChildren
-          addChild :: GroupId -> Shared -> Shared
-          addChild toAdd = execState (unsafeLinkGroups gId toAdd)
-          s' = foldr addChild s toAdd
-      put s'
+      for_ toAdd $ \toAdd -> unsafeLinkGroups gId toAdd
       for_ toRemove $ \toRemove -> unsafeUnlinkGroups gId toRemove
 
 unsafeAdjustPermissionForGroup

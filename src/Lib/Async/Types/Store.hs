@@ -100,9 +100,10 @@ data Store = Store
   { storeGroupsPrev :: Map GroupId GroupId
   , storeGroupsNext :: Multimap GroupId GroupId
   , storeGroupMembers :: Multimap GroupId ActorId
-  , storeGroupRoots :: Set GroupId
-  , storeGroupEdges :: Set (GroupId, GroupId)
-  , storeGroupOuts :: Set GroupId
+  , storeGroupRoots :: Set GroupId -- ^ Only groups without parents
+  , storeGroupEdges :: Set (GroupId, GroupId) -- ^ All group edges
+  , storeGroupOuts :: Set GroupId -- ^ Only groups with parents and have no children
+  , storeGroups :: Set GroupId -- ^ All groups
   , storeActors :: Set ActorId
   , storeSpaces :: Set SpaceId
   , storeSpaceEntities :: Multimap SpaceId EntityId
@@ -126,6 +127,7 @@ makeLensesFor
   , ("storeGroupRoots", "toRoots")
   , ("storeGroupEdges", "toEdges")
   , ("storeGroupOuts", "toOuts")
+  , ("storeGroups", "toGroups")
   , ("storeActors", "toActors")
   , ("storeSpaces", "toSpaces")
   , ("storeSpaceEntities", "toSpaceEntities")
@@ -149,6 +151,7 @@ newStore = do
   roots <- Set.new
   edges <- Set.new
   outs <- Set.new
+  gs <- Set.new
   as <- Set.new
   ss <- Set.new
   se <- Multimap.new
@@ -169,6 +172,7 @@ newStore = do
       , storeGroupRoots = roots
       , storeGroupEdges = edges
       , storeGroupOuts = outs
+      , storeGroups = gs
       , storeActors = as
       , storeSpaces = ss
       , storeSpaceEntities = se

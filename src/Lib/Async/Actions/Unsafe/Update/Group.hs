@@ -1,7 +1,6 @@
 module Lib.Async.Actions.Unsafe.Update.Group where
 
 import Control.Concurrent.STM (STM, modifyTVar, newTVar, readTVar, writeTVar)
-import Control.Exception (Exception)
 import Control.Lens ((^.))
 import Control.Monad (unless)
 import Control.Monad.Base (MonadBase (liftBase))
@@ -13,7 +12,6 @@ import Data.Maybe (fromMaybe)
 import Data.Monoid (First (..))
 import DeferredFolds.UnfoldlM (forM_)
 import qualified Focus
-import GHC.Generics (Generic)
 import Lib.Async.Actions.Tabulation (updateTabulatedPermissionsStartingAt)
 import Lib.Async.Types.Monad (TerseM)
 import Lib.Async.Types.Store (
@@ -32,6 +30,7 @@ import Lib.Async.Types.Store (
   toPermUniverse,
   toRoots,
  )
+import Lib.Types.Errors (CycleDetected (..))
 import Lib.Types.Id (GroupId, SpaceId)
 import Lib.Types.Permission (
   CollectionPermission (Blind),
@@ -63,10 +62,6 @@ hasCycle = do
                   writeTVar trailVar trail'
     forM_ (Set.unfoldlM (s ^. store . toRoots)) dfs
     getFirst <$> readTVar resultVar
-
-newtype CycleDetected = CycleDetected [GroupId]
-  deriving (Generic, Show, Eq)
-instance Exception CycleDetected
 
 unsafeLinkGroups :: GroupId -> GroupId -> TerseM STM ()
 unsafeLinkGroups from to = do

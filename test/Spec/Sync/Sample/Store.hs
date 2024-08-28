@@ -61,10 +61,10 @@ import Lib.Types.Permission (
   CollectionPermission (..),
   SinglePermission,
  )
-
 import Control.Monad (replicateM, void)
 import Control.Monad.Extra (unless)
-import Control.Monad.State (State, execState, get)
+import Control.Exception (SomeException)
+import Control.Monad.State (StateT, execStateT, get)
 import Data.Foldable (foldlM, for_, traverse_)
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HM
@@ -188,7 +188,7 @@ instance Arbitrary SampleStore where
     ]
 
 loadSample :: SampleStore -> Shared
-loadSample SampleStore{..} = flip execState (loadSampleTree sampleGroups) $ do
+loadSample SampleStore{..} = errorOnLeft . flip execStateT (loadSampleTree sampleGroups) $ do
   for_ (HS.toList sampleSpaces) $ \sId -> do
     unsafeStoreSpace sId
   for_ sampleEntities $ \(eId, (sId, vIds, mFork)) -> do
@@ -206,7 +206,7 @@ loadSample SampleStore{..} = flip execState (loadSampleTree sampleGroups) $ do
   let loadPermissions
         :: SampleGroupTree
             (HashMap SpaceId SinglePermission, HashMap SpaceId CollectionPermission)
-        -> State Shared ()
+        -> StateT Shared (Either SomeException) ()
       loadPermissions SampleGroupTree{current, auxPerGroup = (spacesPerms, entityPerms), children} = do
         for_ (HM.toList spacesPerms) $ \(space, permission) -> do
           unsafeAdjustSpacePermission (const (Just permission)) current space
@@ -221,7 +221,7 @@ loadSample SampleStore{..} = flip execState (loadSampleTree sampleGroups) $ do
 
 storeSample :: SampleStore -> ActorId -> GroupId -> Shared
 storeSample SampleStore{..} adminActor adminGroup =
-  flip execState (storeSampleTree sampleGroups adminActor adminGroup) $ do
+  errorOnLeft . flip execStateT (storeSampleTree sampleGroups adminActor adminGroup) $ do
     for_ (HS.toList sampleSpaces) $ \sId -> do
       succeeded <- storeSpace (NE.singleton adminActor) sId
       unless succeeded $ do
@@ -297,7 +297,7 @@ storeSample SampleStore{..} adminActor adminGroup =
     let loadPermissions
           :: SampleGroupTree
               (HashMap SpaceId SinglePermission, HashMap SpaceId CollectionPermission)
-          -> State Shared ()
+          -> StateT Shared (Either SomeException) ()
         loadPermissions SampleGroupTree{current, auxPerGroup = (spacesPerms, entityPerms), children} = do
           for_ (HM.toList spacesPerms) $ \(space, permission) -> do
             succeeded <-
@@ -336,6 +336,11 @@ storeSample SampleStore{..} adminActor adminGroup =
               <> show (aId, gId)
               <> " - "
               <> LT.unpack (pShowNoColor s)
+
+errorOnLeft :: Show l => Either l a -> a
+errorOnLeft eX = case eX of
+  Left e -> error $ show e
+  Right x -> x
 
 arbitraryShared :: Gen (Shared, ActorId, GroupId)
 arbitraryShared = do

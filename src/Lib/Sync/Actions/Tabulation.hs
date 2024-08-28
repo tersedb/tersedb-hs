@@ -123,7 +123,7 @@ updateTabulationStartingAt gId = do
       Just parent -> case s ^. temp . toTabulatedGroups . at parent of
         Nothing -> do
           t <- initTabulatedPermissionsForGroup parent
-          modify $ temp . toTabulatedGroups . at parent .~ Just t
+          modify $ temp . toTabulatedGroups . at parent ?~ t
           pure t
         Just t -> pure t
     pure (parentTab <> initTab)

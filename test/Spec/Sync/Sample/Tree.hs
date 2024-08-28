@@ -59,10 +59,9 @@ import Lib.Types.Permission (
   CollectionPermissionWithExemption (..),
   SinglePermission (Adjust),
  )
-
 import Control.Lens (at, ix, (%~), (&), (.~), (?~))
 import Control.Monad.Extra (unless)
-import Control.Monad.State (State, execState, get, modify)
+import Control.Monad.State (StateT, get, modify, execStateT)
 import Data.Foldable (traverse_)
 import qualified Data.List.NonEmpty as NE
 import Data.Maybe (fromMaybe)
@@ -74,6 +73,7 @@ import Test.QuickCheck (
   resize,
  )
 import Text.Pretty.Simple (pShowNoColor)
+import Control.Exception (SomeException)
 
 data SampleGroupTree a = SampleGroupTree
   { current :: GroupId
@@ -122,16 +122,20 @@ instance Arbitrary (SampleGroupTree ()) where
          ]
 
 storeSampleTree :: SampleGroupTree a -> ActorId -> GroupId -> Shared
-storeSampleTree xs adminActor adminGroup = flip execState (emptyShared adminActor adminGroup) $ do
-  succeeded <- storeGroup (NE.singleton adminActor) (current xs)
-  unless succeeded $ do
-    s <- get
-    error $
-      "Failed to store first group "
-        <> show (current xs)
-        <> " - "
-        <> LT.unpack (pShowNoColor s)
-  go xs
+storeSampleTree xs adminActor adminGroup = 
+  let eX = flip execStateT (emptyShared adminActor adminGroup) $ do
+        succeeded <- storeGroup (NE.singleton adminActor) (current xs)
+        unless succeeded $ do
+          s <- get
+          error $
+            "Failed to store first group "
+              <> show (current xs)
+              <> " - "
+              <> LT.unpack (pShowNoColor s)
+        go xs
+  in  case eX of
+        Left e -> error $ show e
+        Right x -> x
  where
   setupNode current univ org recr = do
     succeeded <- storeGroup (NE.singleton adminActor) current -- adds current as a root
@@ -185,7 +189,7 @@ storeSampleTree xs adminActor adminGroup = flip execState (emptyShared adminActo
     -- ensures that singleton maps still have loaded tabs
     modify $ temp . toTabulatedGroups . at current %~ Just . fromMaybe currentTab
 
-  go :: SampleGroupTree a -> State Shared ()
+  go :: SampleGroupTree a -> StateT Shared (Either SomeException) ()
   go SampleGroupTree{..} = do
     setupNode current univ org recr
     -- loads all nodes
@@ -197,9 +201,13 @@ storeSampleTree xs adminActor adminGroup = flip execState (emptyShared adminActo
 
 -- | Uses unsafe methods
 loadSampleTree :: SampleGroupTree a -> Shared
-loadSampleTree xs = flip execState unsafeEmptyShared $ do
-  modify $ store . toGroups . roots . at (current xs) ?~ ()
-  go xs
+loadSampleTree xs = 
+  let eX = flip execStateT unsafeEmptyShared $ do
+        modify $ store . toGroups . roots . at (current xs) ?~ ()
+        go xs
+  in  case eX of
+        Left e -> error $ show e
+        Right x -> x
  where
   setupNode current univ org recr = do
     modify $ store . toGroups . nodes . at current %~ Just . fromMaybe emptyGroup
@@ -210,7 +218,7 @@ loadSampleTree xs = flip execState unsafeEmptyShared $ do
     -- ensures that singleton maps still have loaded tabs
     modify $ temp . toTabulatedGroups . at current %~ Just . fromMaybe currentTab
 
-  go :: SampleGroupTree a -> State Shared ()
+  go :: SampleGroupTree a -> StateT Shared (Either SomeException) ()
   go SampleGroupTree{..} = do
     setupNode current univ org recr
     -- loads all nodes
@@ -221,11 +229,15 @@ loadSampleTree xs = flip execState unsafeEmptyShared $ do
     traverse_ go children
 
 loadSampleTreeNoTab :: SampleGroupTree a -> Shared
-loadSampleTreeNoTab xs = flip execState unsafeEmptyShared $ do
-  modify $ store . toGroups . roots . at (current xs) ?~ ()
-  go xs
+loadSampleTreeNoTab xs =
+  let eX = flip execStateT unsafeEmptyShared $ do
+        modify $ store . toGroups . roots . at (current xs) ?~ ()
+        go xs
+  in  case eX of
+        Left e -> error $ show e
+        Right x -> x
  where
-  addLink :: GroupId -> GroupId -> State Shared ()
+  addLink :: GroupId -> GroupId -> StateT Shared (Either SomeException) ()
   addLink from to = do
     let adjustGroups groups =
           groups
@@ -243,7 +255,7 @@ loadSampleTreeNoTab xs = flip execState unsafeEmptyShared $ do
     unsafeAdjustOrganizationPermission (const org) current
     unsafeAdjustRecruiterPermission (const recr) current
 
-  go :: SampleGroupTree a -> State Shared ()
+  go :: SampleGroupTree a -> StateT Shared (Either SomeException) ()
   go SampleGroupTree{..} = do
     setupNode current univ org recr
     let linkChild (SampleGroupTree child univChild orgChild recrChild _ _) = do

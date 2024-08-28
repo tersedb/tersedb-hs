@@ -47,7 +47,7 @@ import Lib.Async.Types.Store (
   toTabOther,
   toTabRecruiter,
   toTabUniverse,
-  toVersions,
+  toVersions, toGroups,
  )
 import Lib.Async.Types.Tabulation (
   forEntities,
@@ -65,12 +65,14 @@ import qualified Lib.Sync.Types.Store.Version as Sync
 import qualified StmContainers.Map as Map
 import qualified StmContainers.Multimap as Multimap
 import qualified StmContainers.Set as Set
+import Control.Monad (when)
 
 loadSyncStore :: (MonadReader Shared m, MonadBase STM m) => Sync.Store -> m ()
 loadSyncStore syncStore = do
   s <- ask
   liftBase $ do
     for_ (HM.toList $ syncStore ^. Sync.toGroups . Sync.nodes) $ \(gId, g) -> do
+      Set.insert gId (s ^. store . toGroups)
       case g ^. Sync.prev of
         Nothing -> pure ()
         Just prev -> Map.insert prev gId (s ^. store . toGroupsPrev)
@@ -138,29 +140,30 @@ genSyncStore = do
   liftBase $ do
     syncStore <- newTVar (unsafeEmptyShared ^. Sync.store)
 
-    forM_ (Set.unfoldlM (s ^. store . toRoots)) $ \gId -> do
+    forM_ (Set.unfoldlM (s ^. store . toGroups)) $ \gId -> do
       modifyTVar syncStore (Sync.toGroups . Sync.nodes . at gId ?~ Sync.emptyGroup)
-      modifyTVar syncStore (Sync.toGroups . Sync.roots . at gId ?~ ())
-
-    forM_ (Set.unfoldlM (s ^. store . toOuts)) $ \gId -> do
-      modifyTVar syncStore (Sync.toGroups . Sync.nodes . at gId ?~ Sync.emptyGroup)
-      modifyTVar syncStore (Sync.toGroups . Sync.outs . at gId ?~ ())
+      isRoot <- Set.lookup gId (s ^. store . toRoots)
+      when isRoot $
+        modifyTVar syncStore (Sync.toGroups . Sync.roots . at gId ?~ ())
+      isOut <- Set.lookup gId (s ^. store . toOuts)
+      when isOut $
+        modifyTVar syncStore (Sync.toGroups . Sync.outs . at gId ?~ ())
+      mPrev <- Map.lookup gId (s ^. store . toGroupsPrev)
+      case mPrev of
+        Nothing -> pure ()
+        Just prevId ->
+          modifyTVar syncStore (Sync.toGroups . Sync.nodes . ix gId . Sync.prev ?~ prevId)
+      forM_ (Multimap.unfoldlMByKey gId (s ^. store . toGroupsNext)) $ \nextId ->
+        modifyTVar
+          syncStore
+          (Sync.toGroups . Sync.nodes . ix gId . Sync.next . at nextId ?~ ())
+      forM_ (Multimap.unfoldlMByKey gId (s ^. store . toMembers)) $ \aId ->
+        modifyTVar
+          syncStore
+          (Sync.toGroups . Sync.nodes . ix gId . Sync.members . at aId ?~ ())
 
     forM_ (Set.unfoldlM (s ^. store . toEdges)) $ \(fromId, toId) -> do
-      modifyTVar syncStore (Sync.toGroups . Sync.nodes . at fromId ?~ Sync.emptyGroup)
-      modifyTVar syncStore (Sync.toGroups . Sync.nodes . at toId ?~ Sync.emptyGroup)
       modifyTVar syncStore (Sync.toGroups . Sync.edges . at (fromId, toId) ?~ ())
-
-    forM_ (Map.unfoldlM (s ^. store . toGroupsPrev)) $ \(gId, forkId) ->
-      modifyTVar syncStore (Sync.toGroups . Sync.nodes . ix gId . Sync.prev ?~ forkId)
-    forM_ (Multimap.unfoldlM (s ^. store . toGroupsNext)) $ \(gId, nextId) ->
-      modifyTVar
-        syncStore
-        (Sync.toGroups . Sync.nodes . ix gId . Sync.next . at nextId ?~ ())
-    forM_ (Multimap.unfoldlM (s ^. store . toMembers)) $ \(gId, aId) ->
-      modifyTVar
-        syncStore
-        (Sync.toGroups . Sync.nodes . ix gId . Sync.members . at aId ?~ ())
 
     forM_ (Set.unfoldlM (s ^. store . toActors)) $ \aId ->
       modifyTVar syncStore (Sync.toActors . at aId ?~ ())

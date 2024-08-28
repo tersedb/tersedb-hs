@@ -23,6 +23,7 @@ import Lib.Sync.Types.Store.Version (references, subscriptions)
 import Lib.Types.Id (EntityId, SpaceId, VersionId)
 import ListT (ListT)
 import qualified ListT
+import qualified DeferredFolds.UnfoldlM as UnfoldlM
 
 newtype ReadingStateT s m a = ReadingStateT
   { runReadingStateT :: StateT s m a
@@ -36,11 +37,11 @@ put' :: (Monad m) => s -> ReadingStateT s m ()
 put' s = ReadingStateT (put s)
 
 unsafeReadReferencesEager
-  :: (MonadState Shared m) => VersionId -> UnfoldlM m VersionId
-unsafeReadReferencesEager vId = UnfoldlM $ \f acc -> do
+  :: (MonadState Shared m) => VersionId -> m (UnfoldlM m VersionId)
+unsafeReadReferencesEager vId = do
   s <- get
   let refs = fromMaybe mempty $ s ^? store . toVersions . ix vId . references
-  foldlM f acc refs
+  pure (UnfoldlM.foldable refs)
 
 unsafeReadReferencesLazy
   :: forall m. (MonadState Shared m) => VersionId -> m (ListT m VersionId)
@@ -50,11 +51,11 @@ unsafeReadReferencesLazy vId = do
   pure (ListT.fromFoldable refs)
 
 unsafeReadReferencesFromEager
-  :: (MonadState Shared m) => VersionId -> UnfoldlM m VersionId
-unsafeReadReferencesFromEager vId = UnfoldlM $ \f acc -> do
+  :: (MonadState Shared m) => VersionId -> m (UnfoldlM m VersionId)
+unsafeReadReferencesFromEager vId = do
   s <- get
   let refs = s ^. temp . toReferencesFrom . at vId . non mempty
-  foldlM f acc refs
+  pure (UnfoldlM.foldable refs)
 
 unsafeReadReferencesFromLazy
   :: forall m. (MonadState Shared m) => VersionId -> m (ListT m VersionId)
@@ -64,11 +65,11 @@ unsafeReadReferencesFromLazy vId = do
   pure (ListT.fromFoldable refs)
 
 unsafeReadSubscriptionsEager
-  :: (MonadState Shared m) => VersionId -> UnfoldlM m EntityId
-unsafeReadSubscriptionsEager vId = UnfoldlM $ \f acc -> do
+  :: (MonadState Shared m) => VersionId -> m (UnfoldlM m EntityId)
+unsafeReadSubscriptionsEager vId = do
   s <- get
   let subs = fromMaybe mempty $ s ^? store . toVersions . ix vId . subscriptions
-  foldlM f acc subs
+  pure (UnfoldlM.foldable subs)
 
 unsafeReadSubscriptionsLazy
   :: forall m. (MonadState Shared m) => VersionId -> m (ListT m EntityId)
@@ -78,11 +79,11 @@ unsafeReadSubscriptionsLazy vId = do
   pure (ListT.fromFoldable subs)
 
 unsafeReadSubscriptionsFromEager
-  :: (MonadState Shared m) => EntityId -> UnfoldlM m VersionId
-unsafeReadSubscriptionsFromEager eId = UnfoldlM $ \f acc -> do
+  :: (MonadState Shared m) => EntityId -> m (UnfoldlM m VersionId)
+unsafeReadSubscriptionsFromEager eId = do
   s <- get
   let subs = s ^. temp . toSubscriptionsFrom . at eId . non mempty
-  foldlM f acc subs
+  pure (UnfoldlM.foldable subs)
 
 unsafeReadSubscriptionsFromLazy
   :: forall m. (MonadState Shared m) => EntityId -> m (ListT m VersionId)
@@ -92,11 +93,11 @@ unsafeReadSubscriptionsFromLazy eId = do
   pure (ListT.fromFoldable subs)
 
 unsafeReadEntitiesEager
-  :: (MonadState Shared m) => SpaceId -> UnfoldlM m EntityId
-unsafeReadEntitiesEager sId = UnfoldlM $ \f acc -> do
+  :: (MonadState Shared m) => SpaceId -> m (UnfoldlM m EntityId)
+unsafeReadEntitiesEager sId = do
   s <- get
   let es = s ^. store . toSpaces . at sId . non mempty
-  foldlM f acc es
+  pure (UnfoldlM.foldable es)
 
 unsafeReadEntitiesLazy
   :: forall m. (MonadState Shared m) => SpaceId -> m (ListT m EntityId)

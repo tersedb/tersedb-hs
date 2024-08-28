@@ -37,7 +37,7 @@ import Lib.Async.Types.Store (
   toSpaces,
   toSubscriptions,
   toSubscriptionsFrom,
-  toVersions,
+  toVersions, toGroups,
  )
 import Lib.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
 import qualified StmContainers.Map as Map
@@ -135,3 +135,4 @@ unsafeRemoveGroup gId = do
       runInBase $ unsafeUnlinkGroups gId nextId
     Set.delete gId (s ^. store . toRoots)
     Set.delete gId (s ^. store . toOuts)
+    Set.delete gId (s ^. store . toGroups)

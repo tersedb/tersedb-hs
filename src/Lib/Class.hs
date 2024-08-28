@@ -7,15 +7,9 @@ import Control.Monad.Extra (andM, anyM)
 import Control.Monad.IO.Class (MonadIO)
 import Control.Monad.Morph (hoist)
 import Control.Monad.Reader (MonadReader (ask), ReaderT (runReaderT))
-import Control.Monad.State (
-  MonadState (get, put),
-  StateT (runStateT),
-  evalStateT,
- )
-import Control.Monad.Trans.Control (MonadBaseControl (liftBaseWith))
 import Data.List.NonEmpty (NonEmpty)
 import qualified Data.List.NonEmpty as NE
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, isJust)
 import Data.Maybe.HT (toMaybe)
 import DeferredFolds.UnfoldlM (UnfoldlM)
 import Lib.Actions.Safe.Utils (conditionally)
@@ -53,7 +47,12 @@ import Lib.Types.Permission (
 import ListT (ListT)
 import qualified ListT
 import qualified StmContainers.Map as Map
+import qualified StmContainers.Set as Set
+import qualified StmContainers.Multimap as Multimap
 import System.Random.Stateful (Uniform (uniformM), globalStdGen)
+import Control.Monad.Catch (MonadThrow)
+import qualified DeferredFolds.UnfoldlM as UnfoldlM
+import Control.Monad.State (evalStateT, get, put)
 
 generateWithAuthority
   :: ( MonadIO m
@@ -150,16 +149,22 @@ class (Monad m) => TerseDB n m | m -> n where
   hasEntityPermission :: ActorId -> SpaceId -> CollectionPermission -> m Bool
   hasGroupPermission :: ActorId -> GroupId -> SinglePermission -> m Bool
   hasMemberPermission :: ActorId -> GroupId -> CollectionPermission -> m Bool
+  unsafeActorExists :: ActorId -> m Bool
+  unsafeGroupExists :: GroupId -> m Bool
+  unsafeMemberExists :: GroupId -> ActorId -> m Bool
+  unsafeSpaceExists :: SpaceId -> m Bool
+  unsafeEntityExists :: EntityId -> m Bool
+  unsafeVersionExists :: VersionId -> m Bool
   unsafeReadPrevGroup :: GroupId -> m (Maybe GroupId)
-  unsafeReadReferencesEager :: VersionId -> UnfoldlM m VersionId
+  unsafeReadReferencesEager :: VersionId -> m (UnfoldlM m VersionId)
   unsafeReadReferencesLazy :: VersionId -> m (ListT m VersionId)
-  unsafeReadReferencesFromEager :: VersionId -> UnfoldlM m VersionId
+  unsafeReadReferencesFromEager :: VersionId -> m (UnfoldlM m VersionId)
   unsafeReadReferencesFromLazy :: VersionId -> m (ListT m VersionId)
-  unsafeReadSubscriptionsEager :: VersionId -> UnfoldlM m EntityId
+  unsafeReadSubscriptionsEager :: VersionId -> m (UnfoldlM m EntityId)
   unsafeReadSubscriptionsLazy :: VersionId -> m (ListT m EntityId)
-  unsafeReadSubscriptionsFromEager :: EntityId -> UnfoldlM m VersionId
+  unsafeReadSubscriptionsFromEager :: EntityId -> m (UnfoldlM m VersionId)
   unsafeReadSubscriptionsFromLazy :: EntityId -> m (ListT m VersionId)
-  unsafeReadEntitiesEager :: SpaceId -> UnfoldlM m EntityId
+  unsafeReadEntitiesEager :: SpaceId -> m (UnfoldlM m EntityId)
   unsafeReadEntitiesLazy :: SpaceId -> m (ListT m EntityId)
   unsafeStoreGroup :: GroupId -> m ()
   unsafeStoreActor :: ActorId -> m ()
@@ -202,7 +207,7 @@ class (Monad m) => TerseDB n m | m -> n where
   unsafeRemoveActor :: ActorId -> m ()
   unsafeRemoveGroup :: GroupId -> m ()
 
-instance (Monad m) => TerseDB (Sync.TerseM m) (Sync.TerseM m) where
+instance (MonadThrow m) => TerseDB (Sync.TerseM m) (Sync.TerseM m) where
   commit = id
   loadSyncShared = put
   genSyncShared = get
@@ -240,6 +245,24 @@ instance (Monad m) => TerseDB (Sync.TerseM m) (Sync.TerseM m) where
   hasEntityPermission = Sync.hasEntityPermission
   hasGroupPermission = Sync.hasGroupPermission
   hasMemberPermission = Sync.hasMemberPermission
+  unsafeActorExists aId = do
+    s <- get
+    pure . isJust $ s ^? Sync.store . Sync.toActors . ix aId
+  unsafeGroupExists gId = do
+    s <- get
+    pure . isJust $ s ^? Sync.store . Sync.toGroups . Sync.nodes . ix gId
+  unsafeMemberExists gId aId = do
+    s <- get
+    pure . isJust $ s ^? Sync.store . Sync.toGroups . Sync.nodes . ix gId . Sync.members . ix aId
+  unsafeSpaceExists sId = do
+    s <- get
+    pure . isJust $ s ^? Sync.store . Sync.toSpaces . ix sId
+  unsafeEntityExists eId = do
+    s <- get
+    pure . isJust $ s ^? Sync.store . Sync.toEntities . ix eId
+  unsafeVersionExists vId = do
+    s <- get
+    pure . isJust $ s ^? Sync.store . Sync.toVersions . ix vId
   unsafeReadPrevGroup gId = do
     s <- get
     pure $ s ^? Sync.store . Sync.toGroups . Sync.nodes . ix gId . Sync.prev . _Just
@@ -323,6 +346,24 @@ instance TerseDB (Async.TerseM IO) (Async.TerseM STM) where
   hasEntityPermission = Async.hasEntityPermission
   hasGroupPermission = Async.hasGroupPermission
   hasMemberPermission = Async.hasMemberPermission
+  unsafeActorExists aId = do
+    s <- ask
+    liftBase $ Set.lookup aId (s ^. Async.store . Async.toActors)
+  unsafeGroupExists gId = do
+    s <- ask
+    liftBase $ Set.lookup gId (s ^. Async.store . Async.toGroups)
+  unsafeMemberExists gId aId = do
+    s <- ask
+    liftBase $ Multimap.lookup aId gId (s ^. Async.store . Async.toMembers)
+  unsafeSpaceExists sId = do
+    s <- ask
+    liftBase $ Set.lookup sId (s ^. Async.store . Async.toSpaces)
+  unsafeEntityExists eId = do
+    s <- ask
+    liftBase $ isJust <$> Map.lookup eId (s ^. Async.store . Async.toEntities)
+  unsafeVersionExists vId = do
+    s <- ask
+    liftBase $ Set.lookup vId (s ^. Async.store . Async.toVersions)
   unsafeReadPrevGroup gId = do
     s <- ask
     liftBase $ Map.lookup gId (s ^. Async.store . Async.toGroupsPrev)
@@ -365,6 +406,96 @@ instance TerseDB (Async.TerseM IO) (Async.TerseM STM) where
   unsafeRemoveMember = Async.unsafeRemoveMember
   unsafeRemoveActor = Async.unsafeRemoveActor
   unsafeRemoveGroup = Async.unsafeRemoveGroup
+
+-- * Read
+
+actorExists :: TerseDB n m => NonEmpty ActorId -> ActorId -> m (Maybe Bool)
+actorExists readers aId = do
+  canAdjust <- anyCanReadActor readers
+  if not canAdjust
+  then pure Nothing
+  else Just <$> unsafeActorExists aId
+
+groupExists :: TerseDB n m => NonEmpty ActorId -> GroupId -> m (Maybe Bool)
+groupExists readers gId = do
+  canAdjust <- anyCanReadGroup readers gId
+  if not canAdjust
+  then pure Nothing
+  else Just <$> unsafeGroupExists gId
+
+memberExists :: TerseDB n m => NonEmpty ActorId -> GroupId -> ActorId -> m (Maybe Bool)
+memberExists readers gId aId = do
+  canAdjust <- anyCanReadMember readers gId
+  if not canAdjust
+  then pure Nothing
+  else Just <$> unsafeActorExists aId
+
+spaceExists :: TerseDB n m => NonEmpty ActorId -> SpaceId -> m (Maybe Bool)
+spaceExists readers sId = do
+  canAdjust <- anyCanReadSpace readers sId
+  if not canAdjust
+  then pure Nothing
+  else Just <$> unsafeSpaceExists sId
+
+entityExists :: TerseDB n m => NonEmpty ActorId -> EntityId -> m (Maybe Bool)
+entityExists readers eId = do
+  canAdjust <- anyCanReadEntity readers eId
+  if not canAdjust
+  then pure Nothing
+  else Just <$> unsafeEntityExists eId
+
+versionExists :: TerseDB n m => NonEmpty ActorId -> VersionId -> m (Maybe Bool)
+versionExists readers vId = do
+  canAdjust <- anyCanReadVersion readers vId
+  if not canAdjust
+  then pure Nothing
+  else Just <$> unsafeVersionExists vId
+
+readPrevGroup :: TerseDB n m => NonEmpty ActorId -> GroupId -> m (Maybe (Maybe GroupId))
+readPrevGroup readers gId = do
+  canAdjust <- anyCanReadGroup readers gId
+  if not canAdjust
+  then pure Nothing
+  else Just <$> unsafeReadPrevGroup gId
+
+readReferences :: TerseDB n m => NonEmpty ActorId -> VersionId -> m (Maybe (UnfoldlM m VersionId))
+readReferences readers vId = do
+  canAdjust <- anyCanReadVersion readers vId
+  if not canAdjust
+  then pure Nothing
+  else Just . UnfoldlM.filter (anyCanReadVersion readers)
+    <$> unsafeReadReferencesEager vId
+
+readReferencesFrom :: TerseDB n m => NonEmpty ActorId -> VersionId -> m (Maybe (UnfoldlM m VersionId))
+readReferencesFrom readers vId = do
+  canAdjust <- anyCanReadVersion readers vId
+  if not canAdjust
+  then pure Nothing
+  else Just . UnfoldlM.filter (anyCanReadVersion readers)
+    <$> unsafeReadReferencesFromEager vId
+
+readSubscriptions :: TerseDB n m => NonEmpty ActorId -> VersionId -> m (Maybe (UnfoldlM m EntityId))
+readSubscriptions readers vId = do
+  canAdjust <- anyCanReadVersion readers vId
+  if not canAdjust
+  then pure Nothing
+  else Just . UnfoldlM.filter (anyCanReadEntity readers)
+    <$> unsafeReadSubscriptionsEager vId
+
+readSubscriptionsFrom :: TerseDB n m => NonEmpty ActorId -> EntityId -> m (Maybe (UnfoldlM m VersionId))
+readSubscriptionsFrom readers eId = do
+  canAdjust <- anyCanReadEntity readers eId
+  if not canAdjust
+  then pure Nothing
+  else Just . UnfoldlM.filter (anyCanReadVersion readers)
+    <$> unsafeReadSubscriptionsFromEager eId
+
+readEntities :: TerseDB n m => NonEmpty ActorId -> SpaceId -> m (Maybe (UnfoldlM m EntityId))
+readEntities readers sId = do
+  canAdjust <- anyCanReadAllEntities readers sId
+  if not canAdjust
+  then pure Nothing
+  else Just <$> unsafeReadEntitiesEager sId
 
 -- * Store
 

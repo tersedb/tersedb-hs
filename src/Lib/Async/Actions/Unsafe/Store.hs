@@ -38,7 +38,7 @@ import Lib.Async.Types.Store (
   toSpaceOf,
   toSpaces,
   toSpacesHiddenTo,
-  toVersions,
+  toVersions, toGroups,
  )
 import Lib.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
 import Lib.Types.Permission (CollectionPermission (Blind), collectionPermission)
@@ -50,6 +50,7 @@ unsafeStoreGroup :: GroupId -> TerseM STM ()
 unsafeStoreGroup gId = do
   s <- ask
   liftBase $ do
+    Set.insert gId (s ^. store . toGroups)
     Map.insert minBound gId (s ^. store . toPermUniverse)
     Map.insert minBound gId (s ^. store . toPermOrganization)
     Map.insert minBound gId (s ^. store . toPermRecruiter)

@@ -28,6 +28,7 @@ source-repository head
 library
   exposed-modules:
       Lib.Actions.Safe.Utils
+      Lib.Api
       Lib.Async.Actions.Safe.Store
       Lib.Async.Actions.Safe.Verify
       Lib.Async.Actions.Safe.Verify.Actor
@@ -68,6 +69,7 @@ library
       Lib.Sync.Types.Store.Groups
       Lib.Sync.Types.Store.Tabulation.Group
       Lib.Sync.Types.Store.Version
+      Lib.Types.Errors
       Lib.Types.Id
       Lib.Types.Permission
   other-modules:
@@ -123,6 +125,7 @@ library
     , transformers-base
     , unordered-containers
     , utility-ht
+    , vector
   default-language: Haskell2010
 
 executable tersedb-hs
@@ -181,6 +184,7 @@ executable tersedb-hs
     , transformers-base
     , unordered-containers
     , utility-ht
+    , vector
   default-language: Haskell2010
 
 test-suite tersedb-test
@@ -257,4 +261,5 @@ test-suite tersedb-test
     , transformers-base
     , unordered-containers
     , utility-ht
+    , vector
   default-language: Haskell2010

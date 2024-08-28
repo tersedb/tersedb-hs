@@ -34,30 +34,10 @@ import Lib.Sync.Actions.Unsafe.Update.Group (
 import Lib.Sync.Types.Store (Shared, store, toGroups)
 import Lib.Sync.Types.Store.Groups (next, nodes, prev)
 import Lib.Types.Id (ActorId, GroupId)
-
-updateGroupParent
-  :: (MonadState Shared m)
-  => NonEmpty ActorId
-  -> GroupId
-  -> Maybe GroupId
-  -> m Bool
-updateGroupParent updater gId mParent = do
-  canAdjust <-
-    andM
-      [ anyCanUpdateGroup updater gId
-      , do
-          s <- get
-          case s ^? store . toGroups . nodes . ix gId . prev . _Just of
-            Nothing -> pure True
-            Just oldParent -> anyCanUpdateGroup updater oldParent
-      , case mParent of
-          Nothing -> pure True
-          Just newParent -> anyCanUpdateGroup updater newParent
-      ]
-  conditionally (unsafeUpdateGroupParent gId mParent) canAdjust
+import Control.Monad.Catch (MonadThrow)
 
 updateGroupChildren
-  :: (MonadState Shared m)
+  :: (MonadState Shared m, MonadThrow m)
   => NonEmpty ActorId
   -> GroupId
   -> HashSet GroupId
