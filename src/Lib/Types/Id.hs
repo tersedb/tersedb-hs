@@ -18,7 +18,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 You can reach me at athan.clark@gmail.com.
 -}
 
-module Lib.Types.Id (GroupId, ActorId, SpaceId, EntityId, VersionId) where
+module Lib.Types.Id (GroupId, ActorId, SpaceId, EntityId, VersionId, AnyId (..)) where
 
 import Data.Aeson (FromJSON, ToJSON)
 import Data.Hashable (Hashable)
@@ -79,3 +79,12 @@ newtype VersionId = VersionId
 
 instance Uniform VersionId where
   uniformM gen = VersionId <$> uniformM gen
+
+
+data AnyId
+  = AnyIdActor ActorId
+  | AnyIdGroup GroupId
+  | AnyIdSpace SpaceId
+  | AnyIdEntity EntityId VersionId
+  | AnyIdVersion VersionId
+  deriving (Eq, Ord, Show, Read)

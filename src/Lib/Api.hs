@@ -1,16 +1,19 @@
 module Lib.Api where
 
 import Data.Vector (Vector)
-import Lib.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
+import Lib.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId, AnyId (..))
 import Lib.Types.Permission (
   CollectionPermission,
   CollectionPermissionWithExemption,
   SinglePermission,
  )
 import Data.List.NonEmpty (NonEmpty)
-import Lib.Class (TerseDB (anyCanReadActor), readEntities, actorExists, readReferences, readSubscriptions, readSubscriptionsFrom, readReferencesFrom, readPrevGroup, groupExists, memberExists, spaceExists, entityExists, versionExists, readActors, readGroups, readMembersOf, readMembers, readSpaces, readVersions, readNextGroups, readForkOf, readForkedBy)
+import Lib.Class (TerseDB (anyCanReadActor, commit), readEntities, actorExists, readReferences, readSubscriptions, readSubscriptionsFrom, readReferencesFrom, readPrevGroup, groupExists, memberExists, spaceExists, entityExists, versionExists, readActors, readGroups, readMembersOf, readMembers, readSpaces, readVersions, readNextGroups, readForkOf, readForkedBy, TerseDBGen, storeActor, storeGroup, addMember, storeSpace, storeEntity, storeNextVersion)
 import qualified Data.Vector as V
 import qualified DeferredFolds.UnfoldlM as UnfoldlM
+import Data.Data (Proxy(Proxy))
+import System.Random.Stateful (Uniform(uniformM), globalStdGen)
+import Control.Monad.IO.Class (MonadIO)
 
 data ReadAction
   = ReadAllActors
@@ -115,12 +118,28 @@ data Response
   deriving (Eq, Show, Read)
 
 
-act :: (TerseDB n m) => NonEmpty ActorId -> [Action] -> m [Response]
-act actors = traverse go
+act :: forall m n. (TerseDB n m, MonadIO n) => Proxy m -> NonEmpty ActorId -> [Action] -> n [Response]
+act Proxy actors xs = do
+  ids <- traverse genId xs
+  commit (traverse (uncurry go) (zip xs ids))
   where
-    go action = case action of
+    genId :: Action -> n (Maybe AnyId)
+    genId action = case action of
+      CreateAction x -> case x of
+        CreateActor -> Just . AnyIdActor <$> gen
+        CreateGroup -> Just . AnyIdGroup <$> gen
+        CreateSpace -> Just . AnyIdSpace <$> gen
+        CreateEntity _ _ -> Just <$> (AnyIdEntity <$> gen <*> gen)
+        CreateVersion _ -> Just . AnyIdVersion <$> gen
+        _ -> pure Nothing
+      _ -> pure Nothing
+      where
+        gen :: forall a. Uniform a => n a
+        gen = uniformM globalStdGen
+    go :: Action -> Maybe AnyId -> m Response
+    go action mId = case action of
       ReadAction x -> goRead x
-      CreateAction x -> goCreate x
+      CreateAction x -> goCreate x mId
       UpdateAction x -> goUpdate x
       DeleteAction x -> goDelete x
     goRead x = case x of
@@ -229,7 +248,26 @@ act actors = traverse go
         case mY of
           Nothing -> pure Unauthorized
           Just y -> ReadResponse . ForkedBy <$> unfoldlMToVector y
-    goCreate = undefined
+    goCreate CreateActor (Just (AnyIdActor aId)) = do
+      worked <- storeActor actors aId
+      pure $ if not worked then Unauthorized else CreateResponse (NewActor aId)
+    goCreate CreateGroup (Just (AnyIdGroup gId)) = do
+      worked <- storeGroup actors gId
+      pure $ if not worked then Unauthorized else CreateResponse (NewGroup gId)
+    goCreate (CreateMember gId aId) Nothing = do
+      worked <- addMember actors gId aId
+      pure $ if not worked then Unauthorized else Success
+    goCreate CreateSpace (Just (AnyIdSpace sId)) = do
+      worked <- storeSpace actors sId
+      pure $ if not worked then Unauthorized else CreateResponse (NewSpace sId)
+    goCreate (CreateEntity sId mFork) (Just (AnyIdEntity eId vId)) = do
+      worked <- storeEntity actors eId sId vId mFork
+      pure $ if not worked then Unauthorized else CreateResponse (NewEntity eId vId)
+    goCreate (CreateVersion eId) (Just (AnyIdVersion vId)) = do
+      worked <- storeNextVersion actors eId vId
+      pure $ if not worked then Unauthorized else CreateResponse (NewVersion vId)
+    goCreate x mId = error $ "Mismatched ID generation: " <> show x <> ", " <> show mId
+      
     goUpdate = undefined
     goDelete = undefined
 
