@@ -81,6 +81,7 @@ library
   default-extensions:
       DerivingVia
       DataKinds
+      DeriveFunctor
       DeriveGeneric
       FlexibleContexts
       FlexibleInstances
@@ -139,6 +140,7 @@ executable tersedb-hs
   default-extensions:
       DerivingVia
       DataKinds
+      DeriveFunctor
       DeriveGeneric
       FlexibleContexts
       FlexibleInstances
@@ -213,6 +215,7 @@ test-suite tersedb-test
   default-extensions:
       DerivingVia
       DataKinds
+      DeriveFunctor
       DeriveGeneric
       FlexibleContexts
       FlexibleInstances

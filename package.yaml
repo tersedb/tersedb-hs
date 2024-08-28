@@ -22,6 +22,7 @@ description: Please see the README on GitHub at <https://github.com/tersedb/ters
 default-extensions:
   - DerivingVia
   - DataKinds
+  - DeriveFunctor
   - DeriveGeneric
   - FlexibleContexts
   - FlexibleInstances
