@@ -21,7 +21,15 @@ You can reach me at athan.clark@gmail.com.
 module Lib.Types.Permission where
 
 import Control.Lens.TH (makeLensesFor)
-import Data.Aeson (FromJSON (parseJSON), ToJSON (toJSON), Value (String), withObject, (.:), (.=), object)
+import Data.Aeson (
+  FromJSON (parseJSON),
+  ToJSON (toJSON),
+  Value (String),
+  object,
+  withObject,
+  (.:),
+  (.=),
+ )
 import Data.Aeson.Types (typeMismatch)
 import Data.Hashable (Hashable)
 import Data.Semigroup (Max (..))

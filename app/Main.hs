@@ -20,31 +20,61 @@ You can reach me at athan.clark@gmail.com.
 
 module Main (main) where
 
+import Control.Concurrent (forkIO, threadDelay)
+import Control.Concurrent.STM (
+  STM,
+  TMVar,
+  TVar,
+  atomically,
+  newTMVarIO,
+  newTVarIO,
+  putTMVar,
+  readTMVar,
+  readTVar,
+  takeTMVar,
+  writeTVar,
+ )
+import Control.Monad (forever, void, when)
+import Control.Monad.Catch (MonadThrow)
+import Control.Monad.IO.Class (MonadIO)
+import Control.Monad.Reader (lift, runReaderT)
+import qualified Data.Aeson as Aeson
+import qualified Data.Attoparsec.Text as Atto
+import qualified Data.ByteString as BS
+import Data.Data (Proxy (..))
+import Data.List.NonEmpty (NonEmpty)
+import qualified Data.List.NonEmpty as NE
+import qualified Data.Text.Encoding as T
 import Lib.Api (Action, MutableAction, actMany, actManyStrict)
+import Lib.Async.Types.Monad (TerseM)
 import Lib.Async.Types.Store (newShared)
 import Lib.Async.Types.Store.Iso (genSyncStore)
-import Lib.Async.Types.Monad (TerseM)
+import Lib.Class (TerseDB, commit, loadSyncShared, runTerseDB)
 import Lib.Sync.Actions.Safe (emptyShared)
-import Lib.Types.Id (ActorId, actorIdParser)
 import qualified Lib.Sync.Types.Store as Sync
-import Lib.Class (commit, runTerseDB, loadSyncShared)
-import System.Random.Stateful (uniformM, globalStdGen)
-import Control.Concurrent (forkIO, threadDelay)
-import Control.Concurrent.STM (atomically, STM, TMVar, TVar, newTVarIO, newTMVarIO
-  , takeTMVar, putTMVar, readTVar, readTMVar, writeTVar)
-import Control.Monad.Reader (runReaderT)
-import Control.Monad (forever, when, void)
+import Lib.Types.Id (ActorId, actorIdParser)
+import Network.HTTP.Types (
+  badRequest400,
+  lengthRequired411,
+  methodNotAllowed405,
+  methodPost,
+  notFound404,
+  ok200,
+  unauthorized401,
+  unsupportedMediaType415,
+ )
+import Network.Wai (
+  RequestBodyLength (KnownLength),
+  ResponseReceived,
+  consumeRequestBodyStrict,
+  pathInfo,
+  requestBodyLength,
+  requestHeaders,
+  requestMethod,
+  responseLBS,
+ )
 import Network.Wai.Handler.Warp (runEnv)
-import Network.Wai (responseLBS, pathInfo, RequestBodyLength (KnownLength), consumeRequestBodyStrict, requestMethod, requestHeaders, requestBodyLength, pathInfo, ResponseReceived)
-import Network.HTTP.Types (ok200, notFound404, badRequest400, lengthRequired411, unsupportedMediaType415, methodNotAllowed405, methodPost, unauthorized401)
-import qualified Data.Attoparsec.Text as Atto
-import qualified Data.Text.Encoding as T
-import qualified Data.ByteString as BS
-import qualified Data.Aeson as Aeson
-import Data.List.NonEmpty (NonEmpty)
-import Data.Data (Proxy (..))
-import qualified Data.List.NonEmpty as NE
-import Control.Monad.Reader (lift)
+import System.Random.Stateful (globalStdGen, uniformM)
 
 main :: IO ()
 main = do
@@ -58,10 +88,9 @@ main = do
   putStrLn $ "Admin Group: " <> show adminGroup
 
   (creatingCheckpointVar :: TMVar ()) <- newTMVarIO () -- prevents mutations while checkout is happening
-
   let createCheckpoint :: IO ()
       createCheckpoint = do
-        state <- atomically $ do        
+        state <- atomically $ do
           takeTMVar creatingCheckpointVar
           runReaderT genSyncStore s
         storeCheckpoint state
@@ -78,43 +107,58 @@ main = do
 
   runEnv 8000 $ \req respond ->
     let headers = requestHeaders req
-        getActions :: (NonEmpty ActorId -> [Action] -> IO ResponseReceived) -> IO ResponseReceived
-        getActions onActions = case getActors =<< lookup "Authorization" headers of
-          Nothing -> respond $ responseLBS unauthorized401 [] ""
-          Just actors ->
-            if not (requestMethod req == methodPost)
-            then respond $ responseLBS methodNotAllowed405 [] ""
-            else if not (legitRequestBody (requestBodyLength req))
-            then respond $ responseLBS lengthRequired411 [] ""
-            else do
-              body <- consumeRequestBodyStrict req
-              case lookup "Content-Type" headers of
-                Just "application/json" -> case Aeson.decode body of
-                  Nothing -> respond $ responseLBS badRequest400 [] ""
-                  Just (actions :: [Action]) -> onActions actors actions
-                _ -> respond $ responseLBS unsupportedMediaType415 [] ""
-        whenStoringDiff :: IO () -> TerseM IO ()
-        whenStoringDiff x = lift $ do
-          () <- atomically $ readTMVar creatingCheckpointVar
-          x
-          atomically $ writeTVar needsCheckpointVar True
-    in  case pathInfo req of
-          ["act"] -> getActions $ \actors actions -> do
-            -- FIXME catch HasCycle and/or Unauthorized
-            responses <- flip runReaderT s $ actMany
-              (Proxy @(TerseM STM))
-              (whenStoringDiff . storeSingleDiff)
-              actors
-              actions
-            respond . responseLBS ok200 [] $ Aeson.encode responses
-          ["actStrict"] -> getActions $ \actors actions -> do
-            -- FIXME catch HasCycle and/or Unauthorized
-            responses <- flip runReaderT s $ actManyStrict
-              (Proxy @(TerseM STM))
-              (whenStoringDiff . storeMultipleDiffs)
-              actors
-              actions
-            respond . responseLBS ok200 [] $ Aeson.encode responses
+        route
+          :: forall x r
+           . (Aeson.ToJSON r)
+          => ( forall n m
+                . ( TerseDB n m
+                  , MonadIO n
+                  , MonadThrow m
+                  )
+               => Proxy m
+               -> (x -> n ())
+               -> NonEmpty ActorId
+               -> [Action]
+               -> n [r]
+             )
+          -> (x -> IO ())
+          -> IO ResponseReceived
+        route act storeDiff = getActions $ \actors actions -> do
+          -- FIXME catch HasCycle and/or Unauthorized
+          responses <-
+            flip runReaderT s $
+              act
+                (Proxy @(TerseM STM))
+                (whenStoringDiff . storeDiff)
+                actors
+                actions
+          respond . responseLBS ok200 [] $ Aeson.encode responses
+         where
+          getActions
+            :: (NonEmpty ActorId -> [Action] -> IO ResponseReceived) -> IO ResponseReceived
+          getActions onActions = case getActors =<< lookup "Authorization" headers of
+            Nothing -> respond $ responseLBS unauthorized401 [] ""
+            Just actors ->
+              if not (requestMethod req == methodPost)
+                then respond $ responseLBS methodNotAllowed405 [] ""
+                else
+                  if not (legitRequestBody (requestBodyLength req))
+                    then respond $ responseLBS lengthRequired411 [] ""
+                    else do
+                      body <- consumeRequestBodyStrict req
+                      case lookup "Content-Type" headers of
+                        Just "application/json" -> case Aeson.decode body of
+                          Nothing -> respond $ responseLBS badRequest400 [] ""
+                          Just (actions :: [Action]) -> onActions actors actions
+                        _ -> respond $ responseLBS unsupportedMediaType415 [] ""
+          whenStoringDiff :: IO () -> TerseM IO ()
+          whenStoringDiff x = lift $ do
+            () <- atomically $ readTMVar creatingCheckpointVar
+            x
+            atomically $ writeTVar needsCheckpointVar True
+     in case pathInfo req of
+          ["act"] -> route actMany storeSingleDiff
+          ["actStrict"] -> route actManyStrict storeMultipleDiffs
           _ -> respond $ responseLBS notFound404 [] ""
 
 storeCheckpoint :: Sync.Store -> IO ()

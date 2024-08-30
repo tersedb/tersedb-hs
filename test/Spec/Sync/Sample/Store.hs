@@ -222,121 +222,122 @@ loadSample SampleStore{..} = errorOnLeft . flip execStateT (loadSampleTree sampl
 storeSample :: SampleStore -> ActorId -> GroupId -> Shared
 storeSample SampleStore{..} adminActor adminGroup =
   errorOnLeft
-    . flip execStateT (storeSampleTree sampleGroups adminActor adminGroup) $ do
-    for_ (HS.toList sampleSpaces) $ \sId -> do
-      succeeded <- storeSpace (NE.singleton adminActor) sId
-      unless succeeded $ do
-        s <- get
-        error $
-          "Failed to store space " <> show sId <> " - " <> LT.unpack (pShowNoColor s)
-      succeeded <- setEntityPermission (NE.singleton adminActor) Update adminGroup sId
-      unless succeeded $ do
-        s <- get
-        error $
-          "Failed to set entity permissions "
-            <> show sId
-            <> " - "
-            <> LT.unpack (pShowNoColor s)
-    for_ sampleEntities $ \(eId, (sId, vIds, mFork)) -> do
-      -- FIXME use a State to keep retrying on fork failure? Or just sort the list?
-      let ((vId, refIds, subIds), vIdsTail) = uncons vIds
-      case mFork of
-        Nothing -> do
-          worked <- storeEntity (NE.singleton adminActor) eId sId vId Nothing
-          unless worked $ do
-            s <- get
-            error $
-              "Failed to store entity "
-                <> show (eId, sId, vId)
-                <> " - "
-                <> LT.unpack (pShowNoColor s)
-        Just fork -> do
-          worked <- storeEntity (NE.singleton adminActor) eId sId vId (Just fork)
-          unless worked $ do
-            s <- get
-            error $
-              "Failed to store forked entity "
-                <> show (eId, sId, vId, fork)
-                <> " - "
-                <> LT.unpack (pShowNoColor s)
-      worked <- updateVersionReferences (NE.singleton adminActor) vId refIds
-      unless worked $ do
-        s <- get
-        error $
-          "Failed to store version references "
-            <> show (eId, vId)
-            <> " - "
-            <> LT.unpack (pShowNoColor s)
-      worked <- updateVersionSubscriptions (NE.singleton adminActor) vId subIds
-      unless worked $ do
-        s <- get
-        error $
-          "Failed to store version subscriptions "
-            <> show (eId, vId)
-            <> " - "
-            <> LT.unpack (pShowNoColor s)
-      case vIdsTail of
-        Nothing -> pure ()
-        Just vIdsTail -> for_ vIdsTail $ \(vId, refIds, subIds) -> do
-          worked <- storeNextVersion (NE.singleton adminActor) eId vId
-          unless worked $ do
-            s <- get
-            error $
-              "Failed to store version "
-                <> show (eId, vId)
-                <> " - "
-                <> LT.unpack (pShowNoColor s)
-          worked <- updateVersionReferences (NE.singleton adminActor) vId refIds
-          unless worked $ do
-            s <- get
-            error $
-              "Failed to update version references "
-                <> show (vId, refIds)
-                <> " - "
-                <> LT.unpack (pShowNoColor s)
-          updateVersionSubscriptions (NE.singleton adminActor) vId subIds
-    let loadPermissions
-          :: SampleGroupTree
-              (HashMap SpaceId SinglePermission, HashMap SpaceId CollectionPermission)
-          -> StateT Shared (Either SomeException) ()
-        loadPermissions SampleGroupTree{current, auxPerGroup = (spacesPerms, entityPerms), children} = do
-          for_ (HM.toList spacesPerms) $ \(space, permission) -> do
-            succeeded <-
-              setSpacePermission (NE.singleton adminActor) (Just permission) current space
-            unless succeeded $ do
-              s <- get
-              error $
-                "Failed to set space permission "
-                  <> show (current, space)
-                  <> " - "
-                  <> LT.unpack (pShowNoColor s)
-          for_ (HM.toList entityPerms) $ \(space, permission) -> do
-            succeeded <-
-              setEntityPermission (NE.singleton adminActor) permission current space
-            unless succeeded $ do
-              s <- get
-              error $
-                "Failed to set entity permission "
-                  <> show (current, space)
-                  <> " - "
-                  <> LT.unpack (pShowNoColor s)
-          traverse_ loadPermissions children
-    loadPermissions sampleGroups
-    for_ (HM.toList sampleActors) $ \(aId, gs) -> do
-      succeeded <- storeActor (NE.singleton adminActor) aId
-      unless succeeded $ do
-        s <- get
-        error $
-          "Failed to store actor " <> show aId <> " - " <> LT.unpack (pShowNoColor s)
-      for_ (HS.toList gs) $ \gId -> do
-        succeeded <- addMember (NE.singleton adminActor) gId aId
+    . flip execStateT (storeSampleTree sampleGroups adminActor adminGroup)
+    $ do
+      for_ (HS.toList sampleSpaces) $ \sId -> do
+        succeeded <- storeSpace (NE.singleton adminActor) sId
         unless succeeded $ do
           s <- get
           error $
-            "Failed to add member "
-              <> show (aId, gId)
+            "Failed to store space " <> show sId <> " - " <> LT.unpack (pShowNoColor s)
+        succeeded <- setEntityPermission (NE.singleton adminActor) Update adminGroup sId
+        unless succeeded $ do
+          s <- get
+          error $
+            "Failed to set entity permissions "
+              <> show sId
               <> " - "
               <> LT.unpack (pShowNoColor s)
+      for_ sampleEntities $ \(eId, (sId, vIds, mFork)) -> do
+        -- FIXME use a State to keep retrying on fork failure? Or just sort the list?
+        let ((vId, refIds, subIds), vIdsTail) = uncons vIds
+        case mFork of
+          Nothing -> do
+            worked <- storeEntity (NE.singleton adminActor) eId sId vId Nothing
+            unless worked $ do
+              s <- get
+              error $
+                "Failed to store entity "
+                  <> show (eId, sId, vId)
+                  <> " - "
+                  <> LT.unpack (pShowNoColor s)
+          Just fork -> do
+            worked <- storeEntity (NE.singleton adminActor) eId sId vId (Just fork)
+            unless worked $ do
+              s <- get
+              error $
+                "Failed to store forked entity "
+                  <> show (eId, sId, vId, fork)
+                  <> " - "
+                  <> LT.unpack (pShowNoColor s)
+        worked <- updateVersionReferences (NE.singleton adminActor) vId refIds
+        unless worked $ do
+          s <- get
+          error $
+            "Failed to store version references "
+              <> show (eId, vId)
+              <> " - "
+              <> LT.unpack (pShowNoColor s)
+        worked <- updateVersionSubscriptions (NE.singleton adminActor) vId subIds
+        unless worked $ do
+          s <- get
+          error $
+            "Failed to store version subscriptions "
+              <> show (eId, vId)
+              <> " - "
+              <> LT.unpack (pShowNoColor s)
+        case vIdsTail of
+          Nothing -> pure ()
+          Just vIdsTail -> for_ vIdsTail $ \(vId, refIds, subIds) -> do
+            worked <- storeNextVersion (NE.singleton adminActor) eId vId
+            unless worked $ do
+              s <- get
+              error $
+                "Failed to store version "
+                  <> show (eId, vId)
+                  <> " - "
+                  <> LT.unpack (pShowNoColor s)
+            worked <- updateVersionReferences (NE.singleton adminActor) vId refIds
+            unless worked $ do
+              s <- get
+              error $
+                "Failed to update version references "
+                  <> show (vId, refIds)
+                  <> " - "
+                  <> LT.unpack (pShowNoColor s)
+            updateVersionSubscriptions (NE.singleton adminActor) vId subIds
+      let loadPermissions
+            :: SampleGroupTree
+                (HashMap SpaceId SinglePermission, HashMap SpaceId CollectionPermission)
+            -> StateT Shared (Either SomeException) ()
+          loadPermissions SampleGroupTree{current, auxPerGroup = (spacesPerms, entityPerms), children} = do
+            for_ (HM.toList spacesPerms) $ \(space, permission) -> do
+              succeeded <-
+                setSpacePermission (NE.singleton adminActor) (Just permission) current space
+              unless succeeded $ do
+                s <- get
+                error $
+                  "Failed to set space permission "
+                    <> show (current, space)
+                    <> " - "
+                    <> LT.unpack (pShowNoColor s)
+            for_ (HM.toList entityPerms) $ \(space, permission) -> do
+              succeeded <-
+                setEntityPermission (NE.singleton adminActor) permission current space
+              unless succeeded $ do
+                s <- get
+                error $
+                  "Failed to set entity permission "
+                    <> show (current, space)
+                    <> " - "
+                    <> LT.unpack (pShowNoColor s)
+            traverse_ loadPermissions children
+      loadPermissions sampleGroups
+      for_ (HM.toList sampleActors) $ \(aId, gs) -> do
+        succeeded <- storeActor (NE.singleton adminActor) aId
+        unless succeeded $ do
+          s <- get
+          error $
+            "Failed to store actor " <> show aId <> " - " <> LT.unpack (pShowNoColor s)
+        for_ (HS.toList gs) $ \gId -> do
+          succeeded <- addMember (NE.singleton adminActor) gId aId
+          unless succeeded $ do
+            s <- get
+            error $
+              "Failed to add member "
+                <> show (aId, gId)
+                <> " - "
+                <> LT.unpack (pShowNoColor s)
 
 errorOnLeft :: (Show l) => Either l a -> a
 errorOnLeft eX = case eX of

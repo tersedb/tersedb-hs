@@ -1,19 +1,20 @@
 module Spec.Actor.Sample where
 
-import Lib.Types.Id (GroupId, ActorId, SpaceId, EntityId, VersionId)
+import Control.Concurrent.STM (STM, TMVar)
+import Lib.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
 import Lib.Types.Permission (CollectionPermission)
-import StmContainers.Set (Set)
-import qualified StmContainers.Set as Set
 import StmContainers.Map (Map)
 import qualified StmContainers.Map as Map
-import Control.Concurrent.STM (STM, TMVar)
-
+import StmContainers.Set (Set)
+import qualified StmContainers.Set as Set
 
 -- | Represents the universe visible to an actor
 data ObservableScope = ObservableScope
   { observableScopeActors :: Set ActorId
-  , observableScopeGroups :: Map GroupId (CollectionPermission, CollectionPermission)
-  , observableScopeSpaces :: Map SpaceId (CollectionPermission, CollectionPermission)
+  , observableScopeGroups
+      :: Map GroupId (CollectionPermission, CollectionPermission)
+  , observableScopeSpaces
+      :: Map SpaceId (CollectionPermission, CollectionPermission)
   , observableScopeEntities :: Set EntityId
   , observableScopeVersions :: Set VersionId
   }

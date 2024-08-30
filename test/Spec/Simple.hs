@@ -1,21 +1,25 @@
 module Spec.Simple where
 
-import Lib.Types.Id (GroupId, IdWithPfx, AnyId)
+import Data.Aeson (FromJSON, ToJSON)
+import qualified Data.Aeson as Aeson
+import Data.Data (Proxy (..))
+import Lib.Api (Action, Authorize, MutableAction, Response)
+import Lib.Types.Id (AnyId, GroupId, IdWithPfx)
 import Lib.Types.Permission (
   CollectionPermission (..),
   CollectionPermissionWithExemption (..),
   SinglePermission,
   hasMinimumPermission,
  )
-import Lib.Api (Action, MutableAction, Response, Authorize)
-import qualified Data.Aeson as Aeson
 import Test.QuickCheck (Arbitrary, property)
 import Test.Syd (Spec, describe, it, shouldBe, shouldSatisfy)
 import Text.Read (readEither)
-import Data.Data (Proxy (..))
-import Data.Aeson (ToJSON, FromJSON)
 
-serialization :: forall a. (Show a, Read a, ToJSON a, FromJSON a, Arbitrary a, Eq a) => Proxy a -> Spec
+serialization
+  :: forall a
+   . (Show a, Read a, ToJSON a, FromJSON a, Arbitrary a, Eq a)
+  => Proxy a
+  -> Spec
 serialization Proxy = do
   it "show / read should be isomorphic" $
     property $ \(id :: a) ->
@@ -23,7 +27,6 @@ serialization Proxy = do
   it "aeson should be isomorphic" $
     property $ \(id :: a) ->
       Aeson.decode (Aeson.encode id) `shouldBe` Just id
-
 
 simpleTests :: Spec
 simpleTests = do

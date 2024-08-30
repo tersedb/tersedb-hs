@@ -1,13 +1,26 @@
 module Lib.Api where
 
+import Control.Applicative ((<|>))
 import Control.Monad.Catch (MonadThrow (throwM))
 import Control.Monad.IO.Class (MonadIO)
+import Data.Aeson (
+  FromJSON (..),
+  ToJSON (..),
+  Value (String),
+  object,
+  withObject,
+  (.:),
+  (.=),
+ )
+import Data.Aeson.Types (typeMismatch)
 import Data.Data (Proxy (Proxy))
 import Data.List.NonEmpty (NonEmpty)
+import Data.Maybe (catMaybes)
+import Data.Traversable (for)
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 import qualified DeferredFolds.UnfoldlM as UnfoldlM
-import Data.Maybe (catMaybes)
+import GHC.Generics (Generic)
 import Lib.Class (
   TerseDB (commit),
   actorExists,
@@ -22,21 +35,34 @@ import Lib.Class (
   offsetVersionIndex,
   readActors,
   readEntities,
+  readEntityPermission,
   readForkOf,
   readForkedBy,
+  readGroupPermission,
   readGroups,
+  readMemberPermission,
   readMembers,
   readMembersOf,
   readNextGroups,
+  readOrganizationPermission,
   readPrevGroup,
+  readRecruiterPermission,
   readReferences,
   readReferencesFrom,
+  readSpacePermission,
   readSpaces,
   readSubscriptions,
   readSubscriptionsFrom,
+  readUniversePermission,
   readVersions,
+  removeActor,
+  removeEntity,
+  removeGroup,
+  removeMember,
   removeReference,
+  removeSpace,
   removeSubscription,
+  removeVersion,
   setEntityPermission,
   setGroupPermission,
   setMemberPermission,
@@ -54,7 +80,7 @@ import Lib.Class (
   unlinkGroups,
   updateFork,
   updateGroupParent,
-  versionExists, removeVersion, removeEntity, removeSpace, removeMember, removeGroup, removeActor, readUniversePermission, readOrganizationPermission, readRecruiterPermission, readSpacePermission, readEntityPermission, readGroupPermission, readMemberPermission,
+  versionExists,
  )
 import Lib.Types.Errors (UnauthorizedAction (UnauthorizedAction))
 import Lib.Types.Id (ActorId, AnyId (..), EntityId, GroupId, SpaceId, VersionId)
@@ -64,12 +90,7 @@ import Lib.Types.Permission (
   SinglePermission,
  )
 import System.Random.Stateful (Uniform (uniformM), globalStdGen)
-import Data.Traversable (for)
-import Data.Aeson (withObject, FromJSON (..), ToJSON (..), object, (.=), (.:), Value (String))
-import Control.Applicative ((<|>))
-import Data.Aeson.Types (typeMismatch)
 import Test.QuickCheck (Arbitrary (arbitrary), oneof)
-import GHC.Generics (Generic)
 
 data ReadAction
   = ReadAllActors
@@ -102,36 +123,37 @@ data ReadAction
   | ReadMemberPermission GroupId GroupId
   deriving (Eq, Show, Read, Generic)
 instance Arbitrary ReadAction where
-  arbitrary = oneof
-    [ pure ReadAllActors
-    , ReadActor <$> arbitrary
-    , pure ReadAllGroups
-    , ReadGroup <$> arbitrary
-    , ReadAllMembers <$> arbitrary
-    , ReadAllMemberOf <$> arbitrary
-    , ReadMember <$> arbitrary <*> arbitrary
-    , ReadPrevGroup <$> arbitrary
-    , ReadNextGroups <$> arbitrary
-    , pure ReadAllSpaces
-    , ReadSpace <$> arbitrary
-    , ReadAllEntities <$> arbitrary
-    , ReadEntity <$> arbitrary
-    , ReadAllVersions <$> arbitrary
-    , ReadVersion <$> arbitrary
-    , ReadReferences <$> arbitrary
-    , ReadReferencesOf <$> arbitrary
-    , ReadSubscriptions <$> arbitrary
-    , ReadSubscriptionsOf <$> arbitrary
-    , ReadForkOf <$> arbitrary
-    , ReadForkedBy <$> arbitrary
-    , ReadUniversePermission <$> arbitrary
-    , ReadOrganizationPermission <$> arbitrary
-    , ReadRecruiterPermission <$> arbitrary
-    , ReadSpacePermission <$> arbitrary <*> arbitrary
-    , ReadEntityPermission <$> arbitrary <*> arbitrary
-    , ReadGroupPermission <$> arbitrary <*> arbitrary
-    , ReadMemberPermission <$> arbitrary <*> arbitrary
-    ]
+  arbitrary =
+    oneof
+      [ pure ReadAllActors
+      , ReadActor <$> arbitrary
+      , pure ReadAllGroups
+      , ReadGroup <$> arbitrary
+      , ReadAllMembers <$> arbitrary
+      , ReadAllMemberOf <$> arbitrary
+      , ReadMember <$> arbitrary <*> arbitrary
+      , ReadPrevGroup <$> arbitrary
+      , ReadNextGroups <$> arbitrary
+      , pure ReadAllSpaces
+      , ReadSpace <$> arbitrary
+      , ReadAllEntities <$> arbitrary
+      , ReadEntity <$> arbitrary
+      , ReadAllVersions <$> arbitrary
+      , ReadVersion <$> arbitrary
+      , ReadReferences <$> arbitrary
+      , ReadReferencesOf <$> arbitrary
+      , ReadSubscriptions <$> arbitrary
+      , ReadSubscriptionsOf <$> arbitrary
+      , ReadForkOf <$> arbitrary
+      , ReadForkedBy <$> arbitrary
+      , ReadUniversePermission <$> arbitrary
+      , ReadOrganizationPermission <$> arbitrary
+      , ReadRecruiterPermission <$> arbitrary
+      , ReadSpacePermission <$> arbitrary <*> arbitrary
+      , ReadEntityPermission <$> arbitrary <*> arbitrary
+      , ReadGroupPermission <$> arbitrary <*> arbitrary
+      , ReadMemberPermission <$> arbitrary <*> arbitrary
+      ]
 instance ToJSON ReadAction where
   toJSON x = case x of
     ReadAllActors -> String "a"
@@ -182,39 +204,39 @@ instance FromJSON ReadAction where
       <|> (onV =<< o .: "v")
       <|> (onSub =<< o .: "sub")
       <|> (onF =<< o .: "f")
-    where
-      onS json =
-        (ReadSpace <$> parseJSON json)
-          <|> ((\o -> ReadSpacePermission <$> o .: "g" <*> o .: "s") =<< parseJSON json)
-      onG json =
-        (ReadGroup <$> parseJSON json)
-          <|> (onObj =<< parseJSON json)
-        where
-          onObj o =
-            (ReadPrevGroup <$> o .: "p")
-              <|> (ReadNextGroups <$> o .: "n")
-              <|> (ReadGroupPermission <$> o .: "g" <*> o .: "s")
-      onM json =
-        (ReadAllMembers <$> parseJSON json)
-          <|> (ReadAllMemberOf <$> parseJSON json)
-          <|> (onObj =<< parseJSON json)
-        where
-          onObj o =
-            (ReadMemberPermission <$> o .: "g" <*> o .: "s")
-              <|> (ReadMember <$> o .: "g" <*> o .: "a")
-      onE json =
-        (ReadAllEntities <$> parseJSON json)
-          <|> (ReadEntity <$> parseJSON json)
-          <|> ((\o -> ReadEntityPermission <$> o .: "g" <*> o .: "s") =<< parseJSON json)
-      onV json =
-        (ReadAllVersions <$> parseJSON json)
-          <|> (ReadVersion <$> parseJSON json)
-      onSub json =
-        (ReadSubscriptions <$> parseJSON json)
-          <|> (ReadSubscriptionsOf <$> parseJSON json)
-      onF json =
-        (ReadForkOf <$> parseJSON json)
-          <|> (ReadForkedBy <$> parseJSON json)
+   where
+    onS json =
+      (ReadSpace <$> parseJSON json)
+        <|> ((\o -> ReadSpacePermission <$> o .: "g" <*> o .: "s") =<< parseJSON json)
+    onG json =
+      (ReadGroup <$> parseJSON json)
+        <|> (onObj =<< parseJSON json)
+     where
+      onObj o =
+        (ReadPrevGroup <$> o .: "p")
+          <|> (ReadNextGroups <$> o .: "n")
+          <|> (ReadGroupPermission <$> o .: "g" <*> o .: "s")
+    onM json =
+      (ReadAllMembers <$> parseJSON json)
+        <|> (ReadAllMemberOf <$> parseJSON json)
+        <|> (onObj =<< parseJSON json)
+     where
+      onObj o =
+        (ReadMemberPermission <$> o .: "g" <*> o .: "s")
+          <|> (ReadMember <$> o .: "g" <*> o .: "a")
+    onE json =
+      (ReadAllEntities <$> parseJSON json)
+        <|> (ReadEntity <$> parseJSON json)
+        <|> ((\o -> ReadEntityPermission <$> o .: "g" <*> o .: "s") =<< parseJSON json)
+    onV json =
+      (ReadAllVersions <$> parseJSON json)
+        <|> (ReadVersion <$> parseJSON json)
+    onSub json =
+      (ReadSubscriptions <$> parseJSON json)
+        <|> (ReadSubscriptionsOf <$> parseJSON json)
+    onF json =
+      (ReadForkOf <$> parseJSON json)
+        <|> (ReadForkedBy <$> parseJSON json)
 
 data CreateAction
   = CreateActor
@@ -225,14 +247,15 @@ data CreateAction
   | CreateVersion EntityId
   deriving (Eq, Show, Read, Generic)
 instance Arbitrary CreateAction where
-  arbitrary = oneof
-    [ pure CreateActor
-    , pure CreateGroup
-    , CreateMember <$> arbitrary <*> arbitrary
-    , pure CreateSpace
-    , CreateEntity <$> arbitrary <*> arbitrary
-    , CreateVersion <$> arbitrary
-    ]
+  arbitrary =
+    oneof
+      [ pure CreateActor
+      , pure CreateGroup
+      , CreateMember <$> arbitrary <*> arbitrary
+      , pure CreateSpace
+      , CreateEntity <$> arbitrary <*> arbitrary
+      , CreateVersion <$> arbitrary
+      ]
 instance ToJSON CreateAction where
   toJSON x = case x of
     CreateActor -> String "a"
@@ -261,14 +284,15 @@ data StoreAction
   | StoreVersion EntityId VersionId
   deriving (Eq, Show, Read, Generic)
 instance Arbitrary StoreAction where
-  arbitrary = oneof
-    [ StoreActor <$> arbitrary
-    , StoreGroup <$> arbitrary
-    , StoreMember <$> arbitrary <*> arbitrary
-    , StoreSpace <$> arbitrary
-    , StoreEntity <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
-    , StoreVersion <$> arbitrary <*> arbitrary
-    ]
+  arbitrary =
+    oneof
+      [ StoreActor <$> arbitrary
+      , StoreGroup <$> arbitrary
+      , StoreMember <$> arbitrary <*> arbitrary
+      , StoreSpace <$> arbitrary
+      , StoreEntity <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
+      , StoreVersion <$> arbitrary <*> arbitrary
+      ]
 instance ToJSON StoreAction where
   toJSON x = case x of
     StoreActor aId -> object ["a" .= aId]
@@ -283,7 +307,9 @@ instance FromJSON StoreAction where
       <|> (StoreGroup <$> o .: "g")
       <|> ((\o -> StoreMember <$> o .: "g" <*> o .: "a") =<< o .: "m")
       <|> (StoreSpace <$> o .: "s")
-      <|> ((\o -> StoreEntity <$> o .: "s" <*> o .: "f" <*> o .: "e" <*> o .: "v") =<< o .: "e")
+      <|> ( (\o -> StoreEntity <$> o .: "s" <*> o .: "f" <*> o .: "e" <*> o .: "v")
+              =<< o .: "e"
+          )
       <|> ((\o -> StoreVersion <$> o .: "e" <*> o .: "v") =<< o .: "v")
 
 data UpdateAction
@@ -307,26 +333,27 @@ data UpdateAction
   | UpdateGroupPrev GroupId (Maybe GroupId)
   deriving (Eq, Show, Read, Generic)
 instance Arbitrary UpdateAction where
-  arbitrary = oneof
-    [ AddReference <$> arbitrary <*> arbitrary
-    , RemoveReference <$> arbitrary <*> arbitrary
-    , AddSubscription <$> arbitrary <*> arbitrary
-    , RemoveSubscription <$> arbitrary <*> arbitrary
-    , ChangeFork <$> arbitrary <*> arbitrary
-    , MoveEntity <$> arbitrary <*> arbitrary
-    , OffsetVersion <$> arbitrary <*> arbitrary
-    , SetVersionIndex <$> arbitrary <*> arbitrary
-    , SetUniversePermission <$> arbitrary <*> arbitrary
-    , SetOrganizationPermission <$> arbitrary <*> arbitrary
-    , SetRecruiterPermission <$> arbitrary <*> arbitrary
-    , SetSpacePermission <$> arbitrary <*> arbitrary <*> arbitrary
-    , SetEntityPermission <$> arbitrary <*> arbitrary <*> arbitrary
-    , SetGroupPermission <$> arbitrary <*> arbitrary <*> arbitrary
-    , SetMemberPermission <$> arbitrary <*> arbitrary <*> arbitrary
-    , LinkGroups <$> arbitrary <*> arbitrary
-    , UnlinkGroups <$> arbitrary <*> arbitrary
-    , UpdateGroupPrev <$> arbitrary <*> arbitrary
-    ]
+  arbitrary =
+    oneof
+      [ AddReference <$> arbitrary <*> arbitrary
+      , RemoveReference <$> arbitrary <*> arbitrary
+      , AddSubscription <$> arbitrary <*> arbitrary
+      , RemoveSubscription <$> arbitrary <*> arbitrary
+      , ChangeFork <$> arbitrary <*> arbitrary
+      , MoveEntity <$> arbitrary <*> arbitrary
+      , OffsetVersion <$> arbitrary <*> arbitrary
+      , SetVersionIndex <$> arbitrary <*> arbitrary
+      , SetUniversePermission <$> arbitrary <*> arbitrary
+      , SetOrganizationPermission <$> arbitrary <*> arbitrary
+      , SetRecruiterPermission <$> arbitrary <*> arbitrary
+      , SetSpacePermission <$> arbitrary <*> arbitrary <*> arbitrary
+      , SetEntityPermission <$> arbitrary <*> arbitrary <*> arbitrary
+      , SetGroupPermission <$> arbitrary <*> arbitrary <*> arbitrary
+      , SetMemberPermission <$> arbitrary <*> arbitrary <*> arbitrary
+      , LinkGroups <$> arbitrary <*> arbitrary
+      , UnlinkGroups <$> arbitrary <*> arbitrary
+      , UpdateGroupPrev <$> arbitrary <*> arbitrary
+      ]
 instance ToJSON UpdateAction where
   toJSON x = case x of
     AddReference vId ref -> object ["addR" .= object ["v" .= vId, "r" .= ref]]
@@ -360,10 +387,16 @@ instance FromJSON UpdateAction where
       <|> ((\o -> SetUniversePermission <$> o .: "g" <*> o .: "p") =<< o .: "stU")
       <|> ((\o -> SetOrganizationPermission <$> o .: "g" <*> o .: "p") =<< o .: "stO")
       <|> ((\o -> SetRecruiterPermission <$> o .: "g" <*> o .: "p") =<< o .: "stR")
-      <|> ((\o -> SetSpacePermission <$> o .: "g" <*> o .: "s" <*> o .: "p") =<< o .: "stS")
-      <|> ((\o -> SetEntityPermission <$> o .: "g" <*> o .: "s" <*> o .: "p") =<< o .: "stE")
-      <|> ((\o -> SetGroupPermission <$> o .: "g" <*> o .: "s" <*> o .: "p") =<< o .: "stG")
-      <|> ((\o -> SetMemberPermission <$> o .: "g" <*> o .: "s" <*> o .: "p") =<< o .: "stM")
+      <|> ( (\o -> SetSpacePermission <$> o .: "g" <*> o .: "s" <*> o .: "p") =<< o .: "stS"
+          )
+      <|> ( (\o -> SetEntityPermission <$> o .: "g" <*> o .: "s" <*> o .: "p")
+              =<< o .: "stE"
+          )
+      <|> ( (\o -> SetGroupPermission <$> o .: "g" <*> o .: "s" <*> o .: "p") =<< o .: "stG"
+          )
+      <|> ( (\o -> SetMemberPermission <$> o .: "g" <*> o .: "s" <*> o .: "p")
+              =<< o .: "stM"
+          )
       <|> ((\o -> LinkGroups <$> o .: "f" <*> o .: "t") =<< o .: "lkG")
       <|> ((\o -> UnlinkGroups <$> o .: "f" <*> o .: "t") =<< o .: "unG")
       <|> ((\o -> UpdateGroupPrev <$> o .: "g" <*> o .: "p") =<< o .: "pvG")
@@ -377,14 +410,15 @@ data DeleteAction
   | DeleteActor ActorId
   deriving (Eq, Show, Read, Generic)
 instance Arbitrary DeleteAction where
-  arbitrary = oneof
-    [ DeleteVersion <$> arbitrary
-    , DeleteEntity <$> arbitrary
-    , DeleteSpace <$> arbitrary
-    , DeleteMember <$> arbitrary <*> arbitrary
-    , DeleteGroup <$> arbitrary
-    , DeleteActor <$> arbitrary
-    ]
+  arbitrary =
+    oneof
+      [ DeleteVersion <$> arbitrary
+      , DeleteEntity <$> arbitrary
+      , DeleteSpace <$> arbitrary
+      , DeleteMember <$> arbitrary <*> arbitrary
+      , DeleteGroup <$> arbitrary
+      , DeleteActor <$> arbitrary
+      ]
 instance ToJSON DeleteAction where
   toJSON x = case x of
     DeleteVersion y -> object ["v" .= y]
@@ -396,11 +430,11 @@ instance ToJSON DeleteAction where
 instance FromJSON DeleteAction where
   parseJSON = withObject "DeleteAction" $ \o ->
     (DeleteVersion <$> o .: "v")
-    <|> (DeleteEntity <$> o .: "e")
-    <|> (DeleteSpace <$> o .: "s")
-    <|> ((\o -> DeleteMember <$> o .: "g" <*> o .: "a") =<< o .: "m")
-    <|> (DeleteGroup <$> o .: "g")
-    <|> (DeleteActor <$> o .: "a")
+      <|> (DeleteEntity <$> o .: "e")
+      <|> (DeleteSpace <$> o .: "s")
+      <|> ((\o -> DeleteMember <$> o .: "g" <*> o .: "a") =<< o .: "m")
+      <|> (DeleteGroup <$> o .: "g")
+      <|> (DeleteActor <$> o .: "a")
 
 data Action
   = ReadAction ReadAction
@@ -409,12 +443,13 @@ data Action
   | DeleteAction DeleteAction
   deriving (Eq, Show, Read, Generic)
 instance Arbitrary Action where
-  arbitrary = oneof
-    [ ReadAction <$> arbitrary
-    , CreateAction <$> arbitrary
-    , UpdateAction <$> arbitrary
-    , DeleteAction <$> arbitrary
-    ]
+  arbitrary =
+    oneof
+      [ ReadAction <$> arbitrary
+      , CreateAction <$> arbitrary
+      , UpdateAction <$> arbitrary
+      , DeleteAction <$> arbitrary
+      ]
 instance ToJSON Action where
   toJSON x = case x of
     ReadAction y -> object ["r" .= y]
@@ -424,9 +459,9 @@ instance ToJSON Action where
 instance FromJSON Action where
   parseJSON = withObject "Action" $ \o ->
     (ReadAction <$> o .: "r")
-    <|> (CreateAction <$> o .: "c")
-    <|> (UpdateAction <$> o .: "u")
-    <|> (DeleteAction <$> o .: "d")
+      <|> (CreateAction <$> o .: "c")
+      <|> (UpdateAction <$> o .: "u")
+      <|> (DeleteAction <$> o .: "d")
 
 data MutableAction
   = StoreMutableAction StoreAction
@@ -434,11 +469,12 @@ data MutableAction
   | DeleteMutableAction DeleteAction
   deriving (Eq, Show, Read)
 instance Arbitrary MutableAction where
-  arbitrary = oneof
-    [ StoreMutableAction <$> arbitrary
-    , UpdateMutableAction <$> arbitrary
-    , DeleteMutableAction <$> arbitrary
-    ]
+  arbitrary =
+    oneof
+      [ StoreMutableAction <$> arbitrary
+      , UpdateMutableAction <$> arbitrary
+      , DeleteMutableAction <$> arbitrary
+      ]
 instance ToJSON MutableAction where
   toJSON x = case x of
     StoreMutableAction y -> object ["s" .= y]
@@ -447,8 +483,8 @@ instance ToJSON MutableAction where
 instance FromJSON MutableAction where
   parseJSON = withObject "MutableAction" $ \o ->
     (StoreMutableAction <$> o .: "s")
-    <|> (UpdateMutableAction <$> o .: "u")
-    <|> (DeleteMutableAction <$> o .: "d")
+      <|> (UpdateMutableAction <$> o .: "u")
+      <|> (DeleteMutableAction <$> o .: "d")
 
 toMutate :: Action -> Maybe AnyId -> Maybe MutableAction
 toMutate action mId = case action of
@@ -487,27 +523,28 @@ data ReadResponse
   | Permission CollectionPermission
   deriving (Eq, Show, Read)
 instance Arbitrary ReadResponse where
-  arbitrary = oneof
-    [ pure DoesExist
-    , pure DoesNotExist
-    , Actors <$> arbitrary
-    , Groups <$> arbitrary
-    , Members <$> arbitrary
-    , MemberOf <$> arbitrary
-    , PrevGroup <$> arbitrary
-    , NextGroups <$> arbitrary
-    , Spaces <$> arbitrary
-    , Entities <$> arbitrary
-    , Versions <$> arbitrary
-    , References <$> arbitrary
-    , ReferencesOf <$> arbitrary
-    , Subscriptions <$> arbitrary
-    , SubscriptionsOf <$> arbitrary
-    , ForkOf <$> arbitrary
-    , ForkedBy <$> arbitrary
-    , PermissionWithExemption <$> arbitrary
-    , Permission <$> arbitrary
-    ]
+  arbitrary =
+    oneof
+      [ pure DoesExist
+      , pure DoesNotExist
+      , Actors <$> arbitrary
+      , Groups <$> arbitrary
+      , Members <$> arbitrary
+      , MemberOf <$> arbitrary
+      , PrevGroup <$> arbitrary
+      , NextGroups <$> arbitrary
+      , Spaces <$> arbitrary
+      , Entities <$> arbitrary
+      , Versions <$> arbitrary
+      , References <$> arbitrary
+      , ReferencesOf <$> arbitrary
+      , Subscriptions <$> arbitrary
+      , SubscriptionsOf <$> arbitrary
+      , ForkOf <$> arbitrary
+      , ForkedBy <$> arbitrary
+      , PermissionWithExemption <$> arbitrary
+      , Permission <$> arbitrary
+      ]
 instance ToJSON ReadResponse where
   toJSON x = case x of
     DoesExist -> String "y"
@@ -547,23 +584,23 @@ instance FromJSON ReadResponse where
       <|> (goSub =<< o .: "sub")
       <|> (goF =<< o .: "f")
       <|> (goP =<< o .: "p")
-    where
-      goG json =
-        (Groups <$> parseJSON json)
-          <|> ((\o -> PrevGroup <$> o .: "p") =<< parseJSON json)
-          <|> ((\o -> NextGroups <$> o .: "n") =<< parseJSON json)
-      goM json =
-        (Members <$> parseJSON json)
-          <|> (MemberOf <$> parseJSON json)
-      goSub json =
-        (Subscriptions <$> parseJSON json)
-          <|> (SubscriptionsOf <$> parseJSON json)
-      goF json =
-        (ForkOf <$> parseJSON json)
-          <|> (ForkedBy <$> parseJSON json)
-      goP json =
-        (PermissionWithExemption <$> parseJSON json)
-          <|> (Permission <$> parseJSON json)
+   where
+    goG json =
+      (Groups <$> parseJSON json)
+        <|> ((\o -> PrevGroup <$> o .: "p") =<< parseJSON json)
+        <|> ((\o -> NextGroups <$> o .: "n") =<< parseJSON json)
+    goM json =
+      (Members <$> parseJSON json)
+        <|> (MemberOf <$> parseJSON json)
+    goSub json =
+      (Subscriptions <$> parseJSON json)
+        <|> (SubscriptionsOf <$> parseJSON json)
+    goF json =
+      (ForkOf <$> parseJSON json)
+        <|> (ForkedBy <$> parseJSON json)
+    goP json =
+      (PermissionWithExemption <$> parseJSON json)
+        <|> (Permission <$> parseJSON json)
 
 data CreateResponse
   = NewActor ActorId
@@ -573,13 +610,14 @@ data CreateResponse
   | NewVersion VersionId
   deriving (Eq, Show, Read)
 instance Arbitrary CreateResponse where
-  arbitrary = oneof
-    [ NewActor <$> arbitrary
-    , NewGroup <$> arbitrary
-    , NewSpace <$> arbitrary
-    , NewEntity <$> arbitrary <*> arbitrary
-    , NewVersion <$> arbitrary
-    ]
+  arbitrary =
+    oneof
+      [ NewActor <$> arbitrary
+      , NewGroup <$> arbitrary
+      , NewSpace <$> arbitrary
+      , NewEntity <$> arbitrary <*> arbitrary
+      , NewVersion <$> arbitrary
+      ]
 instance ToJSON CreateResponse where
   toJSON x = case x of
     NewActor aId -> object ["a" .= aId]
@@ -611,10 +649,11 @@ data Response
   | CreateResponse CreateResponse
   deriving (Eq, Show, Read)
 instance Arbitrary Response where
-  arbitrary = oneof
-    [ ReadResponse <$> arbitrary
-    , CreateResponse <$> arbitrary
-    ]
+  arbitrary =
+    oneof
+      [ ReadResponse <$> arbitrary
+      , CreateResponse <$> arbitrary
+      ]
 instance ToJSON Response where
   toJSON x = case x of
     ReadResponse y -> object ["r" .= y]
@@ -628,16 +667,17 @@ data Authorize a
   = Authorized a
   | Unauthorized
   deriving (Functor, Generic, Show, Read, Eq)
-instance Arbitrary a => Arbitrary (Authorize a) where
-  arbitrary = oneof
-    [ pure Unauthorized
-    , Authorized <$> arbitrary
-    ]
-instance ToJSON a => ToJSON (Authorize a) where
+instance (Arbitrary a) => Arbitrary (Authorize a) where
+  arbitrary =
+    oneof
+      [ pure Unauthorized
+      , Authorized <$> arbitrary
+      ]
+instance (ToJSON a) => ToJSON (Authorize a) where
   toJSON x = case x of
     Unauthorized -> String "x"
     Authorized y -> object ["x" .= y]
-instance FromJSON a => FromJSON (Authorize a) where
+instance (FromJSON a) => FromJSON (Authorize a) where
   parseJSON (String t) = case t of
     "x" -> pure Unauthorized
     _ -> typeMismatch "Authorize" (String t)
@@ -649,7 +689,8 @@ actMany
   :: forall m n
    . (TerseDB n m, MonadIO n)
   => Proxy m
-  -> (MutableAction -> n ()) -- ^ Each mutation performed that's authorized
+  -> (MutableAction -> n ())
+  -- ^ Each mutation performed that's authorized
   -> NonEmpty ActorId
   -> [Action]
   -> n [Authorize (Maybe Response)]
@@ -657,9 +698,10 @@ actMany Proxy onAuthorized actors xs = do
   ids <- traverse genId xs
   let ys :: m [Authorize (Maybe Response, Maybe MutableAction)]
       ys = traverse go (zip xs ids)
-        where
-          go :: (Action, Maybe AnyId) -> m (Authorize (Maybe Response, Maybe MutableAction))
-          go (x, mId) = act actors x mId
+       where
+        go
+          :: (Action, Maybe AnyId) -> m (Authorize (Maybe Response, Maybe MutableAction))
+        go (x, mId) = act actors x mId
   rs <- commit ys
   for rs $ \mAuth -> do
     case mAuth of
@@ -672,7 +714,8 @@ actManyStrict
   :: forall m n
    . (TerseDB n m, MonadIO n, MonadThrow m)
   => Proxy m
-  -> ([MutableAction] -> n ()) -- ^ Mutations performed, in the same order as the actions supplied
+  -> ([MutableAction] -> n ())
+  -- ^ Mutations performed, in the same order as the actions supplied
   -> NonEmpty ActorId
   -> [Action]
   -> n [Maybe Response]
@@ -706,7 +749,11 @@ genId action = case action of
   gen = uniformM globalStdGen
 
 mutate
-  :: forall m n. (TerseDB n m) => NonEmpty ActorId -> MutableAction -> m (Authorize ())
+  :: forall m n
+   . (TerseDB n m)
+  => NonEmpty ActorId
+  -> MutableAction
+  -> m (Authorize ())
 mutate actors action = do
   worked <- case action of
     StoreMutableAction x -> goStore x
@@ -758,7 +805,7 @@ act
   -> Maybe AnyId
   -> m (Authorize (Maybe Response, Maybe MutableAction))
 act actors action mId = case action of
-  ReadAction x -> fmap (, Nothing) <$> goRead x
+  ReadAction x -> fmap (,Nothing) <$> goRead x
   _ -> case toMutate action mId of
     Just action' ->
       let mkResponse :: () -> Maybe Response
@@ -768,7 +815,7 @@ act actors action mId = case action of
               Just (Left ()) -> Nothing
               Just (Right y) -> Just (CreateResponse y)
             _ -> Nothing
-       in fmap ((, Just action') . mkResponse) <$> mutate actors action'
+       in fmap ((,Just action') . mkResponse) <$> mutate actors action'
     _ ->
       error $
         "Couldn't generate mutatable action: " <> show action <> ", id: " <> show mId

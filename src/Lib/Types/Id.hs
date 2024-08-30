@@ -18,35 +18,49 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 You can reach me at athan.clark@gmail.com.
 -}
 
-module Lib.Types.Id
-  ( GroupId, groupIdParser
-  , ActorId, actorIdParser
-  , SpaceId, spaceIdParser
-  , EntityId, entityIdParser
-  , VersionId, versionIdParser
-  , AnyId (..)
-  , IdWithPfx, idWithPfxParser) where
+module Lib.Types.Id (
+  GroupId,
+  groupIdParser,
+  ActorId,
+  actorIdParser,
+  SpaceId,
+  spaceIdParser,
+  EntityId,
+  entityIdParser,
+  VersionId,
+  versionIdParser,
+  AnyId (..),
+  IdWithPfx,
+  idWithPfxParser,
+) where
 
-import Data.Aeson (FromJSON (parseJSON), ToJSON (toJSON), Value (String), object, (.:), (.=))
+import Control.Applicative ((<|>))
+import Control.Monad (replicateM)
+import Data.Aeson (
+  FromJSON (parseJSON),
+  ToJSON (toJSON),
+  Value (String),
+  object,
+  (.:),
+  (.=),
+ )
 import Data.Aeson.Types (typeMismatch)
+import Data.Attoparsec.Text (Parser, hexadecimal)
+import qualified Data.Attoparsec.Text as Atto
+import qualified Data.ByteString.Base16 as BS16
 import Data.Hashable (Hashable)
+import Data.Serialize (Serialize)
+import qualified Data.Serialize as Cereal
+import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
 import GHC.Generics (Generic)
+import GHC.TypeLits (KnownSymbol (symbolSing), Symbol, fromSSymbol)
 import System.Random.Stateful (Uniform (uniformM))
 import Test.QuickCheck (Arbitrary (arbitrary), oneof)
 import Test.QuickCheck.Gen (chooseInt)
 import Test.QuickCheck.Instances ()
-import Data.Serialize (Serialize)
-import qualified Data.Serialize as Cereal
-import qualified Data.ByteString.Base16 as BS16
-import qualified Data.Text as T
-import qualified Data.Text.Encoding as T
-import Text.Read (Read (readPrec), look, get, pfail, lift)
 import Text.ParserCombinators.ReadP (skipSpaces)
-import GHC.TypeLits (KnownSymbol (symbolSing), fromSSymbol, Symbol)
-import Control.Monad (replicateM)
-import Control.Applicative ((<|>))
-import Data.Attoparsec.Text (Parser, hexadecimal)
-import qualified Data.Attoparsec.Text as Atto
+import Text.Read (Read (readPrec), get, lift, look, pfail)
 
 -- | 12 byte random number
 newtype Id = Id
@@ -76,9 +90,9 @@ newtype IdWithPfx (k :: Symbol) = IdWithPfx
   deriving (Generic, Eq, Ord, Hashable, Arbitrary)
 instance Uniform (IdWithPfx k) where
   uniformM gen = IdWithPfx <$> uniformM gen
-instance KnownSymbol k => Show (IdWithPfx k) where
+instance (KnownSymbol k) => Show (IdWithPfx k) where
   show (IdWithPfx x) = fromSSymbol (symbolSing @k) <> show x
-instance KnownSymbol k => Read (IdWithPfx k) where
+instance (KnownSymbol k) => Read (IdWithPfx k) where
   readPrec = do
     let pfx = fromSSymbol (symbolSing @k)
     lift skipSpaces
@@ -88,33 +102,34 @@ instance KnownSymbol k => Read (IdWithPfx k) where
         Left _e -> pfail
         Right x -> pure (IdWithPfx x)
       _ -> fail "Incorrect format"
-instance KnownSymbol k => ToJSON (IdWithPfx k) where
+instance (KnownSymbol k) => ToJSON (IdWithPfx k) where
   toJSON (IdWithPfx x) = String (T.pack (fromSSymbol (symbolSing @k)) <> idToText x)
-instance KnownSymbol k => FromJSON (IdWithPfx k) where
+instance (KnownSymbol k) => FromJSON (IdWithPfx k) where
   parseJSON (String t) = case T.splitAt (length pfx) t of
     (p, t) | p == T.pack pfx -> case idFromText t of
       Left e -> fail e
       Right x -> pure (IdWithPfx x)
     _ -> fail "Incorrect format"
-    where
-      pfx = fromSSymbol (symbolSing @k)
+   where
+    pfx = fromSSymbol (symbolSing @k)
   parseJSON json = typeMismatch "IdWithPfx" json
 
-idWithPfxParser :: forall k. KnownSymbol k => Parser (IdWithPfx k)
+idWithPfxParser :: forall k. (KnownSymbol k) => Parser (IdWithPfx k)
 idWithPfxParser = do
   pfx' <- Atto.take (length pfx)
   if T.pack pfx /= pfx'
-  then fail "Incorrect format"
-  else IdWithPfx <$> idParser
-  where
-    pfx = fromSSymbol (symbolSing @k)
+    then fail "Incorrect format"
+    else IdWithPfx <$> idParser
+ where
+  pfx = fromSSymbol (symbolSing @k)
 
 newtype GroupId = GroupId
   { getGroupId :: IdWithPfx "g_"
   }
   deriving (Generic, Eq, Ord, Hashable, ToJSON, FromJSON, Arbitrary)
-  deriving (Show, Read)
-       via (IdWithPfx "g_")
+  deriving
+    (Show, Read)
+    via (IdWithPfx "g_")
 instance Uniform GroupId where
   uniformM gen = GroupId <$> uniformM gen
 
@@ -125,8 +140,9 @@ newtype ActorId = ActorId
   { getActorId :: IdWithPfx "a_"
   }
   deriving (Generic, Eq, Ord, Hashable, ToJSON, FromJSON, Arbitrary)
-  deriving (Show, Read)
-       via (IdWithPfx "a_")
+  deriving
+    (Show, Read)
+    via (IdWithPfx "a_")
 instance Uniform ActorId where
   uniformM gen = ActorId <$> uniformM gen
 
@@ -137,8 +153,9 @@ newtype SpaceId = SpaceId
   { getSpaceId :: IdWithPfx "s_"
   }
   deriving (Generic, Eq, Ord, Hashable, ToJSON, FromJSON, Arbitrary)
-  deriving (Show, Read)
-       via (IdWithPfx "s_")
+  deriving
+    (Show, Read)
+    via (IdWithPfx "s_")
 instance Uniform SpaceId where
   uniformM gen = SpaceId <$> uniformM gen
 
@@ -149,8 +166,9 @@ newtype EntityId = EntityId
   { getEntityId :: IdWithPfx "e_"
   }
   deriving (Generic, Eq, Ord, Hashable, ToJSON, FromJSON, Arbitrary)
-  deriving (Show, Read)
-       via (IdWithPfx "e_")
+  deriving
+    (Show, Read)
+    via (IdWithPfx "e_")
 instance Uniform EntityId where
   uniformM gen = EntityId <$> uniformM gen
 
@@ -161,8 +179,9 @@ newtype VersionId = VersionId
   { getVersionId :: IdWithPfx "v_"
   }
   deriving (Generic, Eq, Ord, Hashable, ToJSON, FromJSON, Arbitrary)
-  deriving (Show, Read)
-       via (IdWithPfx "v_")
+  deriving
+    (Show, Read)
+    via (IdWithPfx "v_")
 instance Uniform VersionId where
   uniformM gen = VersionId <$> uniformM gen
 
@@ -177,13 +196,14 @@ data AnyId
   | AnyIdVersion VersionId
   deriving (Eq, Ord, Show, Read)
 instance Arbitrary AnyId where
-  arbitrary = oneof
-    [ AnyIdActor <$> arbitrary
-    , AnyIdGroup <$> arbitrary
-    , AnyIdSpace <$> arbitrary
-    , AnyIdEntity <$> arbitrary <*> arbitrary
-    , AnyIdVersion <$> arbitrary
-    ]
+  arbitrary =
+    oneof
+      [ AnyIdActor <$> arbitrary
+      , AnyIdGroup <$> arbitrary
+      , AnyIdSpace <$> arbitrary
+      , AnyIdEntity <$> arbitrary <*> arbitrary
+      , AnyIdVersion <$> arbitrary
+      ]
 instance ToJSON AnyId where
   toJSON x = case x of
     AnyIdActor x -> toJSON x

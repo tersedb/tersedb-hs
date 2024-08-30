@@ -25,13 +25,13 @@ import qualified Lib.Async.Actions.Unsafe.Update as Async
 import qualified Lib.Async.Actions.Unsafe.Update.Group as Async
 import qualified Lib.Async.Types.Monad as Async
 import qualified Lib.Async.Types.Store as Async
-import qualified Lib.Async.Types.Tabulation as Async
 import Lib.Async.Types.Store.Iso (
   genSyncStore,
   genSyncTemp,
   loadSyncStore,
   loadSyncTemp,
  )
+import qualified Lib.Async.Types.Tabulation as Async
 import qualified Lib.Sync.Actions.Safe.Verify as Sync
 import qualified Lib.Sync.Actions.Tabulation as Sync
 import qualified Lib.Sync.Actions.Unsafe.Read as Sync
@@ -159,7 +159,8 @@ class (Monad m) => TerseDB n m | m -> n where
   unsafeEntityExists :: EntityId -> m Bool
   unsafeVersionExists :: VersionId -> m Bool
   unsafeReadUniversePermission :: GroupId -> m CollectionPermissionWithExemption
-  unsafeReadOrganizationPermission :: GroupId -> m CollectionPermissionWithExemption
+  unsafeReadOrganizationPermission
+    :: GroupId -> m CollectionPermissionWithExemption
   unsafeReadRecruiterPermission :: GroupId -> m CollectionPermission
   unsafeReadSpacePermission :: GroupId -> SpaceId -> m CollectionPermission
   unsafeReadEntityPermission :: GroupId -> SpaceId -> m CollectionPermission
@@ -308,25 +309,32 @@ instance (MonadThrow m) => TerseDB (Sync.TerseM m) (Sync.TerseM m) where
     pure $ ListT.fromFoldable ns
   unsafeReadUniversePermission gId = do
     s <- get
-    pure . fromMaybe minBound $ s ^? Sync.temp . Sync.toTabulatedGroups . ix gId . Sync.forUniverse
+    pure . fromMaybe minBound $
+      s ^? Sync.temp . Sync.toTabulatedGroups . ix gId . Sync.forUniverse
   unsafeReadOrganizationPermission gId = do
     s <- get
-    pure . fromMaybe minBound $ s ^? Sync.temp . Sync.toTabulatedGroups . ix gId . Sync.forOrganization
+    pure . fromMaybe minBound $
+      s ^? Sync.temp . Sync.toTabulatedGroups . ix gId . Sync.forOrganization
   unsafeReadRecruiterPermission gId = do
     s <- get
-    pure . fromMaybe minBound $ s ^? Sync.temp . Sync.toTabulatedGroups . ix gId . Sync.forRecruiter
+    pure . fromMaybe minBound $
+      s ^? Sync.temp . Sync.toTabulatedGroups . ix gId . Sync.forRecruiter
   unsafeReadSpacePermission gId sId = do
     s <- get
-    pure . fromMaybe minBound $ s ^? Sync.temp . Sync.toTabulatedGroups . ix gId . Sync.forSpaces . ix sId
+    pure . fromMaybe minBound $
+      s ^? Sync.temp . Sync.toTabulatedGroups . ix gId . Sync.forSpaces . ix sId
   unsafeReadEntityPermission gId sId = do
     s <- get
-    pure . fromMaybe minBound $ s ^? Sync.temp . Sync.toTabulatedGroups . ix gId . Sync.forEntities . ix sId
+    pure . fromMaybe minBound $
+      s ^? Sync.temp . Sync.toTabulatedGroups . ix gId . Sync.forEntities . ix sId
   unsafeReadGroupPermission gId gId' = do
     s <- get
-    pure . fromMaybe minBound $ s ^? Sync.temp . Sync.toTabulatedGroups . ix gId . Sync.forGroups . ix gId'
+    pure . fromMaybe minBound $
+      s ^? Sync.temp . Sync.toTabulatedGroups . ix gId . Sync.forGroups . ix gId'
   unsafeReadMemberPermission gId gId' = do
     s <- get
-    pure . fromMaybe minBound $ s ^? Sync.temp . Sync.toTabulatedGroups . ix gId . Sync.forMembers . ix gId'
+    pure . fromMaybe minBound $
+      s ^? Sync.temp . Sync.toTabulatedGroups . ix gId . Sync.forMembers . ix gId'
   unsafeReadReferencesEager = Sync.unsafeReadReferencesEager
   unsafeReadReferencesLazy = Sync.unsafeReadReferencesLazy
   unsafeReadReferencesFromEager = Sync.unsafeReadReferencesFromEager
@@ -447,13 +455,22 @@ instance TerseDB (Async.TerseM IO) (Async.TerseM STM) where
     liftBase $ Map.lookup gId (s ^. Async.store . Async.toGroupsPrev)
   unsafeReadUniversePermission gId = do
     s <- ask
-    liftBase $ fmap (fromMaybe minBound) $ Map.lookup gId $ s ^. Async.temp . Async.toTabUniverse
+    liftBase $
+      fmap (fromMaybe minBound) $
+        Map.lookup gId $
+          s ^. Async.temp . Async.toTabUniverse
   unsafeReadOrganizationPermission gId = do
     s <- ask
-    liftBase $ fmap (fromMaybe minBound) $ Map.lookup gId $ s ^. Async.temp . Async.toTabOrganization
+    liftBase $
+      fmap (fromMaybe minBound) $
+        Map.lookup gId $
+          s ^. Async.temp . Async.toTabOrganization
   unsafeReadRecruiterPermission gId = do
     s <- ask
-    liftBase $ fmap (fromMaybe minBound) $ Map.lookup gId $ s ^. Async.temp . Async.toTabRecruiter
+    liftBase $
+      fmap (fromMaybe minBound) $
+        Map.lookup gId $
+          s ^. Async.temp . Async.toTabRecruiter
   unsafeReadSpacePermission gId sId = do
     s <- ask
     liftBase $ fmap (fromMaybe minBound) $ do
@@ -581,7 +598,8 @@ entityExists readers eId = do
     then pure Nothing
     else Just <$> unsafeEntityExists eId
 
-versionExists :: (TerseDB n m) => NonEmpty ActorId -> VersionId -> m (Maybe Bool)
+versionExists
+  :: (TerseDB n m) => NonEmpty ActorId -> VersionId -> m (Maybe Bool)
 versionExists readers vId = do
   canAdjust <- anyCanReadVersion readers vId
   if not canAdjust
@@ -590,34 +608,71 @@ versionExists readers vId = do
 
 -- ** Details
 
-readUniversePermission :: TerseDB n m => NonEmpty ActorId -> GroupId -> m (Maybe CollectionPermissionWithExemption)
+readUniversePermission
+  :: (TerseDB n m)
+  => NonEmpty ActorId
+  -> GroupId
+  -> m (Maybe CollectionPermissionWithExemption)
 readUniversePermission readers gId = do
   canRead <- anyCanReadGroup readers gId
   if not canRead then pure Nothing else Just <$> unsafeReadUniversePermission gId
-readOrganizationPermission :: TerseDB n m => NonEmpty ActorId -> GroupId -> m (Maybe CollectionPermissionWithExemption)
+readOrganizationPermission
+  :: (TerseDB n m)
+  => NonEmpty ActorId
+  -> GroupId
+  -> m (Maybe CollectionPermissionWithExemption)
 readOrganizationPermission readers gId = do
   canRead <- anyCanReadGroup readers gId
-  if not canRead then pure Nothing else Just <$> unsafeReadOrganizationPermission gId
-readRecruiterPermission :: TerseDB n m => NonEmpty ActorId -> GroupId -> m (Maybe CollectionPermission)
+  if not canRead
+    then pure Nothing
+    else Just <$> unsafeReadOrganizationPermission gId
+readRecruiterPermission
+  :: (TerseDB n m) => NonEmpty ActorId -> GroupId -> m (Maybe CollectionPermission)
 readRecruiterPermission readers gId = do
   canRead <- anyCanReadGroup readers gId
   if not canRead then pure Nothing else Just <$> unsafeReadRecruiterPermission gId
-readSpacePermission :: TerseDB n m => NonEmpty ActorId -> GroupId -> SpaceId -> m (Maybe CollectionPermission)
+readSpacePermission
+  :: (TerseDB n m)
+  => NonEmpty ActorId
+  -> GroupId
+  -> SpaceId
+  -> m (Maybe CollectionPermission)
 readSpacePermission readers gId sId = do
   canRead <- anyCanReadGroup readers gId
   if not canRead then pure Nothing else Just <$> unsafeReadSpacePermission gId sId
-readEntityPermission :: TerseDB n m => NonEmpty ActorId -> GroupId -> SpaceId -> m (Maybe CollectionPermission)
+readEntityPermission
+  :: (TerseDB n m)
+  => NonEmpty ActorId
+  -> GroupId
+  -> SpaceId
+  -> m (Maybe CollectionPermission)
 readEntityPermission readers gId sId = do
   canRead <- anyCanReadGroup readers gId
-  if not canRead then pure Nothing else Just <$> unsafeReadEntityPermission gId sId
-readGroupPermission :: TerseDB n m => NonEmpty ActorId -> GroupId -> GroupId -> m (Maybe CollectionPermission)
+  if not canRead
+    then pure Nothing
+    else Just <$> unsafeReadEntityPermission gId sId
+readGroupPermission
+  :: (TerseDB n m)
+  => NonEmpty ActorId
+  -> GroupId
+  -> GroupId
+  -> m (Maybe CollectionPermission)
 readGroupPermission readers gId gId' = do
   canRead <- anyCanReadGroup readers gId
-  if not canRead then pure Nothing else Just <$> unsafeReadGroupPermission gId gId'
-readMemberPermission :: TerseDB n m => NonEmpty ActorId -> GroupId -> GroupId -> m (Maybe CollectionPermission)
+  if not canRead
+    then pure Nothing
+    else Just <$> unsafeReadGroupPermission gId gId'
+readMemberPermission
+  :: (TerseDB n m)
+  => NonEmpty ActorId
+  -> GroupId
+  -> GroupId
+  -> m (Maybe CollectionPermission)
 readMemberPermission readers gId gId' = do
   canRead <- anyCanReadGroup readers gId
-  if not canRead then pure Nothing else Just <$> unsafeReadMemberPermission gId gId'
+  if not canRead
+    then pure Nothing
+    else Just <$> unsafeReadMemberPermission gId gId'
 
 readPrevGroup
   :: (TerseDB n m) => NonEmpty ActorId -> GroupId -> m (Maybe (Maybe GroupId))
@@ -638,7 +693,10 @@ readNextGroups readers gId = do
         <$> unsafeReadNextGroupsEager gId
 
 readReferences
-  :: (TerseDB n m) => NonEmpty ActorId -> VersionId -> m (Maybe (UnfoldlM m VersionId))
+  :: (TerseDB n m)
+  => NonEmpty ActorId
+  -> VersionId
+  -> m (Maybe (UnfoldlM m VersionId))
 readReferences readers vId = do
   canAdjust <- anyCanReadVersion readers vId
   if not canAdjust
@@ -648,7 +706,10 @@ readReferences readers vId = do
         <$> unsafeReadReferencesEager vId
 
 readReferencesFrom
-  :: (TerseDB n m) => NonEmpty ActorId -> VersionId -> m (Maybe (UnfoldlM m VersionId))
+  :: (TerseDB n m)
+  => NonEmpty ActorId
+  -> VersionId
+  -> m (Maybe (UnfoldlM m VersionId))
 readReferencesFrom readers vId = do
   canAdjust <- anyCanReadVersion readers vId
   if not canAdjust
@@ -658,7 +719,10 @@ readReferencesFrom readers vId = do
         <$> unsafeReadReferencesFromEager vId
 
 readSubscriptions
-  :: (TerseDB n m) => NonEmpty ActorId -> VersionId -> m (Maybe (UnfoldlM m EntityId))
+  :: (TerseDB n m)
+  => NonEmpty ActorId
+  -> VersionId
+  -> m (Maybe (UnfoldlM m EntityId))
 readSubscriptions readers vId = do
   canAdjust <- anyCanReadVersion readers vId
   if not canAdjust
@@ -668,7 +732,10 @@ readSubscriptions readers vId = do
         <$> unsafeReadSubscriptionsEager vId
 
 readSubscriptionsFrom
-  :: (TerseDB n m) => NonEmpty ActorId -> EntityId -> m (Maybe (UnfoldlM m VersionId))
+  :: (TerseDB n m)
+  => NonEmpty ActorId
+  -> EntityId
+  -> m (Maybe (UnfoldlM m VersionId))
 readSubscriptionsFrom readers eId = do
   canAdjust <- anyCanReadEntity readers eId
   if not canAdjust
@@ -692,7 +759,10 @@ readForkOf readers eId = do
           pure $ if not canRead then Nothing else Just (Just fork)
 
 readForkedBy
-  :: (TerseDB n m) => NonEmpty ActorId -> VersionId -> m (Maybe (UnfoldlM m EntityId))
+  :: (TerseDB n m)
+  => NonEmpty ActorId
+  -> VersionId
+  -> m (Maybe (UnfoldlM m EntityId))
 readForkedBy readers vId = do
   canAdjust <- anyCanReadVersion readers vId
   if not canAdjust
@@ -703,14 +773,16 @@ readForkedBy readers vId = do
 
 -- ** Collections
 
-readActors :: (TerseDB n m) => NonEmpty ActorId -> m (Maybe (UnfoldlM m ActorId))
+readActors
+  :: (TerseDB n m) => NonEmpty ActorId -> m (Maybe (UnfoldlM m ActorId))
 readActors readers = do
   canAdjust <- anyCanReadActor readers
   if not canAdjust
     then pure Nothing
     else Just <$> unsafeReadActorsEager
 
-readGroups :: (TerseDB n m) => NonEmpty ActorId -> m (Maybe (UnfoldlM m GroupId))
+readGroups
+  :: (TerseDB n m) => NonEmpty ActorId -> m (Maybe (UnfoldlM m GroupId))
 readGroups readers = do
   canAdjust <-
     anyM
@@ -746,7 +818,8 @@ readMembersOf readers aId = do
       Just . UnfoldlM.filter (anyCanReadGroup readers)
         <$> unsafeReadMembersOfEager aId
 
-readSpaces :: (TerseDB n m) => NonEmpty ActorId -> m (Maybe (UnfoldlM m SpaceId))
+readSpaces
+  :: (TerseDB n m) => NonEmpty ActorId -> m (Maybe (UnfoldlM m SpaceId))
 readSpaces readers = do
   canAdjust <-
     anyM
@@ -768,7 +841,10 @@ readEntities readers sId = do
     else Just <$> unsafeReadEntitiesEager sId
 
 readVersions
-  :: (TerseDB n m) => NonEmpty ActorId -> EntityId -> m (Maybe (UnfoldlM m VersionId))
+  :: (TerseDB n m)
+  => NonEmpty ActorId
+  -> EntityId
+  -> m (Maybe (UnfoldlM m VersionId))
 readVersions readers eId = do
   canAdjust <- anyCanReadEntity readers eId
   if not canAdjust
