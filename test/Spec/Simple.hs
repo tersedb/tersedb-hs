@@ -1,28 +1,38 @@
 module Spec.Simple where
 
-import Lib.Types.Id (GroupId)
+import Lib.Types.Id (GroupId, IdWithPfx, AnyId)
 import Lib.Types.Permission (
   CollectionPermission (..),
   CollectionPermissionWithExemption (..),
   SinglePermission,
   hasMinimumPermission,
  )
-
+import Lib.Api (Action, MutableAction)
 import qualified Data.Aeson as Aeson
-import Test.QuickCheck (property)
+import Test.QuickCheck (Arbitrary, property)
 import Test.Syd (Spec, describe, it, shouldBe, shouldSatisfy)
-import Text.Read (readMaybe)
+import Text.Read (readEither)
+import Data.Data (Proxy (..))
+import Data.Aeson (ToJSON, FromJSON)
+
+serialization :: forall a. (Show a, Read a, ToJSON a, FromJSON a, Arbitrary a, Eq a) => Proxy a -> Spec
+serialization Proxy = do
+  it "show / read should be isomorphic" $
+    property $ \(id :: a) ->
+      readEither (show id) `shouldBe` Right id
+  it "aeson should be isomorphic" $
+    property $ \(id :: a) ->
+      Aeson.decode (Aeson.encode id) `shouldBe` Just id
+
 
 simpleTests :: Spec
 simpleTests = do
   describe "Id" $ do
     describe "parsing" $ do
-      it "show / read should be isomorphic" $
-        property $ \(id :: GroupId) ->
-          readMaybe (show id) `shouldBe` Just id
-      it "aeson should be isomorphic" $
-        property $ \(id :: GroupId) ->
-          Aeson.decode (Aeson.encode id) `shouldBe` Just id
+      describe "IdWithPfx" . serialization $ Proxy @(IdWithPfx "g_")
+      describe "AnyId" . serialization $ Proxy @AnyId
+      describe "Action" . serialization $ Proxy @Action
+      describe "MutableAction" . serialization $ Proxy @MutableAction
   describe "CollectionPermission" $ do
     it "has a lower bound" $
       property $

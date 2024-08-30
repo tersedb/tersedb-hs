@@ -26,6 +26,7 @@ import Lib.Async.Types.Store (
   toEntities,
   toEntityOf,
   toForks,
+  toGroups,
   toGroupsPrev,
   toMemberOf,
   toMembers,
@@ -38,7 +39,7 @@ import Lib.Async.Types.Store (
   toSpaceOf,
   toSpaces,
   toSpacesHiddenTo,
-  toVersions, toGroups,
+  toVersions,
  )
 import Lib.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
 import Lib.Types.Permission (CollectionPermission (Blind), collectionPermission)

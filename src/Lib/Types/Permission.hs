@@ -21,7 +21,7 @@ You can reach me at athan.clark@gmail.com.
 module Lib.Types.Permission where
 
 import Control.Lens.TH (makeLensesFor)
-import Data.Aeson (FromJSON (parseJSON), ToJSON (toJSON), Value (String))
+import Data.Aeson (FromJSON (parseJSON), ToJSON (toJSON), Value (String), withObject, (.:), (.=), object)
 import Data.Aeson.Types (typeMismatch)
 import Data.Hashable (Hashable)
 import Data.Semigroup (Max (..))
@@ -43,18 +43,18 @@ instance HasMinimumPermission CollectionPermission where
 instance Hashable CollectionPermission
 instance ToJSON CollectionPermission where
   toJSON x = String $ case x of
-    Blind -> "blind"
-    Read -> "read"
-    Create -> "create"
-    Update -> "update"
-    Delete -> "delete"
+    Blind -> "b"
+    Read -> "r"
+    Create -> "c"
+    Update -> "u"
+    Delete -> "d"
 instance FromJSON CollectionPermission where
   parseJSON json@(String x) = case x of
-    "blind" -> pure Blind
-    "read" -> pure Read
-    "create" -> pure Create
-    "update" -> pure Update
-    "delete" -> pure Delete
+    "b" -> pure Blind
+    "r" -> pure Read
+    "c" -> pure Create
+    "u" -> pure Update
+    "d" -> pure Delete
     _ -> typeMismatch "CollectionPermission" json
   parseJSON json = typeMismatch "CollectionPermission" json
 instance Semigroup CollectionPermission where
@@ -72,9 +72,11 @@ data CollectionPermissionWithExemption = CollectionPermissionWithExemption
   , collectionPermissionExemption :: Bool
   }
   deriving (Eq, Show, Read, Generic)
-  deriving
-    (ToJSON, FromJSON)
-    via PrefixedSnake "collectionPermission" CollectionPermissionWithExemption
+instance ToJSON CollectionPermissionWithExemption where
+  toJSON (CollectionPermissionWithExemption p e) = object ["p" .= p, "e" .= e]
+instance FromJSON CollectionPermissionWithExemption where
+  parseJSON = withObject "CollectionPermissionWithExemption" $ \o ->
+    CollectionPermissionWithExemption <$> o .: "p" <*> o .: "e"
 instance HasMinimumPermission CollectionPermissionWithExemption where
   hasMinimumPermission
     (CollectionPermissionWithExemption xp _)
@@ -108,16 +110,16 @@ data SinglePermission
   deriving (Eq, Ord, Show, Read, Generic)
 instance ToJSON SinglePermission where
   toJSON x = String $ case x of
-    NonExistent -> "nonexistent"
-    Exists -> "exists"
-    Adjust -> "adjust"
-    Obliterate -> "obliterate"
+    NonExistent -> "n"
+    Exists -> "e"
+    Adjust -> "a"
+    Obliterate -> "o"
 instance FromJSON SinglePermission where
   parseJSON json@(String x) = case x of
-    "nonexistent" -> pure NonExistent
-    "exists" -> pure Exists
-    "adjust" -> pure Adjust
-    "obliterate" -> pure Obliterate
+    "n" -> pure NonExistent
+    "e" -> pure Exists
+    "a" -> pure Adjust
+    "o" -> pure Obliterate
     _ -> typeMismatch "SinglePermission" json
   parseJSON json = typeMismatch "SinglePermission" json
 instance Semigroup SinglePermission where

@@ -26,6 +26,18 @@ import Spec.Sync.Sample.Tree (
   storeSampleTree,
  )
 
+import Control.Exception (SomeException)
+import Control.Monad (replicateM, void)
+import Control.Monad.Extra (unless)
+import Control.Monad.State (StateT, execStateT, get)
+import Data.Foldable (foldlM, for_, traverse_)
+import Data.HashMap.Strict (HashMap)
+import qualified Data.HashMap.Strict as HM
+import Data.HashSet (HashSet)
+import qualified Data.HashSet as HS
+import Data.List.NonEmpty (NonEmpty, uncons)
+import qualified Data.List.NonEmpty as NE
+import qualified Data.Text.Lazy as LT
 import Lib.Class (
   addMember,
   setEntityPermission,
@@ -61,18 +73,6 @@ import Lib.Types.Permission (
   CollectionPermission (..),
   SinglePermission,
  )
-import Control.Monad (replicateM, void)
-import Control.Monad.Extra (unless)
-import Control.Exception (SomeException)
-import Control.Monad.State (StateT, execStateT, get)
-import Data.Foldable (foldlM, for_, traverse_)
-import Data.HashMap.Strict (HashMap)
-import qualified Data.HashMap.Strict as HM
-import Data.HashSet (HashSet)
-import qualified Data.HashSet as HS
-import Data.List.NonEmpty (NonEmpty, uncons)
-import qualified Data.List.NonEmpty as NE
-import qualified Data.Text.Lazy as LT
 import Test.QuickCheck (
   Arbitrary (arbitrary, shrink),
   Gen,
@@ -221,7 +221,8 @@ loadSample SampleStore{..} = errorOnLeft . flip execStateT (loadSampleTree sampl
 
 storeSample :: SampleStore -> ActorId -> GroupId -> Shared
 storeSample SampleStore{..} adminActor adminGroup =
-  errorOnLeft . flip execStateT (storeSampleTree sampleGroups adminActor adminGroup) $ do
+  errorOnLeft
+    . flip execStateT (storeSampleTree sampleGroups adminActor adminGroup) $ do
     for_ (HS.toList sampleSpaces) $ \sId -> do
       succeeded <- storeSpace (NE.singleton adminActor) sId
       unless succeeded $ do
@@ -337,7 +338,7 @@ storeSample SampleStore{..} adminActor adminGroup =
               <> " - "
               <> LT.unpack (pShowNoColor s)
 
-errorOnLeft :: Show l => Either l a -> a
+errorOnLeft :: (Show l) => Either l a -> a
 errorOnLeft eX = case eX of
   Left e -> error $ show e
   Right x -> x

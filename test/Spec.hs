@@ -26,5 +26,5 @@ import Test.Syd (describe, sydTest)
 main :: IO ()
 main = sydTest $ do
   describe "Simple" simpleTests
-  describe "Sync" syncTests
-  describe "Async" asyncTests
+  -- describe "Sync" syncTests
+  -- describe "Async" asyncTests

@@ -32,12 +32,14 @@ default-extensions:
   - KindSignatures
   - MultiParamTypeClasses
   - NamedFieldPuns
+  - NumericUnderscores
   - OverloadedStrings
   - RankNTypes
   - RecordWildCards
   - ScopedTypeVariables
   - StandaloneDeriving
   - TemplateHaskell
+  - TupleSections
   - TypeApplications
   - TypeFamilies
   - UndecidableInstances
@@ -47,6 +49,7 @@ dependencies:
   - aeson
   - base16-bytestring
   - bytestring
+  - cereal
   - deferred-folds
   - deriving-aeson
   - exceptions
@@ -94,6 +97,9 @@ executables:
       - -with-rtsopts=-N
     dependencies:
       - tersedb
+      - http-types
+      - wai
+      - warp
 
 tests:
   tersedb-test:

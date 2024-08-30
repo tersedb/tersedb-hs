@@ -46,6 +46,7 @@ import Control.Lens (
   _Just,
  )
 import Control.Monad (unless)
+import Control.Monad.Catch (MonadThrow (throwM))
 import Control.Monad.State (MonadState (get, put), execState, modify, runState)
 import Data.Foldable (foldlM, for_)
 import Data.HashSet (HashSet)
@@ -74,15 +75,13 @@ import Lib.Sync.Types.Store.Groups (
   roots,
   universePermission,
  )
+import Lib.Types.Errors (CycleDetected (..))
 import Lib.Types.Id (GroupId, SpaceId)
 import Lib.Types.Permission (
   CollectionPermission (..),
   CollectionPermissionWithExemption,
   SinglePermission,
  )
-import Lib.Types.Errors (CycleDetected (..))
-import Control.Monad.Catch (MonadThrow(throwM))
-
 
 -- | Loads the parent's untabulated permissions if it's not already tabulated!
 unsafeLinkGroups

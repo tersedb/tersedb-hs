@@ -20,6 +20,14 @@ You can reach me at athan.clark@gmail.com.
 
 module Spec.Sync.Sample.Tree where
 
+import Control.Exception (SomeException)
+import Control.Lens (at, ix, (%~), (&), (.~), (?~))
+import Control.Monad.Extra (unless)
+import Control.Monad.State (StateT, execStateT, get, modify)
+import Data.Foldable (traverse_)
+import qualified Data.List.NonEmpty as NE
+import Data.Maybe (fromMaybe)
+import qualified Data.Text.Lazy as LT
 import Lib.Class (
   setGroupPermission,
   setMemberPermission,
@@ -59,13 +67,6 @@ import Lib.Types.Permission (
   CollectionPermissionWithExemption (..),
   SinglePermission (Adjust),
  )
-import Control.Lens (at, ix, (%~), (&), (.~), (?~))
-import Control.Monad.Extra (unless)
-import Control.Monad.State (StateT, get, modify, execStateT)
-import Data.Foldable (traverse_)
-import qualified Data.List.NonEmpty as NE
-import Data.Maybe (fromMaybe)
-import qualified Data.Text.Lazy as LT
 import Test.QuickCheck (
   Arbitrary (arbitrary, shrink),
   getSize,
@@ -73,7 +74,6 @@ import Test.QuickCheck (
   resize,
  )
 import Text.Pretty.Simple (pShowNoColor)
-import Control.Exception (SomeException)
 
 data SampleGroupTree a = SampleGroupTree
   { current :: GroupId
@@ -122,7 +122,7 @@ instance Arbitrary (SampleGroupTree ()) where
          ]
 
 storeSampleTree :: SampleGroupTree a -> ActorId -> GroupId -> Shared
-storeSampleTree xs adminActor adminGroup = 
+storeSampleTree xs adminActor adminGroup =
   let eX = flip execStateT (emptyShared adminActor adminGroup) $ do
         succeeded <- storeGroup (NE.singleton adminActor) (current xs)
         unless succeeded $ do
@@ -133,7 +133,7 @@ storeSampleTree xs adminActor adminGroup =
               <> " - "
               <> LT.unpack (pShowNoColor s)
         go xs
-  in  case eX of
+   in case eX of
         Left e -> error $ show e
         Right x -> x
  where
@@ -201,11 +201,11 @@ storeSampleTree xs adminActor adminGroup =
 
 -- | Uses unsafe methods
 loadSampleTree :: SampleGroupTree a -> Shared
-loadSampleTree xs = 
+loadSampleTree xs =
   let eX = flip execStateT unsafeEmptyShared $ do
         modify $ store . toGroups . roots . at (current xs) ?~ ()
         go xs
-  in  case eX of
+   in case eX of
         Left e -> error $ show e
         Right x -> x
  where
@@ -233,7 +233,7 @@ loadSampleTreeNoTab xs =
   let eX = flip execStateT unsafeEmptyShared $ do
         modify $ store . toGroups . roots . at (current xs) ?~ ()
         go xs
-  in  case eX of
+   in case eX of
         Left e -> error $ show e
         Right x -> x
  where

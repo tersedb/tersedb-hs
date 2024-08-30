@@ -17,14 +17,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 You can reach me at athan.clark@gmail.com.
 -}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE DerivingVia #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE TemplateHaskell #-}
 
 module Lib.Sync.Actions.Safe where
 

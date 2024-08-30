@@ -21,6 +21,7 @@ You can reach me at athan.clark@gmail.com.
 module Lib.Sync.Actions.Safe.Update.Group where
 
 import Control.Lens (ix, (^?), _Just)
+import Control.Monad.Catch (MonadThrow)
 import Control.Monad.Extra (andM)
 import Control.Monad.State (MonadState, get)
 import Data.HashSet (HashSet)
@@ -34,7 +35,6 @@ import Lib.Sync.Actions.Unsafe.Update.Group (
 import Lib.Sync.Types.Store (Shared, store, toGroups)
 import Lib.Sync.Types.Store.Groups (next, nodes, prev)
 import Lib.Types.Id (ActorId, GroupId)
-import Control.Monad.Catch (MonadThrow)
 
 updateGroupChildren
   :: (MonadState Shared m, MonadThrow m)

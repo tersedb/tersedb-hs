@@ -2,6 +2,7 @@ module Lib.Async.Types.Store.Iso where
 
 import Control.Concurrent.STM (STM, modifyTVar, newTVar, readTVar)
 import Control.Lens (at, ix, non, (&), (.~), (?~), (^.))
+import Control.Monad (when)
 import Control.Monad.Base (MonadBase (liftBase))
 import Control.Monad.Reader (MonadReader (ask))
 import Control.Monad.Trans.Control (MonadBaseControl (liftBaseWith))
@@ -25,6 +26,7 @@ import Lib.Async.Types.Store (
   toEntityOf,
   toForks,
   toForksFrom,
+  toGroups,
   toGroupsNext,
   toGroupsPrev,
   toMemberOf,
@@ -47,7 +49,7 @@ import Lib.Async.Types.Store (
   toTabOther,
   toTabRecruiter,
   toTabUniverse,
-  toVersions, toGroups,
+  toVersions,
  )
 import Lib.Async.Types.Tabulation (
   forEntities,
@@ -65,7 +67,6 @@ import qualified Lib.Sync.Types.Store.Version as Sync
 import qualified StmContainers.Map as Map
 import qualified StmContainers.Multimap as Multimap
 import qualified StmContainers.Set as Set
-import Control.Monad (when)
 
 loadSyncStore :: (MonadReader Shared m, MonadBase STM m) => Sync.Store -> m ()
 loadSyncStore syncStore = do

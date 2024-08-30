@@ -100,10 +100,14 @@ data Store = Store
   { storeGroupsPrev :: Map GroupId GroupId
   , storeGroupsNext :: Multimap GroupId GroupId
   , storeGroupMembers :: Multimap GroupId ActorId
-  , storeGroupRoots :: Set GroupId -- ^ Only groups without parents
-  , storeGroupEdges :: Set (GroupId, GroupId) -- ^ All group edges
-  , storeGroupOuts :: Set GroupId -- ^ Only groups with parents and have no children
-  , storeGroups :: Set GroupId -- ^ All groups
+  , storeGroupRoots :: Set GroupId
+  -- ^ Only groups without parents
+  , storeGroupEdges :: Set (GroupId, GroupId)
+  -- ^ All group edges
+  , storeGroupOuts :: Set GroupId
+  -- ^ Only groups with parents and have no children
+  , storeGroups :: Set GroupId
+  -- ^ All groups
   , storeActors :: Set ActorId
   , storeSpaces :: Set SpaceId
   , storeSpaceEntities :: Multimap SpaceId EntityId

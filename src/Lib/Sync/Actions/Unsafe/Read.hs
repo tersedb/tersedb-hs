@@ -5,30 +5,34 @@ import Control.Monad.Base (MonadBase)
 import Control.Monad.Morph (hoist)
 import Control.Monad.State (MonadIO, MonadState (get, put), StateT, evalStateT)
 import Data.Foldable (foldlM)
+import qualified Data.HashMap.Strict as HM
 import qualified Data.HashSet as HS
+import qualified Data.List.NonEmpty as NE
 import Data.Maybe (fromMaybe)
 import Debug.Trace (traceShow)
 import DeferredFolds.UnfoldlM (UnfoldlM (..))
+import qualified DeferredFolds.UnfoldlM as UnfoldlM
 import GHC.Generics (Generic)
 import Lib.Sync.Types.Store (
   Shared,
   store,
   temp,
+  toActors,
+  toEntities,
+  toForksFrom,
+  toGroups,
+  toMemberOf,
   toReferencesFrom,
   toSpaces,
   toSubscriptionsFrom,
-  toVersions, toActors, toGroups, toMemberOf, toEntities, toForksFrom,
+  toVersions,
  )
+import Lib.Sync.Types.Store.Entity (versions)
+import Lib.Sync.Types.Store.Groups (members, nodes)
 import Lib.Sync.Types.Store.Version (references, subscriptions)
-import Lib.Types.Id (EntityId, SpaceId, VersionId, ActorId, GroupId)
+import Lib.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
 import ListT (ListT)
 import qualified ListT
-import qualified DeferredFolds.UnfoldlM as UnfoldlM
-import qualified Data.HashMap.Strict as HM
-import Lib.Sync.Types.Store.Groups (nodes, members)
-import Lib.Sync.Types.Store.Entity (versions)
-import qualified Data.List.NonEmpty as NE
-
 
 unsafeReadReferencesEager
   :: (MonadState Shared m) => VersionId -> m (UnfoldlM m VersionId)

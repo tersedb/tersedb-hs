@@ -91,12 +91,14 @@ library
       KindSignatures
       MultiParamTypeClasses
       NamedFieldPuns
+      NumericUnderscores
       OverloadedStrings
       RankNTypes
       RecordWildCards
       ScopedTypeVariables
       StandaloneDeriving
       TemplateHaskell
+      TupleSections
       TypeApplications
       TypeFamilies
       UndecidableInstances
@@ -107,6 +109,7 @@ library
     , base >=4.7 && <5
     , base16-bytestring
     , bytestring
+    , cereal
     , deferred-folds
     , deriving-aeson
     , exceptions
@@ -150,12 +153,14 @@ executable tersedb-hs
       KindSignatures
       MultiParamTypeClasses
       NamedFieldPuns
+      NumericUnderscores
       OverloadedStrings
       RankNTypes
       RecordWildCards
       ScopedTypeVariables
       StandaloneDeriving
       TemplateHaskell
+      TupleSections
       TypeApplications
       TypeFamilies
       UndecidableInstances
@@ -166,12 +171,14 @@ executable tersedb-hs
     , base >=4.7 && <5
     , base16-bytestring
     , bytestring
+    , cereal
     , deferred-folds
     , deriving-aeson
     , exceptions
     , extra
     , focus
     , hashable
+    , http-types
     , lens
     , list-t
     , mmorph
@@ -187,12 +194,15 @@ executable tersedb-hs
     , unordered-containers
     , utility-ht
     , vector
+    , wai
+    , warp
   default-language: Haskell2010
 
 test-suite tersedb-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
+      Spec.Actor.Sample
       Spec.Async
       Spec.Generic
       Spec.Generic.Create
@@ -225,12 +235,14 @@ test-suite tersedb-test
       KindSignatures
       MultiParamTypeClasses
       NamedFieldPuns
+      NumericUnderscores
       OverloadedStrings
       RankNTypes
       RecordWildCards
       ScopedTypeVariables
       StandaloneDeriving
       TemplateHaskell
+      TupleSections
       TypeApplications
       TypeFamilies
       UndecidableInstances
@@ -241,6 +253,7 @@ test-suite tersedb-test
     , base >=4.7 && <5
     , base16-bytestring
     , bytestring
+    , cereal
     , deferred-folds
     , deriving-aeson
     , exceptions

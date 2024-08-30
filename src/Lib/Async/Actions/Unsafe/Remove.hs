@@ -24,6 +24,7 @@ import Lib.Async.Types.Store (
   toEntityOf,
   toForks,
   toForksFrom,
+  toGroups,
   toGroupsNext,
   toGroupsPrev,
   toMemberOf,
@@ -37,7 +38,7 @@ import Lib.Async.Types.Store (
   toSpaces,
   toSubscriptions,
   toSubscriptionsFrom,
-  toVersions, toGroups,
+  toVersions,
  )
 import Lib.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
 import qualified StmContainers.Map as Map
