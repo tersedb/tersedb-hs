@@ -486,6 +486,84 @@ data ReadResponse
   | PermissionWithExemption CollectionPermissionWithExemption
   | Permission CollectionPermission
   deriving (Eq, Show, Read)
+instance Arbitrary ReadResponse where
+  arbitrary = oneof
+    [ pure DoesExist
+    , pure DoesNotExist
+    , Actors <$> arbitrary
+    , Groups <$> arbitrary
+    , Members <$> arbitrary
+    , MemberOf <$> arbitrary
+    , PrevGroup <$> arbitrary
+    , NextGroups <$> arbitrary
+    , Spaces <$> arbitrary
+    , Entities <$> arbitrary
+    , Versions <$> arbitrary
+    , References <$> arbitrary
+    , ReferencesOf <$> arbitrary
+    , Subscriptions <$> arbitrary
+    , SubscriptionsOf <$> arbitrary
+    , ForkOf <$> arbitrary
+    , ForkedBy <$> arbitrary
+    , PermissionWithExemption <$> arbitrary
+    , Permission <$> arbitrary
+    ]
+instance ToJSON ReadResponse where
+  toJSON x = case x of
+    DoesExist -> String "y"
+    DoesNotExist -> String "n"
+    Actors as -> object ["a" .= as]
+    Groups gs -> object ["g" .= gs]
+    Members as -> object ["m" .= as]
+    MemberOf gs -> object ["m" .= gs]
+    PrevGroup mG -> object ["g" .= object ["p" .= mG]]
+    NextGroups gs -> object ["g" .= object ["n" .= gs]]
+    Spaces ss -> object ["s" .= ss]
+    Entities es -> object ["e" .= es]
+    Versions vs -> object ["v" .= vs]
+    References vs -> object ["ref" .= vs]
+    ReferencesOf vs -> object ["refOf" .= vs]
+    Subscriptions es -> object ["sub" .= es]
+    SubscriptionsOf vs -> object ["sub" .= vs]
+    ForkOf mV -> object ["f" .= mV]
+    ForkedBy es -> object ["f" .= es]
+    PermissionWithExemption p -> object ["p" .= p]
+    Permission p -> object ["p" .= p]
+instance FromJSON ReadResponse where
+  parseJSON (String t) = case t of
+    "y" -> pure DoesExist
+    "n" -> pure DoesNotExist
+    _ -> typeMismatch "ReadResponse" (String t)
+  parseJSON json = flip (withObject "ReadResponse") json $ \o ->
+    (Actors <$> o .: "a")
+      <|> (Actors <$> o .: "a")
+      <|> (Spaces <$> o .: "s")
+      <|> (Entities <$> o .: "e")
+      <|> (Versions <$> o .: "v")
+      <|> (References <$> o .: "ref")
+      <|> (ReferencesOf <$> o .: "refOf")
+      <|> (goG =<< o .: "g")
+      <|> (goM =<< o .: "m")
+      <|> (goSub =<< o .: "sub")
+      <|> (goF =<< o .: "f")
+      <|> (goP =<< o .: "p")
+    where
+      goG json =
+        (Groups <$> parseJSON json)
+          <|> ((\o -> PrevGroup <$> o .: "p") =<< parseJSON json)
+          <|> ((\o -> NextGroups <$> o .: "n") =<< parseJSON json)
+      goM json =
+        (Members <$> parseJSON json)
+          <|> (MemberOf <$> parseJSON json)
+      goSub json =
+        (Subscriptions <$> parseJSON json)
+          <|> (SubscriptionsOf <$> parseJSON json)
+      goF json =
+        (ForkOf <$> parseJSON json)
+          <|> (ForkedBy <$> parseJSON json)
+      goP json =
+        (PermissionWithExemption <$> parseJSON json)
+          <|> (Permission <$> parseJSON json)
 
 data CreateResponse
   = NewActor ActorId
@@ -494,6 +572,28 @@ data CreateResponse
   | NewEntity EntityId VersionId
   | NewVersion VersionId
   deriving (Eq, Show, Read)
+instance Arbitrary CreateResponse where
+  arbitrary = oneof
+    [ NewActor <$> arbitrary
+    , NewGroup <$> arbitrary
+    , NewSpace <$> arbitrary
+    , NewEntity <$> arbitrary <*> arbitrary
+    , NewVersion <$> arbitrary
+    ]
+instance ToJSON CreateResponse where
+  toJSON x = case x of
+    NewActor aId -> object ["a" .= aId]
+    NewGroup gId -> object ["g" .= gId]
+    NewSpace sId -> object ["s" .= sId]
+    NewEntity eId vId -> object ["e" .= object ["e" .= eId, "v" .= vId]]
+    NewVersion vId -> object ["v" .= vId]
+instance FromJSON CreateResponse where
+  parseJSON = withObject "CreateResponse" $ \o ->
+    (NewActor <$> o .: "a")
+      <|> (NewGroup <$> o .: "g")
+      <|> (NewSpace <$> o .: "s")
+      <|> ((\o -> NewEntity <$> o .: "e" <*> o .: "v") =<< o .: "e")
+      <|> (NewVersion <$> o .: "v")
 
 toCreateResponse
   :: CreateAction -> Maybe AnyId -> Maybe (Either () CreateResponse)
@@ -510,11 +610,39 @@ data Response
   = ReadResponse ReadResponse
   | CreateResponse CreateResponse
   deriving (Eq, Show, Read)
+instance Arbitrary Response where
+  arbitrary = oneof
+    [ ReadResponse <$> arbitrary
+    , CreateResponse <$> arbitrary
+    ]
+instance ToJSON Response where
+  toJSON x = case x of
+    ReadResponse y -> object ["r" .= y]
+    CreateResponse y -> object ["c" .= y]
+instance FromJSON Response where
+  parseJSON = withObject "Response" $ \o ->
+    (ReadResponse <$> o .: "r")
+      <|> (CreateResponse <$> o .: "c")
 
 data Authorize a
   = Authorized a
   | Unauthorized
-  deriving (Functor)
+  deriving (Functor, Generic, Show, Read, Eq)
+instance Arbitrary a => Arbitrary (Authorize a) where
+  arbitrary = oneof
+    [ pure Unauthorized
+    , Authorized <$> arbitrary
+    ]
+instance ToJSON a => ToJSON (Authorize a) where
+  toJSON x = case x of
+    Unauthorized -> String "x"
+    Authorized y -> object ["x" .= y]
+instance FromJSON a => FromJSON (Authorize a) where
+  parseJSON (String t) = case t of
+    "x" -> pure Unauthorized
+    _ -> typeMismatch "Authorize" (String t)
+  parseJSON json = flip (withObject "Authorize") json $ \o ->
+    Authorized <$> o .: "x"
 
 -- | If one action is unauthorized, continue
 actMany

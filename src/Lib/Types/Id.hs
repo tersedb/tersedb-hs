@@ -18,7 +18,14 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 You can reach me at athan.clark@gmail.com.
 -}
 
-module Lib.Types.Id (GroupId, ActorId, SpaceId, EntityId, VersionId, AnyId (..), IdWithPfx) where
+module Lib.Types.Id
+  ( GroupId, groupIdParser
+  , ActorId, actorIdParser
+  , SpaceId, spaceIdParser
+  , EntityId, entityIdParser
+  , VersionId, versionIdParser
+  , AnyId (..)
+  , IdWithPfx, idWithPfxParser) where
 
 import Data.Aeson (FromJSON (parseJSON), ToJSON (toJSON), Value (String), object, (.:), (.=))
 import Data.Aeson.Types (typeMismatch)
@@ -38,6 +45,8 @@ import Text.ParserCombinators.ReadP (skipSpaces)
 import GHC.TypeLits (KnownSymbol (symbolSing), fromSSymbol, Symbol)
 import Control.Monad (replicateM)
 import Control.Applicative ((<|>))
+import Data.Attoparsec.Text (Parser, hexadecimal)
+import qualified Data.Attoparsec.Text as Atto
 
 -- | 12 byte random number
 newtype Id = Id
@@ -50,6 +59,9 @@ idFromText t = BS16.decode (T.encodeUtf8 t) >>= Cereal.decode
 
 idToText :: Id -> T.Text
 idToText = T.decodeUtf8 . BS16.encode . Cereal.encode
+
+idParser :: Parser Id
+idParser = Id <$> hexadecimal
 
 instance Show Id where
   show = T.unpack . idToText
@@ -88,6 +100,15 @@ instance KnownSymbol k => FromJSON (IdWithPfx k) where
       pfx = fromSSymbol (symbolSing @k)
   parseJSON json = typeMismatch "IdWithPfx" json
 
+idWithPfxParser :: forall k. KnownSymbol k => Parser (IdWithPfx k)
+idWithPfxParser = do
+  pfx' <- Atto.take (length pfx)
+  if T.pack pfx /= pfx'
+  then fail "Incorrect format"
+  else IdWithPfx <$> idParser
+  where
+    pfx = fromSSymbol (symbolSing @k)
+
 newtype GroupId = GroupId
   { getGroupId :: IdWithPfx "g_"
   }
@@ -96,6 +117,9 @@ newtype GroupId = GroupId
        via (IdWithPfx "g_")
 instance Uniform GroupId where
   uniformM gen = GroupId <$> uniformM gen
+
+groupIdParser :: Parser GroupId
+groupIdParser = GroupId <$> idWithPfxParser
 
 newtype ActorId = ActorId
   { getActorId :: IdWithPfx "a_"
@@ -106,6 +130,9 @@ newtype ActorId = ActorId
 instance Uniform ActorId where
   uniformM gen = ActorId <$> uniformM gen
 
+actorIdParser :: Parser ActorId
+actorIdParser = ActorId <$> idWithPfxParser
+
 newtype SpaceId = SpaceId
   { getSpaceId :: IdWithPfx "s_"
   }
@@ -114,6 +141,9 @@ newtype SpaceId = SpaceId
        via (IdWithPfx "s_")
 instance Uniform SpaceId where
   uniformM gen = SpaceId <$> uniformM gen
+
+spaceIdParser :: Parser SpaceId
+spaceIdParser = SpaceId <$> idWithPfxParser
 
 newtype EntityId = EntityId
   { getEntityId :: IdWithPfx "e_"
@@ -124,6 +154,9 @@ newtype EntityId = EntityId
 instance Uniform EntityId where
   uniformM gen = EntityId <$> uniformM gen
 
+entityIdParser :: Parser EntityId
+entityIdParser = EntityId <$> idWithPfxParser
+
 newtype VersionId = VersionId
   { getVersionId :: IdWithPfx "v_"
   }
@@ -132,6 +165,9 @@ newtype VersionId = VersionId
        via (IdWithPfx "v_")
 instance Uniform VersionId where
   uniformM gen = VersionId <$> uniformM gen
+
+versionIdParser :: Parser VersionId
+versionIdParser = VersionId <$> idWithPfxParser
 
 data AnyId
   = AnyIdActor ActorId

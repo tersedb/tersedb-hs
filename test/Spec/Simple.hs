@@ -7,7 +7,7 @@ import Lib.Types.Permission (
   SinglePermission,
   hasMinimumPermission,
  )
-import Lib.Api (Action, MutableAction)
+import Lib.Api (Action, MutableAction, Response, Authorize)
 import qualified Data.Aeson as Aeson
 import Test.QuickCheck (Arbitrary, property)
 import Test.Syd (Spec, describe, it, shouldBe, shouldSatisfy)
@@ -33,6 +33,7 @@ simpleTests = do
       describe "AnyId" . serialization $ Proxy @AnyId
       describe "Action" . serialization $ Proxy @Action
       describe "MutableAction" . serialization $ Proxy @MutableAction
+      describe "Authorize Response" . serialization $ Proxy @(Authorize Response)
   describe "CollectionPermission" $ do
     it "has a lower bound" $
       property $

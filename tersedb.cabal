@@ -106,6 +106,7 @@ library
   build-depends:
       QuickCheck
     , aeson
+    , attoparsec
     , base >=4.7 && <5
     , base16-bytestring
     , bytestring
@@ -168,6 +169,7 @@ executable tersedb-hs
   build-depends:
       QuickCheck
     , aeson
+    , attoparsec
     , base >=4.7 && <5
     , base16-bytestring
     , bytestring
@@ -250,6 +252,7 @@ test-suite tersedb-test
   build-depends:
       QuickCheck
     , aeson
+    , attoparsec
     , base >=4.7 && <5
     , base16-bytestring
     , bytestring
