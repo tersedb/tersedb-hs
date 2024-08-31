@@ -1,6 +1,7 @@
 module Lib.Api where
 
 import Control.Applicative ((<|>))
+import Control.Monad (when)
 import Control.Monad.Catch (MonadThrow (throwM))
 import Control.Monad.IO.Class (MonadIO)
 import Data.Aeson (
@@ -463,6 +464,18 @@ instance FromJSON Action where
       <|> (UpdateAction <$> o .: "u")
       <|> (DeleteAction <$> o .: "d")
 
+isMutable :: Action -> Bool
+isMutable x = case x of
+  CreateAction _ -> True
+  UpdateAction _ -> True
+  DeleteAction _ -> True
+  _ -> False
+
+isCreate :: Action -> Bool
+isCreate x = case x of
+  CreateAction _ -> True
+  _ -> False
+
 data MutableAction
   = StoreMutableAction StoreAction
   | UpdateMutableAction UpdateAction
@@ -689,50 +702,106 @@ actMany
   :: forall m n
    . (TerseDB n m, MonadIO n)
   => Proxy m
+  -> (m ()) -- ^ Conditional action to perform when mutating
   -> (MutableAction -> n ())
   -- ^ Each mutation performed that's authorized
   -> NonEmpty ActorId
   -> [Action]
   -> n [Authorize (Maybe Response)]
-actMany Proxy onAuthorized actors xs = do
+actMany Proxy beforeMutate onAuthorized actors xs = do
   ids <- traverse genId xs
   let ys :: m [Authorize (Maybe Response, Maybe MutableAction)]
       ys = traverse go (zip xs ids)
        where
         go
           :: (Action, Maybe AnyId) -> m (Authorize (Maybe Response, Maybe MutableAction))
-        go (x, mId) = act actors x mId
-  rs <- commit ys
+        go (x, mId) = makeResponse actors x mId
+  rs <- commit $ do
+    when (any isMutable xs) $
+      beforeMutate
+    ys
   for rs $ \mAuth -> do
     case mAuth of
       Authorized (_, Just action') -> onAuthorized action'
       _ -> pure ()
     pure (fst <$> mAuth)
 
+act
+  :: forall m n
+   . (TerseDB n m, MonadIO n)
+  => Proxy m
+  -> (m ())
+  -> (MutableAction -> n ())
+  -> NonEmpty ActorId
+  -> Action
+  -> n (Authorize (Maybe Response))
+act Proxy beforeMutate onAuthorized actors x = do
+  mId <- genId x
+  let y :: m (Authorize (Maybe Response, Maybe MutableAction))
+      y = makeResponse actors x mId
+  mAuth <- commit $ do
+    when (isMutable x) $
+      beforeMutate
+    y
+  case mAuth of
+    Authorized (_, Just action') -> onAuthorized action'
+    _ -> pure ()
+  pure (fst <$> mAuth)
+
 -- | If one action is unauthorized, abandon all transactions
 actManyStrict
   :: forall m n
    . (TerseDB n m, MonadIO n, MonadThrow m)
   => Proxy m
+  -> (m ()) -- ^ Conditional action to perform when mutating
   -> ([MutableAction] -> n ())
   -- ^ Mutations performed, in the same order as the actions supplied
   -> NonEmpty ActorId
   -> [Action]
   -> n [Maybe Response]
-actManyStrict Proxy onAuthorized actors xs = do
+actManyStrict Proxy beforeMutate onAuthorized actors xs = do
   ids <- traverse genId xs
   let ys :: m [(Maybe Response, Maybe MutableAction)]
       ys = traverse go (zip xs ids)
        where
         go :: (Action, Maybe AnyId) -> m (Maybe Response, Maybe MutableAction)
         go (x, mId) = do
-          mAuth <- act actors x mId
+          mAuth <- makeResponse actors x mId
           case mAuth of
             Unauthorized -> throwM UnauthorizedAction
             Authorized y -> pure y
-  (rs, as) <- unzip <$> commit ys
+  (rs, as) <- fmap unzip . commit $ do
+    when (any isMutable xs) $
+      beforeMutate
+    ys
   onAuthorized (catMaybes as)
   pure rs
+
+actStrict
+  :: forall m n
+   . (TerseDB n m, MonadIO n, MonadThrow m)
+  => Proxy m
+  -> (m ())
+  -> (MutableAction -> n ())
+  -> NonEmpty ActorId
+  -> Action
+  -> n (Maybe Response)
+actStrict Proxy beforeMutate onAuthorized actors x = do
+  mId <- genId x
+  let y :: m ((Maybe Response, Maybe MutableAction))
+      y = do
+        mAuth <- makeResponse actors x mId
+        case mAuth of
+          Unauthorized -> throwM UnauthorizedAction
+          Authorized z -> pure z
+  (r, mA) <- commit $ do
+    when (isMutable x) $
+      beforeMutate
+    y
+  case mA of
+    Nothing -> pure ()
+    Just a -> onAuthorized a
+  pure r
 
 genId :: forall n. (MonadIO n) => Action -> n (Maybe AnyId)
 genId action = case action of
@@ -797,14 +866,14 @@ mutate actors action = do
     DeleteEntity eId -> removeEntity actors eId
     DeleteVersion vId -> removeVersion actors vId
 
-act
+makeResponse
   :: forall m n
    . (TerseDB n m)
   => NonEmpty ActorId
   -> Action
   -> Maybe AnyId
   -> m (Authorize (Maybe Response, Maybe MutableAction))
-act actors action mId = case action of
+makeResponse actors action mId = case action of
   ReadAction x -> fmap (,Nothing) <$> goRead x
   _ -> case toMutate action mId of
     Just action' ->

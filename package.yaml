@@ -99,7 +99,9 @@ executables:
     dependencies:
       - tersedb
       - http-types
+      - logging
       - wai
+      - wai-extra
       - warp
 
 tests:
