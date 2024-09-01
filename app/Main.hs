@@ -67,7 +67,7 @@ import Lib.Sync.Actions.Safe (emptyShared)
 import qualified Lib.Sync.Types.Store as Sync
 import Lib.Types.Errors (CycleDetected (..), UnauthorizedAction (..))
 import Lib.Types.Id (ActorId, actorIdParser)
-import Main.Options (programOptions)
+import Main.Options (programOptions, CLIOptions (CLIOptions, cliConfig, currentConfig, defaultConfig, config), Configuration (http, Configuration), HttpConfig (port))
 import Network.HTTP.Types (
   badRequest400,
   conflict409,
@@ -98,10 +98,26 @@ import Network.Wai.Middleware.RequestLogger (
  )
 import qualified Options.Applicative as OptParse
 import System.Random.Stateful (globalStdGen, uniformM)
+import System.Exit (exitSuccess)
+import qualified Data.Yaml as Yaml
+import Data.Default (Default(def))
 
 main :: IO ()
 main = withStderrLogging $ do
-  cliOptions <- OptParse.execParser programOptions
+  CLIOptions{..} <- OptParse.execParser programOptions
+
+  when defaultConfig $ do
+    BS.putStr (Yaml.encode (def :: Configuration))
+    exitSuccess
+  baseConfig <- case config of
+    Nothing -> pure def
+    Just path -> Yaml.decodeFileThrow path
+
+  let cfg@Configuration{..} = baseConfig <> cliConfig
+  
+  when currentConfig $ do
+    BS.putStr (Yaml.encode cfg)
+    exitSuccess
 
   (adminActor, adminGroup) <- uniformM globalStdGen
   s <- atomically newShared
@@ -130,10 +146,9 @@ main = withStderrLogging $ do
       log' "Writing checkpoint"
       createCheckpoint
 
-  let port = 8000
-  log' $ "Running on port " <> T.pack (show port)
+  log' $ "Running on port " <> T.pack (show (port http))
   loggerMiddleware <- mkRequestLogger defaultRequestLoggerSettings
-  run port . loggerMiddleware $ \req respond ->
+  run (fromIntegral $ port http) . loggerMiddleware $ \req respond ->
     let headers = requestHeaders req
         route
           :: forall mutMany respMany mutSingle respSingle
@@ -144,7 +159,7 @@ main = withStderrLogging $ do
                   , MonadThrow m
                   )
                => Proxy m
-               -> (m ())
+               -> m ()
                -> (mutMany -> n ())
                -> NonEmpty ActorId
                -> [Action]
@@ -157,7 +172,7 @@ main = withStderrLogging $ do
                   , MonadThrow m
                   )
                => Proxy m
-               -> (m ())
+               -> m ()
                -> (mutSingle -> n ())
                -> NonEmpty ActorId
                -> Action

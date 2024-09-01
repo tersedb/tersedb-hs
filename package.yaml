@@ -106,6 +106,7 @@ executables:
       - wai
       - wai-extra
       - warp
+      - yaml
 
 tests:
   tersedb-test:

@@ -499,13 +499,19 @@ configParser =
         OffsetTextWeek y -> show y <> "w"
 
 data CLIOptions = CLIOptions
-  { config :: FilePath
+  { config :: Maybe FilePath
+  , currentConfig :: Bool
   , defaultConfig :: Bool
   , cliConfig :: Configuration
   }
 
 cliOptions :: OptParse.Parser CLIOptions
-cliOptions = CLIOptions <$> configPath <*> showDefaultConfig <*> configParser
+cliOptions =
+  CLIOptions
+    <$> optional configPath
+    <*> showCurrentConfig
+    <*> showDefaultConfig
+    <*> configParser
  where
   configPath =
     strOption $
@@ -515,6 +521,10 @@ cliOptions = CLIOptions <$> configPath <*> showDefaultConfig <*> configParser
         <> showDefault
         <> value "./tersedb.yml"
         <> help "Location of configuration file"
+  showCurrentConfig =
+    switch $
+      long "current-config"
+        <> help "Print the currently assembled configuration to stdout"
   showDefaultConfig =
     switch $
       long "default-config"

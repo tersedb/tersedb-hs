@@ -203,6 +203,7 @@ executable tersedb-hs
     , wai
     , wai-extra
     , warp
+    , yaml
   default-language: Haskell2010
 
 test-suite tersedb-test
