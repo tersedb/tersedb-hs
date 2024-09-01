@@ -1,6 +1,6 @@
 module Main.Options where
 
-import Control.Applicative ((<|>))
+import Control.Applicative ((<|>), optional)
 import Control.Lens (ix, (%~), (&))
 import Data.Aeson (
   FromJSON (..),
@@ -22,6 +22,8 @@ import Data.Word (Word16, Word32, Word64, Word8)
 import Deriving.Aeson.Stock (CustomJSON (..), PrefixedSnake, Snake)
 import GHC.Generics (Generic)
 import GHC.TypeLits (Nat)
+import qualified Env as Env
+import qualified Env.Internal.Parser as Env
 import Options.Applicative (
   ParserInfo,
   auto,
@@ -34,7 +36,6 @@ import Options.Applicative (
   long,
   metavar,
   option,
-  optional,
   progDesc,
   short,
   showDefault,
@@ -291,11 +292,58 @@ postgresBackendParser =
         <> help "Table for Checkpoints"
   parseDiffTable =
     strOption $
-      long "postgres-checkpoint-table"
+      long "postgres-diff-table"
         <> metavar "POSTGRES_DIFF_TABLE"
         <> showDefault
         <> value "tersedb_diffs"
         <> help "Table for Diffs"
+
+postgresBackendEnv :: (Env.AsUnset e, Env.AsUnread e) => Env.Parser e PostgresBackendConfig
+postgresBackendEnv =
+  parseBackendEnv "postgres"
+    *> (PostgresBackendConfig
+          <$> parseHost
+          <*> parsePort
+          <*> parseUsername
+          <*> parsePassword
+          <*> parseDatabase
+          <*> parseCheckpointTable
+          <*> parseDiffTable
+        )
+  where
+    parseHost =
+      Env.var Env.str "POSTGRES_HOST" $
+          Env.showDef
+          <> Env.def "localhost"
+          <> Env.help "Host of the Postgres Backend"
+    parsePort =
+      Env.var Env.auto "POSTGRES_PORT" $
+          Env.showDef
+          <> Env.def 5678
+          <> Env.help "Port of the Postgres Backend"
+    parseUsername =
+      Env.var Env.str "POSTGRES_USERNAME" $
+          Env.showDef
+          <> Env.def "postgres"
+          <> Env.help "Username for the Postgres Backend"
+    parsePassword =
+      Env.var Env.str "POSTGRES_PASSWORD" $
+          Env.help "Password for the Postgres Backend"
+    parseDatabase =
+      Env.var Env.str "POSTGRES_DB" $
+          Env.showDef
+          <> Env.def "postgres"
+          <> Env.help "Database for the Postgres Backend"
+    parseCheckpointTable =
+      Env.var Env.str "POSTGRES_CHECKPOINT_TABLE" $
+          Env.showDef
+          <> Env.def "tersedb_checkpoints"
+          <> Env.help "Table for Checkpoints"
+    parseDiffTable =
+      Env.var Env.str "POSTGRES_DIFF_TABLE" $
+          Env.showDef
+          <> Env.def "tersedb_diffs"
+          <> Env.help "Table for Diffs"
 
 data FileBackendConfig = FileBackendConfig
   { fileBackendPath :: FilePath
@@ -317,6 +365,21 @@ fileBackendParser =
         <> showDefault
         <> value "./backend"
         <> help "Path for file-based Backend"
+
+fileBackendEnv :: (Env.AsUnset e, Env.AsUnread e) => Env.Parser e FileBackendConfig
+fileBackendEnv =
+   parseBackendEnv "file" *> (FileBackendConfig <$> parsePath)
+  where
+    parsePath = Env.var Env.str "FILE_BACKEND_PATH" $
+      Env.def "./backend"
+      <> Env.showDef
+      <> Env.help "Path for file-based Backend"
+
+parseBackendEnv :: (Env.AsUnset e, Env.AsUnread e) => String -> Env.Parser e ()
+parseBackendEnv v = () <$ Env.var
+  (Env.eitherReader $ \s -> if s == v then pure s else Left "Not file")
+  "BACKEND"
+  (Env.def "none" <> Env.showDef <> Env.help "Backend to use - either \"none\", \"file\", or \"postgres\"")
 
 data SelectedBackend
   = -- | Don't persist any changes made - *Warning* this ensures nothing is stored!
@@ -344,6 +407,12 @@ selectedBackendParser =
   (NoBackend <$ optional (flag' () (long "no-backend")))
     <|> (File <$> fileBackendParser)
     <|> (Postgres <$> postgresBackendParser)
+
+selectedBackendEnv :: (Env.AsUnset e, Env.AsUnread e) => Env.Parser e SelectedBackend
+selectedBackendEnv =
+  (NoBackend <$ parseBackendEnv "none")
+    <|> (File <$> fileBackendEnv)
+    <|> (Postgres <$> postgresBackendEnv)
 
 data HttpConfig = HttpConfig
   { maxUploadLength :: Maybe Word64
@@ -379,6 +448,21 @@ httpConfigParser =
         <> showDefault
         <> value (port def)
         <> help "Port to bind the http server to"
+
+httpConfigEnv :: (Env.AsUnset e, Env.AsUnread e) => Env.Parser e HttpConfig
+httpConfigEnv =
+  HttpConfig <$> maxUploadParser <*> portParser
+ where
+  maxUploadParser =
+    optional . Env.var Env.auto "MAX_UPLOAD_LENGTH" $
+      Env.showDef
+        <> Env.def (fromJust $ maxUploadLength def)
+        <> Env.help "Maximum file size for uploads"
+  portParser =
+    Env.var Env.auto "PORT" $
+      Env.showDef
+        <> Env.def (port def)
+        <> Env.help "Port to bind the http server to"
 
 -- | Configuration should be "flat" - to support configuration via a separate file, like YAML, or via environment variables, or command-line arguments.
 data Configuration = Configuration
@@ -498,6 +582,54 @@ configParser =
         OffsetTextDay y -> show y <> "d"
         OffsetTextWeek y -> show y <> "w"
 
+configEnv :: (Env.AsUnset e, Env.AsUnread e) => Env.Parser e Configuration
+configEnv =
+  Configuration
+    <$> httpConfigEnv
+    <*> purgeDiffsParser
+    <*> purgeCheckpointsParser
+    <*> optional checkpointEveryParser
+    <*> optional checkpointEveryOffsetParser
+    <*> selectedBackendEnv
+ where
+  purgeDiffsParser =
+    Env.switch "PURGE_DIFFS_ON_CHECKPOINT" $
+      Env.help "Remove all recorded diffs when a checkpoint is made"
+  purgeCheckpointsParser =
+    Env.switch "PURGE_CHECKPOINTS_ON_CHECKPOINT" $
+      Env.help "Remove all checkpoints when a checkpoint is made"
+  checkpointEveryParser =
+    Env.var durationUnit "CHECKPOINT_INTERVAL" $
+      Env.helpDef (map toLower . show)
+        <> Env.def (fromJust $ checkpointEvery def)
+        <> Env.help "How often to perform checkpoints"
+   where
+    durationUnit = Env.eitherReader $ \s -> case s of
+      "hour" -> pure Hour
+      "day" -> pure Day
+      "week" -> pure Week
+      "month" -> pure Month
+      "year" -> pure Year
+      _ -> Left "Not a valid DurationUnit"
+  checkpointEveryOffsetParser =
+    Env.var durationUnitOffset "CHECKPOINT_INTERVAL_OFFSET" $
+      Env.helpDef showDurationUnitOffset
+        <> Env.def (DurationUnitOffset [OffsetTextSecond 0])
+        <> Env.help
+          "Offset within interval - 's' is \"seconds\", 'm' is \"minutes\", _h_our, _d_ay, _w_eek"
+   where
+    durationUnitOffset = Env.eitherReader $ \s -> case Atto.parseOnly durationOffset (T.pack s) of
+        Left e -> Left e
+        Right xs -> pure xs
+    showDurationUnitOffset = concatMap go . getDurationUnitOffset
+     where
+      go x = case x of
+        OffsetTextSecond y -> show y <> "s"
+        OffsetTextMinute y -> show y <> "m"
+        OffsetTextHour y -> show y <> "h"
+        OffsetTextDay y -> show y <> "d"
+        OffsetTextWeek y -> show y <> "w"
+
 data CLIOptions = CLIOptions
   { config :: Maybe FilePath
   , currentConfig :: Bool
@@ -518,8 +650,6 @@ cliOptions =
       long "config"
         <> short 'c'
         <> metavar "CONFIG_PATH"
-        <> showDefault
-        <> value "./tersedb.yml"
         <> help "Location of configuration file"
   showCurrentConfig =
     switch $
@@ -536,3 +666,6 @@ programOptions =
     fullDesc
       <> progDesc "Start a TerseDB server"
       <> header "tersedb - entity management system"
+
+programEnv :: IO Configuration
+programEnv = Env.parse (Env.header "tersedb environment variables") configEnv

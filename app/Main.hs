@@ -67,7 +67,7 @@ import Lib.Sync.Actions.Safe (emptyShared)
 import qualified Lib.Sync.Types.Store as Sync
 import Lib.Types.Errors (CycleDetected (..), UnauthorizedAction (..))
 import Lib.Types.Id (ActorId, actorIdParser)
-import Main.Options (programOptions, CLIOptions (CLIOptions, cliConfig, currentConfig, defaultConfig, config), Configuration (http, Configuration), HttpConfig (port))
+import Main.Options (programOptions, CLIOptions (CLIOptions, cliConfig, currentConfig, defaultConfig, config), Configuration (http, Configuration), HttpConfig (port), programEnv)
 import Network.HTTP.Types (
   badRequest400,
   conflict409,
@@ -112,8 +112,9 @@ main = withStderrLogging $ do
   baseConfig <- case config of
     Nothing -> pure def
     Just path -> Yaml.decodeFileThrow path
+  envConfig <- programEnv
 
-  let cfg@Configuration{..} = baseConfig <> cliConfig
+  let cfg@Configuration{..} = baseConfig <> envConfig <> cliConfig
   
   when currentConfig $ do
     BS.putStr (Yaml.encode cfg)

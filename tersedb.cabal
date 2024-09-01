@@ -178,6 +178,7 @@ executable tersedb-hs
     , data-default
     , deferred-folds
     , deriving-aeson
+    , envparse >=0.6
     , exceptions
     , extra
     , focus
