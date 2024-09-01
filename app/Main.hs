@@ -20,6 +20,8 @@ You can reach me at athan.clark@gmail.com.
 
 module Main (main) where
 
+import Main.Options (programOptions)
+import qualified Options.Applicative as OptParse
 import Control.Concurrent (forkIO, threadDelay)
 import Control.Concurrent.STM (
   STM,
@@ -87,6 +89,8 @@ import qualified Data.Text as T
 
 main :: IO ()
 main = withStderrLogging $ do
+  cliOptions <- OptParse.execParser programOptions
+
   (adminActor, adminGroup) <- uniformM globalStdGen
   s <- atomically newShared
   let init :: TerseM STM ()

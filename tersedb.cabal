@@ -175,6 +175,7 @@ executable tersedb-hs
     , base16-bytestring
     , bytestring
     , cereal
+    , data-default
     , deferred-folds
     , deriving-aeson
     , exceptions
@@ -188,6 +189,7 @@ executable tersedb-hs
     , mmorph
     , monad-control
     , mtl
+    , optparse-applicative
     , quickcheck-instances
     , random
     , stm

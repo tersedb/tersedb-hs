@@ -98,8 +98,11 @@ executables:
       - -with-rtsopts=-N
     dependencies:
       - tersedb
+      - attoparsec
+      - data-default
       - http-types
       - logging
+      - optparse-applicative
       - wai
       - wai-extra
       - warp
