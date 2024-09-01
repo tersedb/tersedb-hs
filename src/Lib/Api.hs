@@ -702,7 +702,8 @@ actMany
   :: forall m n
    . (TerseDB n m, MonadIO n)
   => Proxy m
-  -> (m ()) -- ^ Conditional action to perform when mutating
+  -> (m ())
+  -- ^ Conditional action to perform when mutating
   -> (MutableAction -> n ())
   -- ^ Each mutation performed that's authorized
   -> NonEmpty ActorId
@@ -753,7 +754,8 @@ actManyStrict
   :: forall m n
    . (TerseDB n m, MonadIO n, MonadThrow m)
   => Proxy m
-  -> (m ()) -- ^ Conditional action to perform when mutating
+  -> (m ())
+  -- ^ Conditional action to perform when mutating
   -> ([MutableAction] -> n ())
   -- ^ Mutations performed, in the same order as the actions supplied
   -> NonEmpty ActorId

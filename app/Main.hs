@@ -20,8 +20,6 @@ You can reach me at athan.clark@gmail.com.
 
 module Main (main) where
 
-import Main.Options (programOptions)
-import qualified Options.Applicative as OptParse
 import Control.Concurrent (forkIO, threadDelay)
 import Control.Concurrent.STM (
   STM,
@@ -36,8 +34,9 @@ import Control.Concurrent.STM (
   takeTMVar,
   writeTVar,
  )
+import Control.Logging (log', warn', withStderrLogging)
 import Control.Monad (forever, void, when)
-import Control.Monad.Catch (MonadThrow, catch, catches, Handler (..))
+import Control.Monad.Catch (Handler (..), MonadThrow, catch, catches)
 import Control.Monad.IO.Class (MonadIO)
 import Control.Monad.Reader (lift, runReaderT)
 import qualified Data.Aeson as Aeson
@@ -46,28 +45,41 @@ import qualified Data.ByteString as BS
 import Data.Data (Proxy (..))
 import Data.List.NonEmpty (NonEmpty)
 import qualified Data.List.NonEmpty as NE
+import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
-import Lib.Api (Action, MutableAction, actMany, actManyStrict, act, actStrict, isCreate, Authorize (..))
-import Lib.Types.Errors (CycleDetected (..), UnauthorizedAction (..))
+import qualified Data.Text.Lazy as LT
+import qualified Data.Text.Lazy.Encoding as LT
+import Lib.Api (
+  Action,
+  Authorize (..),
+  MutableAction,
+  act,
+  actMany,
+  actManyStrict,
+  actStrict,
+  isCreate,
+ )
 import Lib.Async.Types.Monad (TerseM)
 import Lib.Async.Types.Store (newShared)
 import Lib.Async.Types.Store.Iso (genSyncStore)
 import Lib.Class (TerseDB, commit, loadSyncShared, runTerseDB)
 import Lib.Sync.Actions.Safe (emptyShared)
 import qualified Lib.Sync.Types.Store as Sync
+import Lib.Types.Errors (CycleDetected (..), UnauthorizedAction (..))
 import Lib.Types.Id (ActorId, actorIdParser)
+import Main.Options (programOptions)
 import Network.HTTP.Types (
   badRequest400,
+  conflict409,
+  created201,
   lengthRequired411,
   methodNotAllowed405,
   methodPost,
+  noContent204,
   notFound404,
   ok200,
-  created201,
-  noContent204,
   unauthorized401,
   unsupportedMediaType415,
-  conflict409
  )
 import Network.Wai (
   RequestBodyLength (KnownLength),
@@ -80,12 +92,12 @@ import Network.Wai (
   responseLBS,
  )
 import Network.Wai.Handler.Warp (run)
+import Network.Wai.Middleware.RequestLogger (
+  defaultRequestLoggerSettings,
+  mkRequestLogger,
+ )
+import qualified Options.Applicative as OptParse
 import System.Random.Stateful (globalStdGen, uniformM)
-import qualified Data.Text.Lazy as LT
-import qualified Data.Text.Lazy.Encoding as LT
-import Network.Wai.Middleware.RequestLogger (mkRequestLogger, defaultRequestLoggerSettings)
-import Control.Logging (withStderrLogging, log', warn')
-import qualified Data.Text as T
 
 main :: IO ()
 main = withStderrLogging $ do
@@ -175,7 +187,7 @@ main = withStderrLogging $ do
                       actors
                       action
                 respondSingle response action
-          in  getActions onActions onAction
+           in getActions onActions onAction
          where
           getActions
             :: (NonEmpty ActorId -> [Action] -> IO ResponseReceived)
@@ -209,20 +221,25 @@ main = withStderrLogging $ do
      in case pathInfo req of
           ["act"] ->
             let go = route actMany storeSingleDiff act storeSingleDiff $ \mAuth action ->
-                      case mAuth of
-                        Unauthorized -> respond $ responseLBS unauthorized401 [] ""
-                        Authorized mResp -> case mResp of
-                          Nothing -> respond $ responseLBS noContent204 [] ""
-                          Just r -> respond . responseLBS (if isCreate action then created201 else ok200) [] $ Aeson.encode r
-            in  catch go handleCycle
+                  case mAuth of
+                    Unauthorized -> respond $ responseLBS unauthorized401 [] ""
+                    Authorized mResp -> case mResp of
+                      Nothing -> respond $ responseLBS noContent204 [] ""
+                      Just r ->
+                        respond . responseLBS (if isCreate action then created201 else ok200) [] $
+                          Aeson.encode r
+             in catch go handleCycle
           ["actStrict"] ->
             let handleUnauthorized UnauthorizedAction =
                   respond $ responseLBS unauthorized401 [] ""
                 go = route actManyStrict storeMultipleDiffs actStrict storeSingleDiff $ \mResp action ->
-                      case mResp of
-                        Nothing -> respond $ responseLBS noContent204 [] ""
-                        Just r -> respond . responseLBS (if isCreate action then created201 else ok200) [] $ Aeson.encode r
-            in  catches go
+                  case mResp of
+                    Nothing -> respond $ responseLBS noContent204 [] ""
+                    Just r ->
+                      respond . responseLBS (if isCreate action then created201 else ok200) [] $
+                        Aeson.encode r
+             in catches
+                  go
                   [ Handler handleCycle
                   , Handler handleUnauthorized
                   ]
