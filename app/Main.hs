@@ -44,14 +44,16 @@ import qualified Data.Attoparsec.Text as Atto
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
 import Data.Data (Proxy (..))
+import Data.Default (Default (def))
 import Data.List.NonEmpty (NonEmpty)
-import Data.Word (Word64)
-import Data.Maybe (fromJust)
 import qualified Data.List.NonEmpty as NE
+import Data.Maybe (fromJust)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.Text.Lazy as LT
 import qualified Data.Text.Lazy.Encoding as LT
+import Data.Word (Word64)
+import qualified Data.Yaml as Yaml
 import Lib.Api (
   Action,
   Authorize (..),
@@ -70,7 +72,16 @@ import Lib.Sync.Actions.Safe (emptyShared)
 import qualified Lib.Sync.Types.Store as Sync
 import Lib.Types.Errors (CycleDetected (..), UnauthorizedAction (..))
 import Lib.Types.Id (ActorId, actorIdParser)
-import Main.Options (programOptions, CLIOptions (..), Configuration (..), programEnv, ToSeconds (..), HttpConfig (..), SelectedBackend (..), FileBackendConfig (..))
+import Main.Options (
+  CLIOptions (..),
+  Configuration (..),
+  FileBackendConfig (..),
+  HttpConfig (..),
+  SelectedBackend (..),
+  ToSeconds (..),
+  programEnv,
+  programOptions,
+ )
 import Network.HTTP.Types (
   badRequest400,
   conflict409,
@@ -100,10 +111,8 @@ import Network.Wai.Middleware.RequestLogger (
   mkRequestLogger,
  )
 import qualified Options.Applicative as OptParse
-import System.Random.Stateful (globalStdGen, uniformM)
 import System.Exit (exitSuccess)
-import qualified Data.Yaml as Yaml
-import Data.Default (Default(def))
+import System.Random.Stateful (globalStdGen, uniformM)
 
 main :: IO ()
 main = withStderrLogging $ do
@@ -118,7 +127,7 @@ main = withStderrLogging $ do
   envConfig <- programEnv
 
   let cfg@Configuration{..} = baseConfig <> envConfig <> cliConfig
-  
+
   when currentConfig $ do
     BS.putStr (Yaml.encode cfg)
     exitSuccess
@@ -245,12 +254,14 @@ main = withStderrLogging $ do
                             Left e -> case Aeson.eitherDecode body of
                               Left e' ->
                                 respond . responseLBS badRequest400 [] . LT.encodeUtf8 $
-                                  "List of Actions Parsing Failure: " <> LT.pack e <>
-                                  ", Single Action Parsing Failure: " <> LT.pack e'
+                                  "List of Actions Parsing Failure: "
+                                    <> LT.pack e
+                                    <> ", Single Action Parsing Failure: "
+                                    <> LT.pack e'
                               Right (action :: Action) -> onAction actors action
                             Right (actions :: [Action]) -> onActions actors actions
                           _ -> respond $ responseLBS unsupportedMediaType415 [] ""
-                  in  case maxUploadLength http of
+                   in case maxUploadLength http of
                         Nothing -> continue
                         Just maxLength
                           | legitRequestBody (requestBodyLength req) maxLength -> continue

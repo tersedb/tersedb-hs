@@ -1,6 +1,6 @@
 module Main.Options where
 
-import Control.Applicative ((<|>), optional)
+import Control.Applicative (optional, (<|>))
 import Control.Lens (ix, (%~), (&))
 import Data.Aeson (
   FromJSON (..),
@@ -20,10 +20,10 @@ import Data.Maybe (fromJust, fromMaybe)
 import qualified Data.Text as T
 import Data.Word (Word16, Word32, Word64, Word8)
 import Deriving.Aeson.Stock (CustomJSON (..), PrefixedSnake, Snake)
-import GHC.Generics (Generic)
-import GHC.TypeLits (Nat)
 import qualified Env as Env
 import qualified Env.Internal.Parser as Env
+import GHC.Generics (Generic)
+import GHC.TypeLits (Nat)
 import Options.Applicative (
   ParserInfo,
   auto,
@@ -48,7 +48,6 @@ import Options.Applicative (
  )
 import qualified Options.Applicative as OptParse
 import Text.Read (readMaybe)
-
 
 class ToSeconds a where
   toSeconds :: a -> Int
@@ -227,13 +226,13 @@ durationOffset = DurationUnitOffset <$> Atto.many1 go
 
 instance ToSeconds DurationUnitOffset where
   toSeconds = foldr go 0 . getDurationUnitOffset
-    where
-      go x acc = case x of
-        OffsetTextSecond y -> acc + y
-        OffsetTextMinute y -> acc + (y * 60)
-        OffsetTextHour y -> acc + (y * 60 * 60)
-        OffsetTextDay y -> acc + (y * 60 * 60 * 24)
-        OffsetTextWeek y -> acc + (y * 60 * 60 * 24 * 7)
+   where
+    go x acc = case x of
+      OffsetTextSecond y -> acc + y
+      OffsetTextMinute y -> acc + (y * 60)
+      OffsetTextHour y -> acc + (y * 60 * 60)
+      OffsetTextDay y -> acc + (y * 60 * 60 * 24)
+      OffsetTextWeek y -> acc + (y * 60 * 60 * 24 * 7)
 
 data PostgresBackendConfig = PostgresBackendConfig
   { postgresHost :: String
@@ -249,17 +248,18 @@ data PostgresBackendConfig = PostgresBackendConfig
     (ToJSON, FromJSON)
     via PrefixedSnake "postgres" PostgresBackendConfig
 instance Default PostgresBackendConfig where
-  def = PostgresBackendConfig
-    { postgresHost = "localhost"
-    , postgresPort = 5432
-    , postgresUsername = "postgres"
-    , postgresPassword = ""
-    , postgresDatabase = "postgres"
-    , postgresCheckpointTable = "tersedb_checkpoints"
-    , postgresDiffTable = "tersedb_diffs"
-    }
+  def =
+    PostgresBackendConfig
+      { postgresHost = "localhost"
+      , postgresPort = 5432
+      , postgresUsername = "postgres"
+      , postgresPassword = ""
+      , postgresDatabase = "postgres"
+      , postgresCheckpointTable = "tersedb_checkpoints"
+      , postgresDiffTable = "tersedb_diffs"
+      }
 instance Semigroup PostgresBackendConfig where
-  x <> y = 
+  x <> y =
     let applyIfNotDef
           :: forall a
            . (Eq a)
@@ -340,10 +340,11 @@ postgresBackendParser =
         <> value (postgresDiffTable def)
         <> help "Table for Diffs"
 
-postgresBackendEnv :: (Env.AsUnset e, Env.AsUnread e) => Env.Parser e PostgresBackendConfig
+postgresBackendEnv
+  :: (Env.AsUnset e, Env.AsUnread e) => Env.Parser e PostgresBackendConfig
 postgresBackendEnv =
   parseBackendEnv "postgres"
-    *> (PostgresBackendConfig
+    *> ( PostgresBackendConfig
           <$> parseHost
           <*> parsePort
           <*> parseUsername
@@ -351,43 +352,43 @@ postgresBackendEnv =
           <*> parseDatabase
           <*> parseCheckpointTable
           <*> parseDiffTable
-        )
-  where
-    parseHost =
-      Env.var Env.str "POSTGRES_HOST" $
-          Env.showDef
-          <> Env.def (postgresHost def)
-          <> Env.help "Host of the Postgres Backend"
-    parsePort =
-      Env.var Env.auto "POSTGRES_PORT" $
-          Env.showDef
-          <> Env.def (postgresPort def)
-          <> Env.help "Port of the Postgres Backend"
-    parseUsername =
-      Env.var Env.str "POSTGRES_USERNAME" $
-          Env.showDef
-          <> Env.def (postgresUsername def)
-          <> Env.help "Username for the Postgres Backend"
-    parsePassword =
-      Env.var Env.str "POSTGRES_PASSWORD" $
-          Env.showDef
-          <> Env.def (postgresPassword def)
-          <> Env.help "Password for the Postgres Backend"
-    parseDatabase =
-      Env.var Env.str "POSTGRES_DB" $
-          Env.showDef
-          <> Env.def (postgresDatabase def)
-          <> Env.help "Database for the Postgres Backend"
-    parseCheckpointTable =
-      Env.var Env.str "POSTGRES_CHECKPOINT_TABLE" $
-          Env.showDef
-          <> Env.def (postgresCheckpointTable def)
-          <> Env.help "Table for Checkpoints"
-    parseDiffTable =
-      Env.var Env.str "POSTGRES_DIFF_TABLE" $
-          Env.showDef
-          <> Env.def (postgresDiffTable def)
-          <> Env.help "Table for Diffs"
+       )
+ where
+  parseHost =
+    Env.var Env.str "POSTGRES_HOST" $
+      Env.showDef
+        <> Env.def (postgresHost def)
+        <> Env.help "Host of the Postgres Backend"
+  parsePort =
+    Env.var Env.auto "POSTGRES_PORT" $
+      Env.showDef
+        <> Env.def (postgresPort def)
+        <> Env.help "Port of the Postgres Backend"
+  parseUsername =
+    Env.var Env.str "POSTGRES_USERNAME" $
+      Env.showDef
+        <> Env.def (postgresUsername def)
+        <> Env.help "Username for the Postgres Backend"
+  parsePassword =
+    Env.var Env.str "POSTGRES_PASSWORD" $
+      Env.showDef
+        <> Env.def (postgresPassword def)
+        <> Env.help "Password for the Postgres Backend"
+  parseDatabase =
+    Env.var Env.str "POSTGRES_DB" $
+      Env.showDef
+        <> Env.def (postgresDatabase def)
+        <> Env.help "Database for the Postgres Backend"
+  parseCheckpointTable =
+    Env.var Env.str "POSTGRES_CHECKPOINT_TABLE" $
+      Env.showDef
+        <> Env.def (postgresCheckpointTable def)
+        <> Env.help "Table for Checkpoints"
+  parseDiffTable =
+    Env.var Env.str "POSTGRES_DIFF_TABLE" $
+      Env.showDef
+        <> Env.def (postgresDiffTable def)
+        <> Env.help "Table for Diffs"
 
 data FileBackendConfig = FileBackendConfig
   { fileBackendPath :: FilePath
@@ -397,11 +398,12 @@ data FileBackendConfig = FileBackendConfig
     (ToJSON, FromJSON)
     via PrefixedSnake "fileBackend" FileBackendConfig
 instance Default FileBackendConfig where
-  def = FileBackendConfig
-    { fileBackendPath = "./backend"
-    }
+  def =
+    FileBackendConfig
+      { fileBackendPath = "./backend"
+      }
 instance Semigroup FileBackendConfig where
-  x <> y = 
+  x <> y =
     let applyIfNotDef
           :: forall a
            . (Eq a)
@@ -410,8 +412,8 @@ instance Semigroup FileBackendConfig where
           -> FileBackendConfig
           -> FileBackendConfig
         applyIfNotDef f appF z = if f y /= f def then appF (f y) z else z
-     in applyIfNotDef fileBackendPath (\a b -> b{fileBackendPath = a})
-          $ x
+     in applyIfNotDef fileBackendPath (\a b -> b{fileBackendPath = a}) $
+          x
 
 fileBackendParser :: OptParse.Parser FileBackendConfig
 fileBackendParser =
@@ -426,20 +428,27 @@ fileBackendParser =
         <> value (fileBackendPath def)
         <> help "Path for file-based Backend"
 
-fileBackendEnv :: (Env.AsUnset e, Env.AsUnread e) => Env.Parser e FileBackendConfig
+fileBackendEnv
+  :: (Env.AsUnset e, Env.AsUnread e) => Env.Parser e FileBackendConfig
 fileBackendEnv =
-   parseBackendEnv "file" *> (FileBackendConfig <$> parsePath)
-  where
-    parsePath = Env.var Env.str "FILE_BACKEND_PATH" $
+  parseBackendEnv "file" *> (FileBackendConfig <$> parsePath)
+ where
+  parsePath =
+    Env.var Env.str "FILE_BACKEND_PATH" $
       Env.def (fileBackendPath def)
-      <> Env.showDef
-      <> Env.help "Path for file-based Backend"
+        <> Env.showDef
+        <> Env.help "Path for file-based Backend"
 
 parseBackendEnv :: (Env.AsUnset e, Env.AsUnread e) => String -> Env.Parser e ()
-parseBackendEnv v = () <$ Env.var
-  (Env.eitherReader $ \s -> if s == v then pure s else Left $ "Not " <> v)
-  "BACKEND"
-  (Env.def "none" <> Env.showDef <> Env.help "Backend to use - either \"none\", \"file\", or \"postgres\"")
+parseBackendEnv v =
+  ()
+    <$ Env.var
+      (Env.eitherReader $ \s -> if s == v then pure s else Left $ "Not " <> v)
+      "BACKEND"
+      ( Env.def "none"
+          <> Env.showDef
+          <> Env.help "Backend to use - either \"none\", \"file\", or \"postgres\""
+      )
 
 data SelectedBackend
   = -- | Don't persist any changes made - *Warning* this ensures nothing is stored!
@@ -474,7 +483,8 @@ selectedBackendParser =
     <|> (File <$> fileBackendParser)
     <|> (Postgres <$> postgresBackendParser)
 
-selectedBackendEnv :: (Env.AsUnset e, Env.AsUnread e) => Env.Parser e SelectedBackend
+selectedBackendEnv
+  :: (Env.AsUnset e, Env.AsUnread e) => Env.Parser e SelectedBackend
 selectedBackendEnv =
   (NoBackend <$ parseBackendEnv "none")
     <|> (File <$> fileBackendEnv)
@@ -496,7 +506,7 @@ instance Default HttpConfig where
       , port = 8000
       }
 instance Semigroup HttpConfig where
-  x <> y = 
+  x <> y =
     let applyIfNotDef
           :: forall a
            . (Eq a)
@@ -706,8 +716,8 @@ configEnv =
           "Offset within interval - 's' is \"seconds\", 'm' is \"minutes\", _h_our, _d_ay, _w_eek"
    where
     durationUnitOffset = Env.eitherReader $ \s -> case Atto.parseOnly durationOffset (T.pack s) of
-        Left e -> Left e
-        Right xs -> pure xs
+      Left e -> Left e
+      Right xs -> pure xs
     showDurationUnitOffset = concatMap go . getDurationUnitOffset
      where
       go x = case x of

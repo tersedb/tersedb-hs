@@ -21,8 +21,12 @@ You can reach me at athan.clark@gmail.com.
 module Lib.Sync.Types.Store where
 
 import Control.Lens.TH (makeLensesFor)
+import Data.Aeson (FromJSON, ToJSON)
 import Data.HashMap.Strict (HashMap)
 import Data.HashSet (HashSet)
+import Deriving.Aeson (CustomJSON (..))
+import Deriving.Aeson.Stock (PrefixedSnake)
+import GHC.Generics (Generic)
 import Lib.Sync.Types.Store.Entity (Entity)
 import Lib.Sync.Types.Store.Groups (Groups)
 import Lib.Sync.Types.Store.Tabulation.Group (TabulatedPermissionsForGroup)
@@ -32,10 +36,6 @@ import Lib.Types.Permission (
   CollectionPermission,
   SinglePermission,
  )
-import GHC.Generics (Generic)
-import Data.Aeson (ToJSON, FromJSON)
-import Deriving.Aeson (CustomJSON (..))
-import Deriving.Aeson.Stock (PrefixedSnake)
 
 data Temp = Temp
   { tempReferencesFrom :: HashMap VersionId (HashSet VersionId)
@@ -96,8 +96,9 @@ data Store = Store
   , storeMemberPermissions :: HashMap GroupId (HashMap GroupId CollectionPermission)
   }
   deriving (Eq, Show, Read, Generic)
-  deriving (ToJSON, FromJSON)
-       via PrefixedSnake "store" Store
+  deriving
+    (ToJSON, FromJSON)
+    via PrefixedSnake "store" Store
 
 makeLensesFor
   [ ("storeGroups", "toGroups")

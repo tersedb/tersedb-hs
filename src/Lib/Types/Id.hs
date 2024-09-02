@@ -38,19 +38,19 @@ import Control.Applicative ((<|>))
 import Control.Monad (replicateM)
 import Data.Aeson (
   FromJSON (parseJSON),
-  ToJSON (toJSON),
-  ToJSONKey (toJSONKey),
   FromJSONKey (fromJSONKey),
   FromJSONKeyFunction (FromJSONKeyTextParser),
+  ToJSON (toJSON),
+  ToJSONKey (toJSONKey),
   Value (String),
   object,
   (.:),
   (.=),
  )
-import Data.Aeson.Types
-  ( typeMismatch
-  , toJSONKeyText
-  )
+import Data.Aeson.Types (
+  toJSONKeyText,
+  typeMismatch,
+ )
 import Data.Attoparsec.Text (Parser, hexadecimal)
 import qualified Data.Attoparsec.Text as Atto
 import qualified Data.ByteString.Base16 as BS16
@@ -136,7 +136,17 @@ idWithPfxParser = do
 newtype GroupId = GroupId
   { getGroupId :: IdWithPfx "g_"
   }
-  deriving (Generic, Eq, Ord, Hashable, ToJSON, FromJSON, ToJSONKey, FromJSONKey, Arbitrary)
+  deriving
+    ( Generic
+    , Eq
+    , Ord
+    , Hashable
+    , ToJSON
+    , FromJSON
+    , ToJSONKey
+    , FromJSONKey
+    , Arbitrary
+    )
   deriving
     (Show, Read)
     via (IdWithPfx "g_")
@@ -149,7 +159,17 @@ groupIdParser = GroupId <$> idWithPfxParser
 newtype ActorId = ActorId
   { getActorId :: IdWithPfx "a_"
   }
-  deriving (Generic, Eq, Ord, Hashable, ToJSON, FromJSON, ToJSONKey, FromJSONKey, Arbitrary)
+  deriving
+    ( Generic
+    , Eq
+    , Ord
+    , Hashable
+    , ToJSON
+    , FromJSON
+    , ToJSONKey
+    , FromJSONKey
+    , Arbitrary
+    )
   deriving
     (Show, Read)
     via (IdWithPfx "a_")
@@ -162,7 +182,17 @@ actorIdParser = ActorId <$> idWithPfxParser
 newtype SpaceId = SpaceId
   { getSpaceId :: IdWithPfx "s_"
   }
-  deriving (Generic, Eq, Ord, Hashable, ToJSON, FromJSON, ToJSONKey, FromJSONKey, Arbitrary)
+  deriving
+    ( Generic
+    , Eq
+    , Ord
+    , Hashable
+    , ToJSON
+    , FromJSON
+    , ToJSONKey
+    , FromJSONKey
+    , Arbitrary
+    )
   deriving
     (Show, Read)
     via (IdWithPfx "s_")
@@ -175,7 +205,17 @@ spaceIdParser = SpaceId <$> idWithPfxParser
 newtype EntityId = EntityId
   { getEntityId :: IdWithPfx "e_"
   }
-  deriving (Generic, Eq, Ord, Hashable, ToJSON, FromJSON, ToJSONKey, FromJSONKey, Arbitrary)
+  deriving
+    ( Generic
+    , Eq
+    , Ord
+    , Hashable
+    , ToJSON
+    , FromJSON
+    , ToJSONKey
+    , FromJSONKey
+    , Arbitrary
+    )
   deriving
     (Show, Read)
     via (IdWithPfx "e_")
@@ -188,7 +228,17 @@ entityIdParser = EntityId <$> idWithPfxParser
 newtype VersionId = VersionId
   { getVersionId :: IdWithPfx "v_"
   }
-  deriving (Generic, Eq, Ord, Hashable, ToJSON, FromJSON, ToJSONKey, FromJSONKey, Arbitrary)
+  deriving
+    ( Generic
+    , Eq
+    , Ord
+    , Hashable
+    , ToJSON
+    , FromJSON
+    , ToJSONKey
+    , FromJSONKey
+    , Arbitrary
+    )
   deriving
     (Show, Read)
     via (IdWithPfx "v_")
