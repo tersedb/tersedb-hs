@@ -44,6 +44,8 @@ import qualified Data.Attoparsec.Text as Atto
 import qualified Data.ByteString as BS
 import Data.Data (Proxy (..))
 import Data.List.NonEmpty (NonEmpty)
+import Data.Word (Word64)
+import Data.Maybe (fromJust)
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
@@ -67,7 +69,7 @@ import Lib.Sync.Actions.Safe (emptyShared)
 import qualified Lib.Sync.Types.Store as Sync
 import Lib.Types.Errors (CycleDetected (..), UnauthorizedAction (..))
 import Lib.Types.Id (ActorId, actorIdParser)
-import Main.Options (programOptions, CLIOptions (CLIOptions, cliConfig, currentConfig, defaultConfig, config), Configuration (http, Configuration), HttpConfig (port), programEnv)
+import Main.Options (programOptions, CLIOptions (..), Configuration (..), programEnv, ToSeconds (..), HttpConfig (..))
 import Network.HTTP.Types (
   badRequest400,
   conflict409,
@@ -140,12 +142,16 @@ main = withStderrLogging $ do
 
   (needsCheckpointVar :: TVar Bool) <- newTVarIO False
 
-  void . forkIO . forever $ do
-    threadDelay (1_000_000 * 60 * 60) -- every hour?
-    needsCheckpoint <- atomically (readTVar needsCheckpointVar)
-    when needsCheckpoint $ do
-      log' "Writing checkpoint"
-      createCheckpoint
+  void . forkIO $ do
+    case checkpointEveryOffset of
+      Nothing -> pure ()
+      Just offset -> threadDelay (1_000_000 * toSeconds offset)
+    forever $ do
+      threadDelay (1_000_000 * toSeconds (fromJust checkpointEvery)) -- every hour?
+      needsCheckpoint <- atomically (readTVar needsCheckpointVar)
+      when needsCheckpoint $ do
+        log' "Writing checkpoint"
+        createCheckpoint
 
   log' $ "Running on port " <> T.pack (show (port http))
   loggerMiddleware <- mkRequestLogger defaultRequestLoggerSettings
@@ -215,25 +221,30 @@ main = withStderrLogging $ do
               if requestMethod req /= methodPost
                 then respond $ responseLBS methodNotAllowed405 [] ""
                 else
-                  if not (legitRequestBody (requestBodyLength req))
-                    then respond $ responseLBS lengthRequired411 [] ""
-                    else do
-                      body <- consumeRequestBodyStrict req
-                      case lookup "Content-Type" headers of
-                        Just "application/json" -> case Aeson.eitherDecode body of
-                          Left e -> case Aeson.eitherDecode body of
-                            Left e' -> do
-                              warn' $ T.pack e <> ", " <> T.pack e'
-                              respond $ responseLBS badRequest400 [] ""
-                            Right (action :: Action) -> onAction actors action
-                          Right (actions :: [Action]) -> onActions actors actions
-                        _ -> respond $ responseLBS unsupportedMediaType415 [] ""
+                  let continue = do
+                        body <- consumeRequestBodyStrict req
+                        case lookup "Content-Type" headers of
+                          Just "application/json" -> case Aeson.eitherDecode body of
+                            Left e -> case Aeson.eitherDecode body of
+                              Left e' ->
+                                respond . responseLBS badRequest400 [] . LT.encodeUtf8 $
+                                  "List of Actions Parsing Failure: " <> LT.pack e <>
+                                  ", Single Action Parsing Failure: " <> LT.pack e'
+                              Right (action :: Action) -> onAction actors action
+                            Right (actions :: [Action]) -> onActions actors actions
+                          _ -> respond $ responseLBS unsupportedMediaType415 [] ""
+                  in  case maxUploadLength http of
+                        Nothing -> continue
+                        Just maxLength
+                          | legitRequestBody (requestBodyLength req) maxLength -> continue
+                          | otherwise -> respond $ responseLBS lengthRequired411 [] ""
           whenStoringDiff :: IO () -> TerseM IO ()
           whenStoringDiff x = lift $ do
             x
             atomically $ writeTVar needsCheckpointVar True
         handleCycle (CycleDetected cs) =
-          respond $ responseLBS conflict409 [] ""
+          respond . responseLBS conflict409 [] . LT.encodeUtf8 $
+            "Cycle Detected: " <> LT.pack (show cs)
      in case pathInfo req of
           ["act"] ->
             let go = route actMany storeSingleDiff act storeSingleDiff $ \mAuth action ->
@@ -271,9 +282,9 @@ storeSingleDiff mutableAction = pure ()
 storeMultipleDiffs :: [MutableAction] -> IO ()
 storeMultipleDiffs mutableActions = pure ()
 
-legitRequestBody :: RequestBodyLength -> Bool
-legitRequestBody (KnownLength l) = l < 1024
-legitRequestBody _ = False
+legitRequestBody :: RequestBodyLength -> Word64 -> Bool
+legitRequestBody (KnownLength l) l' = l <= l'
+legitRequestBody _ _ = False
 
 getActors :: BS.ByteString -> Maybe (NonEmpty ActorId)
 getActors t = case Atto.parseOnly (actorIdParser `Atto.sepBy1` (Atto.char ',')) (T.decodeUtf8 t) of
