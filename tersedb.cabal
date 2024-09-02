@@ -136,6 +136,8 @@ library
 executable tersedb-hs
   main-is: Main.hs
   other-modules:
+      Main.Backends
+      Main.Backends.File
       Main.Options
       Paths_tersedb
   autogen-modules:

@@ -72,6 +72,7 @@ import Lib.Sync.Actions.Safe (emptyShared)
 import qualified Lib.Sync.Types.Store as Sync
 import Lib.Types.Errors (CycleDetected (..), UnauthorizedAction (..))
 import Lib.Types.Id (ActorId, actorIdParser)
+import Main.Backends.File (mkCheckpointFunctionsAndLoad)
 import Main.Options (
   CLIOptions (..),
   Configuration (..),
@@ -142,20 +143,16 @@ main = withStderrLogging $ do
   log' . T.pack $ "Admin Group: " <> show adminGroup
 
   ( storeCheckpoint :: Sync.Store -> IO ()
-    , storeSingleDiff :: MutableAction -> IO ()
-    , storeMultipleDiffs :: [MutableAction] -> IO ()
+    , storeSingleDiff :: NonEmpty ActorId -> MutableAction -> IO ()
+    , storeMultipleDiffs :: NonEmpty ActorId -> [MutableAction] -> IO ()
     ) <- case backend of
     NoBackend -> do
       warn' "No backend selected - all changes will be erased if the server stops"
-      pure (const $ pure (), const $ pure (), const $ pure ())
-    File FileBackendConfig{fileBackendPath} -> do
-      pure
-        ( LBS.appendFile fileBackendPath . Aeson.encode
-        , LBS.appendFile fileBackendPath . Aeson.encode
-        , LBS.appendFile fileBackendPath . Aeson.encode
-        )
+      pure (\_ -> pure (), \_ _ -> pure (), \_ _ -> pure ())
+    File FileBackendConfig{fileBackendPath} ->
+      mkCheckpointFunctionsAndLoad fileBackendPath s
     Postgres p -> do
-      pure (const $ pure (), const $ pure (), const $ pure ())
+      pure (\_ -> pure (), \_ _ -> pure (), \_ _ -> pure ())
 
   (creatingCheckpointVar :: TMVar ()) <- newTMVarIO () -- prevents mutations while checkout is happening
   let createCheckpoint :: IO ()
@@ -198,7 +195,7 @@ main = withStderrLogging $ do
                -> [Action]
                -> n [respMany]
              )
-          -> (mutMany -> IO ())
+          -> (NonEmpty ActorId -> mutMany -> IO ())
           -> ( forall n m
                 . ( TerseDB n m
                   , MonadIO n
@@ -211,7 +208,7 @@ main = withStderrLogging $ do
                -> Action
                -> n respSingle
              )
-          -> (mutSingle -> IO ())
+          -> (NonEmpty ActorId -> mutSingle -> IO ())
           -> (respSingle -> Action -> IO ResponseReceived)
           -> IO ResponseReceived
         route actMany storeDiffMany actSingle storeDiffSingle respondSingle =
@@ -221,7 +218,7 @@ main = withStderrLogging $ do
                     actMany
                       (Proxy @(TerseM STM))
                       (lift (readTMVar creatingCheckpointVar)) -- Ensures that a checkpoint isn't currently happening
-                      (whenStoringDiff . storeDiffMany)
+                      (whenStoringDiff . storeDiffMany actors)
                       actors
                       actions
                 respond . responseLBS ok200 [] $ Aeson.encode responses
@@ -231,7 +228,7 @@ main = withStderrLogging $ do
                     actSingle
                       (Proxy @(TerseM STM))
                       (lift (readTMVar creatingCheckpointVar)) -- Ensures that a checkpoint isn't currently happening
-                      (whenStoringDiff . storeDiffSingle)
+                      (whenStoringDiff . storeDiffSingle actors)
                       actors
                       action
                 respondSingle response action
