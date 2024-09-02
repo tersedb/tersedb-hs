@@ -150,7 +150,7 @@ main = withStderrLogging $ do
       warn' "No backend selected - all changes will be erased if the server stops"
       pure (\_ -> pure (), \_ _ -> pure (), \_ _ -> pure ())
     File FileBackendConfig{fileBackendPath} ->
-      mkCheckpointFunctionsAndLoad fileBackendPath s
+      mkCheckpointFunctionsAndLoad fileBackendPath cfg s
     Postgres p -> do
       pure (\_ -> pure (), \_ _ -> pure (), \_ _ -> pure ())
 

@@ -21,6 +21,7 @@ import Lib.Async.Types.Store.Iso (loadSyncStore)
 import Lib.Class (commit, resetTabulation)
 import qualified Lib.Sync.Types.Store as Sync
 import Lib.Types.Id (ActorId)
+import Main.Options (Configuration (Configuration, purgeCheckpointsOnCheckpoint, purgeDiffsOnCheckpoint))
 
 data CheckpointOrDiff
   = Checkpoint Sync.Store
@@ -43,13 +44,14 @@ instance FromJSON CheckpointOrDiff where
 
 mkCheckpointFunctionsAndLoad
   :: FilePath
+  -> Configuration
   -> Async.Shared
   -> IO
       ( Sync.Store -> IO ()
       , NonEmpty ActorId -> MutableAction -> IO ()
       , NonEmpty ActorId -> [MutableAction] -> IO ()
       )
-mkCheckpointFunctionsAndLoad fileBackendPath s = do
+mkCheckpointFunctionsAndLoad fileBackendPath Configuration{purgeDiffsOnCheckpoint, purgeCheckpointsOnCheckpoint} s = do
   eEntries <-
     mapM (Aeson.eitherDecode . LT.encodeUtf8)
       . reverse
@@ -81,8 +83,24 @@ mkCheckpointFunctionsAndLoad fileBackendPath s = do
               loadSyncStore y
               resetTabulation
       flip runReaderT s . commit $ forM_ entries go
+      let addCheckpoint :: Sync.Store -> IO ()
+          addCheckpoint x
+            | purgeCheckpointsOnCheckpoint = LBS.writeFile fileBackendPath $ Aeson.encode (Checkpoint x) <> "\n"
+            | purgeDiffsOnCheckpoint = do
+                eEntries <- mapM (Aeson.eitherDecode . LT.encodeUtf8) . reverse . LT.lines <$> LT.readFile fileBackendPath
+                case eEntries of
+                  Left e -> errorL' $ "Couldn't parse file backend on checkpoint: " <> T.pack e
+                  Right entries -> do
+                    let everythingTilLastCheckpoint = dropWhile (not . aCheckpoint) entries
+                          where
+                            aCheckpoint x = case x of
+                              Checkpoint _ -> True
+                              _ -> False
+                        newEntries = reverse (Checkpoint x : everythingTilLastCheckpoint)
+                    LT.writeFile fileBackendPath (LT.unlines (LT.decodeUtf8 . Aeson.encode <$> newEntries))
+            | otherwise = LBS.appendFile fileBackendPath $ Aeson.encode (Checkpoint x) <> "\n"
       pure
-        ( \x -> LBS.appendFile fileBackendPath $ Aeson.encode (Checkpoint x) <> "\n"
+        ( addCheckpoint
         , \as x -> LBS.appendFile fileBackendPath $ Aeson.encode (DiffSingle as x) <> "\n"
         , \as x -> LBS.appendFile fileBackendPath $ Aeson.encode (DiffMultiple as x) <> "\n"
         )
