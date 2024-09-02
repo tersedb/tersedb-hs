@@ -1,26 +1,26 @@
 module Main.Backends.File where
 
-import Lib.Api (MutableAction, Authorize (..), mutate)
-import Lib.Class (resetTabulation, commit)
-import Lib.Types.Id (ActorId)
-import qualified Lib.Sync.Types.Store as Sync
-import Lib.Async.Types.Store.Iso (loadSyncStore)
-import Lib.Async.Types.Monad (TerseM)
-import qualified Lib.Async.Types.Store as Async
-import Data.Aeson (ToJSON (..), FromJSON (..), (.:), (.=), object, withObject)
 import Control.Applicative ((<|>))
-import qualified Data.ByteString.Lazy as LBS
-import qualified Data.Aeson as Aeson
+import Control.Concurrent.STM (STM)
 import Control.Logging (errorL')
+import Control.Monad (forM_)
+import Control.Monad.Reader (runReaderT)
+import Data.Aeson (FromJSON (..), ToJSON (..), object, withObject, (.:), (.=))
+import qualified Data.Aeson as Aeson
+import qualified Data.ByteString.Lazy as LBS
+import Data.Foldable (foldl')
+import Data.List.NonEmpty (NonEmpty)
+import qualified Data.Text as T
 import qualified Data.Text.Lazy as LT
 import qualified Data.Text.Lazy.Encoding as LT
 import qualified Data.Text.Lazy.IO as LT
-import qualified Data.Text as T
-import Data.List.NonEmpty (NonEmpty)
-import Control.Monad.Reader (runReaderT)
-import Control.Monad (forM_)
-import Data.Foldable (foldl')
-import Control.Concurrent.STM (STM)
+import Lib.Api (Authorize (..), MutableAction, mutate)
+import Lib.Async.Types.Monad (TerseM)
+import qualified Lib.Async.Types.Store as Async
+import Lib.Async.Types.Store.Iso (loadSyncStore)
+import Lib.Class (commit, resetTabulation)
+import qualified Lib.Sync.Types.Store as Sync
+import Lib.Types.Id (ActorId)
 
 data CheckpointOrDiff
   = Checkpoint Sync.Store
@@ -36,28 +36,33 @@ instance FromJSON CheckpointOrDiff where
   parseJSON = withObject "CheckpointOrDiff" $ \o ->
     (Checkpoint <$> o .: "c")
       <|> (onD =<< o .: "d")
-    where
-      onD o =
-        (DiffMultiple <$> o .: "as" <*> o .: "a")
-          <|> (DiffSingle <$> o .: "as" <*> o .: "a")
-
+   where
+    onD o =
+      (DiffMultiple <$> o .: "as" <*> o .: "a")
+        <|> (DiffSingle <$> o .: "as" <*> o .: "a")
 
 mkCheckpointFunctionsAndLoad
   :: FilePath
   -> Async.Shared
-  -> IO (Sync.Store -> IO (), NonEmpty ActorId -> MutableAction -> IO (), NonEmpty ActorId -> [MutableAction] -> IO ())
+  -> IO
+      ( Sync.Store -> IO ()
+      , NonEmpty ActorId -> MutableAction -> IO ()
+      , NonEmpty ActorId -> [MutableAction] -> IO ()
+      )
 mkCheckpointFunctionsAndLoad fileBackendPath s = do
-  eEntries <- mapM (Aeson.eitherDecode . LT.encodeUtf8)
-    . reverse
-    . LT.lines <$> LT.readFile fileBackendPath
+  eEntries <-
+    mapM (Aeson.eitherDecode . LT.encodeUtf8)
+      . reverse
+      . LT.lines
+      <$> LT.readFile fileBackendPath
   case eEntries of
     Left e -> errorL' $ "Couldn't parse file backend: " <> T.pack e
     Right entries' -> do
       let (entries, _) = foldl' go ([], False) entries'
-            where
-              go (acc, stopped) x
-                | stopped = (acc, stopped)
-                | otherwise = case x of
+           where
+            go (acc, stopped) x
+              | stopped = (acc, stopped)
+              | otherwise = case x of
                   Checkpoint _ -> (x : acc, True)
                   _ -> (x : acc, False)
           go :: CheckpointOrDiff -> TerseM STM ()
