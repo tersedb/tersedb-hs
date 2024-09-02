@@ -39,12 +39,18 @@ import Control.Monad (replicateM)
 import Data.Aeson (
   FromJSON (parseJSON),
   ToJSON (toJSON),
+  ToJSONKey (toJSONKey),
+  FromJSONKey (fromJSONKey),
+  FromJSONKeyFunction (FromJSONKeyTextParser),
   Value (String),
   object,
   (.:),
   (.=),
  )
-import Data.Aeson.Types (typeMismatch)
+import Data.Aeson.Types
+  ( typeMismatch
+  , toJSONKeyText
+  )
 import Data.Attoparsec.Text (Parser, hexadecimal)
 import qualified Data.Attoparsec.Text as Atto
 import qualified Data.ByteString.Base16 as BS16
@@ -66,7 +72,7 @@ import Text.Read (Read (readPrec), get, lift, look, pfail)
 newtype Id = Id
   { getId :: Int
   }
-  deriving (Eq, Ord, Hashable, Generic, Serialize)
+  deriving (Eq, Ord, Hashable, Generic, Serialize, ToJSONKey)
 
 idFromText :: T.Text -> Either String Id
 idFromText t = BS16.decode (T.encodeUtf8 t) >>= Cereal.decode
@@ -113,6 +119,10 @@ instance (KnownSymbol k) => FromJSON (IdWithPfx k) where
    where
     pfx = fromSSymbol (symbolSing @k)
   parseJSON json = typeMismatch "IdWithPfx" json
+instance (KnownSymbol k) => ToJSONKey (IdWithPfx k) where
+  toJSONKey = toJSONKeyText $ \(IdWithPfx x) -> T.pack (fromSSymbol (symbolSing @k)) <> idToText x
+instance (KnownSymbol k) => FromJSONKey (IdWithPfx k) where
+  fromJSONKey = FromJSONKeyTextParser (parseJSON . String)
 
 idWithPfxParser :: forall k. (KnownSymbol k) => Parser (IdWithPfx k)
 idWithPfxParser = do
@@ -126,7 +136,7 @@ idWithPfxParser = do
 newtype GroupId = GroupId
   { getGroupId :: IdWithPfx "g_"
   }
-  deriving (Generic, Eq, Ord, Hashable, ToJSON, FromJSON, Arbitrary)
+  deriving (Generic, Eq, Ord, Hashable, ToJSON, FromJSON, ToJSONKey, FromJSONKey, Arbitrary)
   deriving
     (Show, Read)
     via (IdWithPfx "g_")
@@ -139,7 +149,7 @@ groupIdParser = GroupId <$> idWithPfxParser
 newtype ActorId = ActorId
   { getActorId :: IdWithPfx "a_"
   }
-  deriving (Generic, Eq, Ord, Hashable, ToJSON, FromJSON, Arbitrary)
+  deriving (Generic, Eq, Ord, Hashable, ToJSON, FromJSON, ToJSONKey, FromJSONKey, Arbitrary)
   deriving
     (Show, Read)
     via (IdWithPfx "a_")
@@ -152,7 +162,7 @@ actorIdParser = ActorId <$> idWithPfxParser
 newtype SpaceId = SpaceId
   { getSpaceId :: IdWithPfx "s_"
   }
-  deriving (Generic, Eq, Ord, Hashable, ToJSON, FromJSON, Arbitrary)
+  deriving (Generic, Eq, Ord, Hashable, ToJSON, FromJSON, ToJSONKey, FromJSONKey, Arbitrary)
   deriving
     (Show, Read)
     via (IdWithPfx "s_")
@@ -165,7 +175,7 @@ spaceIdParser = SpaceId <$> idWithPfxParser
 newtype EntityId = EntityId
   { getEntityId :: IdWithPfx "e_"
   }
-  deriving (Generic, Eq, Ord, Hashable, ToJSON, FromJSON, Arbitrary)
+  deriving (Generic, Eq, Ord, Hashable, ToJSON, FromJSON, ToJSONKey, FromJSONKey, Arbitrary)
   deriving
     (Show, Read)
     via (IdWithPfx "e_")
@@ -178,7 +188,7 @@ entityIdParser = EntityId <$> idWithPfxParser
 newtype VersionId = VersionId
   { getVersionId :: IdWithPfx "v_"
   }
-  deriving (Generic, Eq, Ord, Hashable, ToJSON, FromJSON, Arbitrary)
+  deriving (Generic, Eq, Ord, Hashable, ToJSON, FromJSON, ToJSONKey, FromJSONKey, Arbitrary)
   deriving
     (Show, Read)
     via (IdWithPfx "v_")

@@ -46,7 +46,7 @@ default-extensions:
 
 dependencies:
   - base >= 4.7 && < 5
-  - aeson
+  - aeson >= 2.2.3
   - attoparsec
   - base16-bytestring
   - bytestring

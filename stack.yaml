@@ -42,6 +42,10 @@ packages:
 #
 extra-deps:
   - envparse-0.6.0
+  - aeson-2.2.3.0
+  - character-ps-0.1
+  - hashable-1.4.7.0
+  - text-iso8601-0.1.1
 
 # Override default flag values for project packages and extra-deps
 # flags: {}

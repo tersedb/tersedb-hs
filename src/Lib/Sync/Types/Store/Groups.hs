@@ -73,15 +73,18 @@ emptyGroup =
 
 -- | How groups interact with one another - inheritance
 data Groups = Groups
-  { groupsHashMap :: HashMap GroupId Group
+  { groupsNodes :: HashMap GroupId Group
   , groupsRoots :: HashSet GroupId -- FIXME roots are just the complement of outs?
   , groupsEdges :: HashSet (GroupId, GroupId)
   , groupsOuts :: HashSet GroupId -- FIXME rename to "has parent"
   }
   deriving (Eq, Generic, Show, Read)
+  deriving
+    (ToJSON, FromJSON)
+    via PrefixedSnake "groups" Groups
 
 makeLensesFor
-  [ ("groupsHashMap", "nodes")
+  [ ("groupsNodes", "nodes")
   , ("groupsRoots", "roots")
   , ("groupsEdges", "edges")
   , ("groupsOuts", "outs")
@@ -91,7 +94,7 @@ makeLensesFor
 emptyGroups :: Groups
 emptyGroups =
   Groups
-    { groupsHashMap = mempty
+    { groupsNodes = mempty
     , groupsRoots = mempty
     , groupsEdges = mempty
     , groupsOuts = mempty

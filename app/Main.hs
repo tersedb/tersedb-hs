@@ -42,6 +42,7 @@ import Control.Monad.Reader (lift, runReaderT)
 import qualified Data.Aeson as Aeson
 import qualified Data.Attoparsec.Text as Atto
 import qualified Data.ByteString as BS
+import qualified Data.ByteString.Lazy as LBS
 import Data.Data (Proxy (..))
 import Data.List.NonEmpty (NonEmpty)
 import Data.Word (Word64)
@@ -69,7 +70,7 @@ import Lib.Sync.Actions.Safe (emptyShared)
 import qualified Lib.Sync.Types.Store as Sync
 import Lib.Types.Errors (CycleDetected (..), UnauthorizedAction (..))
 import Lib.Types.Id (ActorId, actorIdParser)
-import Main.Options (programOptions, CLIOptions (..), Configuration (..), programEnv, ToSeconds (..), HttpConfig (..))
+import Main.Options (programOptions, CLIOptions (..), Configuration (..), programEnv, ToSeconds (..), HttpConfig (..), SelectedBackend (..), FileBackendConfig (..))
 import Network.HTTP.Types (
   badRequest400,
   conflict409,
@@ -130,6 +131,22 @@ main = withStderrLogging $ do
 
   log' . T.pack $ "Admin Actor: " <> show adminActor
   log' . T.pack $ "Admin Group: " <> show adminGroup
+
+  ( storeCheckpoint :: Sync.Store -> IO ()
+    , storeSingleDiff :: MutableAction -> IO ()
+    , storeMultipleDiffs :: [MutableAction] -> IO ()
+    ) <- case backend of
+    NoBackend -> do
+      warn' "No backend selected - all changes will be erased if the server stops"
+      pure (const $ pure (), const $ pure (), const $ pure ())
+    File FileBackendConfig{fileBackendPath} -> do
+      pure
+        ( LBS.appendFile fileBackendPath . Aeson.encode
+        , LBS.appendFile fileBackendPath . Aeson.encode
+        , LBS.appendFile fileBackendPath . Aeson.encode
+        )
+    Postgres p -> do
+      pure (const $ pure (), const $ pure (), const $ pure ())
 
   (creatingCheckpointVar :: TMVar ()) <- newTMVarIO () -- prevents mutations while checkout is happening
   let createCheckpoint :: IO ()
@@ -272,15 +289,6 @@ main = withStderrLogging $ do
                   ]
           ["config"] -> undefined -- TODO adjust configuration fields at runtime
           _ -> respond $ responseLBS notFound404 [] ""
-
-storeCheckpoint :: Sync.Store -> IO ()
-storeCheckpoint state = pure ()
-
-storeSingleDiff :: MutableAction -> IO ()
-storeSingleDiff mutableAction = pure ()
-
-storeMultipleDiffs :: [MutableAction] -> IO ()
-storeMultipleDiffs mutableActions = pure ()
 
 legitRequestBody :: RequestBodyLength -> Word64 -> Bool
 legitRequestBody (KnownLength l) l' = l <= l'

@@ -32,6 +32,10 @@ import Lib.Types.Permission (
   CollectionPermission,
   SinglePermission,
  )
+import GHC.Generics (Generic)
+import Data.Aeson (ToJSON, FromJSON)
+import Deriving.Aeson (CustomJSON (..))
+import Deriving.Aeson.Stock (PrefixedSnake)
 
 data Temp = Temp
   { tempReferencesFrom :: HashMap VersionId (HashSet VersionId)
@@ -91,7 +95,9 @@ data Store = Store
   , storeGroupPermissions :: HashMap GroupId (HashMap GroupId SinglePermission)
   , storeMemberPermissions :: HashMap GroupId (HashMap GroupId CollectionPermission)
   }
-  deriving (Eq, Show, Read)
+  deriving (Eq, Show, Read, Generic)
+  deriving (ToJSON, FromJSON)
+       via PrefixedSnake "store" Store
 
 makeLensesFor
   [ ("storeGroups", "toGroups")

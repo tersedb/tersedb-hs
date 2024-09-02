@@ -11,6 +11,34 @@ packages:
       size: 1181
   original:
     hackage: envparse-0.6.0
+- completed:
+    hackage: aeson-2.2.3.0@sha256:ef66d29cb5b8d87a144838dfd5745bb3ac6b8fc4b142129fac84814baee13660,6351
+    pantry-tree:
+      sha256: f925a03afc15ae26beaf32dfbf4bf126b66744b459ea6a7065381c71ccd48371
+      size: 83371
+  original:
+    hackage: aeson-2.2.3.0
+- completed:
+    hackage: character-ps-0.1@sha256:b38ed1c07ae49e7461e44ca1d00c9ca24d1dcb008424ccd919916f92fd48d9fe,1315
+    pantry-tree:
+      sha256: 22d98d7c8b4c2bb9cb7fe429adf52bfed0c18269eac146b1e591c5941e26161a
+      size: 382
+  original:
+    hackage: character-ps-0.1
+- completed:
+    hackage: hashable-1.4.7.0@sha256:573f3ab242f75465a0d67ce9d84202650a1606575e6dbd6d31ffcf4767a9a379,6629
+    pantry-tree:
+      sha256: 9ec168505c52fa389b7447a1251b302e32537adeecac88c2aa72beed53beb3bd
+      size: 1578
+  original:
+    hackage: hashable-1.4.7.0
+- completed:
+    hackage: text-iso8601-0.1.1@sha256:ce3fbe6177e6ddb9e2646a059130a5352babe5a1289d12e9b0987c32ae526d53,2374
+    pantry-tree:
+      sha256: f816105d3a7412e0794b53a8b4b296ba6b24e58e3a74bfc96cfece9e975b52b8
+      size: 427
+  original:
+    hackage: text-iso8601-0.1.1
 snapshots:
 - completed:
     sha256: 4a0e5e187fbef423f9c60072bfb1dd56f2a01a07a2667eb1469bd79073cfceaf
