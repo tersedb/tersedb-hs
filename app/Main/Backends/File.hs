@@ -1,7 +1,7 @@
 module Main.Backends.File where
 
 import Control.Applicative ((<|>))
-import Control.Concurrent.STM (STM)
+import Control.Concurrent.STM (STM, newTVarIO, writeTVar, readTVarIO)
 import Control.Logging (errorL')
 import Control.Monad (forM_)
 import Control.Monad.Reader (runReaderT)
@@ -22,6 +22,7 @@ import Lib.Class (commit, resetTabulation)
 import qualified Lib.Sync.Types.Store as Sync
 import Lib.Types.Id (ActorId)
 import Main.Options (Configuration (Configuration, purgeCheckpointsOnCheckpoint, purgeDiffsOnCheckpoint))
+import Control.Monad.Base (MonadBase(liftBase))
 
 data CheckpointOrDiff
   = Checkpoint Sync.Store
@@ -31,16 +32,13 @@ data CheckpointOrDiff
 instance ToJSON CheckpointOrDiff where
   toJSON x = case x of
     Checkpoint y -> object ["c" .= y]
-    DiffSingle as y -> object ["d" .= object ["as" .= as, "a" .= y]]
-    DiffMultiple as y -> object ["d" .= object ["as" .= as, "a" .= y]]
+    DiffSingle as y -> object ["d" .= y, "a" .= as]
+    DiffMultiple as y -> object ["d" .= y, "a" .= as]
 instance FromJSON CheckpointOrDiff where
   parseJSON = withObject "CheckpointOrDiff" $ \o ->
     (Checkpoint <$> o .: "c")
-      <|> (onD =<< o .: "d")
-   where
-    onD o =
-      (DiffMultiple <$> o .: "as" <*> o .: "a")
-        <|> (DiffSingle <$> o .: "as" <*> o .: "a")
+      <|> (DiffSingle <$> o .: "a" <*> o .: "d")
+      <|> (DiffMultiple <$> o .: "a" <*> o .: "d")
 
 mkCheckpointFunctionsAndLoad
   :: FilePath
@@ -50,6 +48,7 @@ mkCheckpointFunctionsAndLoad
       ( Sync.Store -> IO ()
       , NonEmpty ActorId -> MutableAction -> IO ()
       , NonEmpty ActorId -> [MutableAction] -> IO ()
+      , Bool
       )
 mkCheckpointFunctionsAndLoad fileBackendPath Configuration{purgeDiffsOnCheckpoint, purgeCheckpointsOnCheckpoint} s = do
   eEntries <-
@@ -60,6 +59,7 @@ mkCheckpointFunctionsAndLoad fileBackendPath Configuration{purgeDiffsOnCheckpoin
   case eEntries of
     Left e -> errorL' $ "Couldn't parse file backend: " <> T.pack e
     Right entries' -> do
+      loadedCheckpointVar <- newTVarIO False
       let (entries, _) = foldl' go ([], False) entries'
            where
             go (acc, stopped) x
@@ -67,8 +67,8 @@ mkCheckpointFunctionsAndLoad fileBackendPath Configuration{purgeDiffsOnCheckpoin
               | otherwise = case x of
                   Checkpoint _ -> (x : acc, True)
                   _ -> (x : acc, False)
-          go :: CheckpointOrDiff -> TerseM STM ()
-          go x = case x of
+          load :: CheckpointOrDiff -> TerseM STM ()
+          load x = case x of
             DiffSingle as y -> do
               mAuth <- mutate as y
               case mAuth of
@@ -82,7 +82,8 @@ mkCheckpointFunctionsAndLoad fileBackendPath Configuration{purgeDiffsOnCheckpoin
             Checkpoint y -> do
               loadSyncStore y
               resetTabulation
-      flip runReaderT s . commit $ forM_ entries go
+              liftBase $ writeTVar loadedCheckpointVar True
+      flip runReaderT s . commit $ forM_ entries load
       let addCheckpoint :: Sync.Store -> IO ()
           addCheckpoint x
             | purgeCheckpointsOnCheckpoint = LBS.writeFile fileBackendPath $ Aeson.encode (Checkpoint x) <> "\n"
@@ -99,8 +100,10 @@ mkCheckpointFunctionsAndLoad fileBackendPath Configuration{purgeDiffsOnCheckpoin
                         newEntries = reverse (Checkpoint x : everythingTilLastCheckpoint)
                     LT.writeFile fileBackendPath (LT.unlines (LT.decodeUtf8 . Aeson.encode <$> newEntries))
             | otherwise = LBS.appendFile fileBackendPath $ Aeson.encode (Checkpoint x) <> "\n"
+      loadedCheckpoint <- readTVarIO loadedCheckpointVar
       pure
         ( addCheckpoint
         , \as x -> LBS.appendFile fileBackendPath $ Aeson.encode (DiffSingle as x) <> "\n"
         , \as x -> LBS.appendFile fileBackendPath $ Aeson.encode (DiffMultiple as x) <> "\n"
+        , loadedCheckpoint
         )

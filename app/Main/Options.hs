@@ -48,12 +48,15 @@ import Options.Applicative (
  )
 import qualified Options.Applicative as OptParse
 import Text.Read (readMaybe)
+import Data.Functor (void)
 
 class ToSeconds a where
   toSeconds :: a -> Int
 
 data DurationUnit
-  = Hour
+  = Second
+  | Minute
+  | Hour
   | Day
   | Week
   | Month
@@ -69,6 +72,8 @@ instance FromJSON DurationUnit where
 
 instance ToSeconds DurationUnit where
   toSeconds x = case x of
+    Second -> 1
+    Minute -> 60
     Hour -> 60 * 60
     Day -> 60 * 60 * 24
     Week -> 60 * 60 * 24 * 7
@@ -441,8 +446,8 @@ fileBackendEnv =
 
 parseBackendEnv :: (Env.AsUnset e, Env.AsUnread e) => String -> Env.Parser e ()
 parseBackendEnv v =
-  ()
-    <$ Env.var
+  void $
+    Env.var
       (Env.eitherReader $ \s -> if s == v then pure s else Left $ "Not " <> v)
       "BACKEND"
       ( Env.def "none"
@@ -610,7 +615,7 @@ instance Semigroup Configuration where
           -> (a -> Configuration -> Configuration)
           -> Configuration
           -> Configuration
-        applySemigroup f appF z = appF (f x <> f y) z
+        applySemigroup f appF = appF (f x <> f y)
      in applySemigroup http (\a b -> b{http = a})
           . applyIfNotDef purgeDiffsOnCheckpoint (\a b -> b{purgeDiffsOnCheckpoint = a})
           . applyIfNotDef
@@ -649,13 +654,9 @@ configParser =
    where
     durationUnit = do
       s <- str
-      case s of
-        "hour" -> pure Hour
-        "day" -> pure Day
-        "week" -> pure Week
-        "month" -> pure Month
-        "year" -> pure Year
-        _ -> fail "Not a valid DurationUnit"
+      case readMaybe (s & ix 0 %~ toUpper) of
+        Just x -> pure x
+        Nothing -> fail $ "Not a valid DurationUnit: " <> s
   checkpointEveryOffsetParser =
     option durationUnitOffset $
       long "checkpoint-interval-offset"

@@ -32,9 +32,9 @@ import Control.Concurrent.STM (
   readTMVar,
   readTVar,
   takeTMVar,
-  writeTVar,
+  writeTVar, readTVarIO,
  )
-import Control.Logging (log', warn', withStderrLogging)
+import Control.Logging (log', warn', withStderrLogging, errorL')
 import Control.Monad (forever, void, when)
 import Control.Monad.Catch (Handler (..), MonadThrow, catch, catches)
 import Control.Monad.IO.Class (MonadIO)
@@ -67,11 +67,11 @@ import Lib.Api (
 import Lib.Async.Types.Monad (TerseM)
 import Lib.Async.Types.Store (newShared)
 import Lib.Async.Types.Store.Iso (genSyncStore)
-import Lib.Class (TerseDB, commit, loadSyncShared, runTerseDB)
+import Lib.Class (TerseDB (unsafeReadGroupsEager, unsafeReadMembersLazy, unsafeReadUniversePermission, unsafeReadOrganizationPermission, unsafeReadRecruiterPermission), commit, loadSyncShared, runTerseDB)
 import Lib.Sync.Actions.Safe (emptyShared)
 import qualified Lib.Sync.Types.Store as Sync
 import Lib.Types.Errors (CycleDetected (..), UnauthorizedAction (..))
-import Lib.Types.Id (ActorId, actorIdParser)
+import Lib.Types.Id (ActorId, actorIdParser, GroupId)
 import Main.Backends.File (mkCheckpointFunctionsAndLoad)
 import Main.Options (
   CLIOptions (..),
@@ -114,6 +114,8 @@ import Network.Wai.Middleware.RequestLogger (
 import qualified Options.Applicative as OptParse
 import System.Exit (exitSuccess)
 import System.Random.Stateful (globalStdGen, uniformM)
+import qualified DeferredFolds.UnfoldlM as UnfoldlM
+import qualified ListT
 
 main :: IO ()
 main = withStderrLogging $ do
@@ -132,38 +134,69 @@ main = withStderrLogging $ do
   when currentConfig $ do
     BS.putStr (Yaml.encode cfg)
     exitSuccess
-
-  (adminActor, adminGroup) <- uniformM globalStdGen
+      
   s <- atomically newShared
-  let init :: TerseM STM ()
-      init = loadSyncShared $ emptyShared adminActor adminGroup
-  runReaderT (commit init) s
-
-  log' . T.pack $ "Admin Actor: " <> show adminActor
-  log' . T.pack $ "Admin Group: " <> show adminGroup
 
   ( storeCheckpoint :: Sync.Store -> IO ()
     , storeSingleDiff :: NonEmpty ActorId -> MutableAction -> IO ()
     , storeMultipleDiffs :: NonEmpty ActorId -> [MutableAction] -> IO ()
+    , loadedCheckpoint
     ) <- case backend of
     NoBackend -> do
       warn' "No backend selected - all changes will be erased if the server stops"
-      pure (\_ -> pure (), \_ _ -> pure (), \_ _ -> pure ())
+      pure (\_ -> pure (), \_ _ -> pure (), \_ _ -> pure (), False)
     File FileBackendConfig{fileBackendPath} ->
       mkCheckpointFunctionsAndLoad fileBackendPath cfg s
     Postgres p -> do
-      pure (\_ -> pure (), \_ _ -> pure (), \_ _ -> pure ())
+      pure (\_ -> pure (), \_ _ -> pure (), \_ _ -> pure (), False)
+
+  (adminActor, adminGroup) <-
+    if loadedCheckpoint
+    then do
+      let getAdminGroupAndMember :: TerseM STM (ActorId, GroupId)
+          getAdminGroupAndMember = do
+            gs <- unsafeReadGroupsEager
+            let gs' = flip UnfoldlM.filter gs $ \gId -> do
+                  u <- unsafeReadUniversePermission gId
+                  o <- unsafeReadOrganizationPermission gId
+                  r <- unsafeReadRecruiterPermission gId
+                  pure (u == maxBound && o == maxBound && r == maxBound)
+                getFirst :: Maybe (ActorId, GroupId) -> GroupId -> TerseM STM (Maybe (ActorId, GroupId))
+                getFirst (Just xs) _ = pure (Just xs)
+                getFirst Nothing gId = do
+                  ms <- unsafeReadMembersLazy gId
+                  mAId <- ListT.head ms
+                  case mAId of
+                    Nothing -> pure Nothing
+                    Just aId -> pure (Just (aId, gId))
+            mAdmin <- UnfoldlM.foldlM' getFirst Nothing gs'
+            case mAdmin of
+              Nothing -> errorL' "Admin group and actor not found!"
+              Just xs -> pure xs
+      flip runReaderT s $ commit getAdminGroupAndMember
+    else do
+      (aA, aG) <- uniformM globalStdGen
+      let init :: TerseM STM ()
+          init = loadSyncShared $ emptyShared aA aG
+      runReaderT (commit init) s
+      pure (aA, aG)
+
+  log' . T.pack $ "Admin Actor: " <> show adminActor
+  log' . T.pack $ "Admin Group: " <> show adminGroup
+
 
   (creatingCheckpointVar :: TMVar ()) <- newTMVarIO () -- prevents mutations while checkout is happening
   let createCheckpoint :: IO ()
       createCheckpoint = do
+        log' "Writing checkpoint"
         state <- atomically $ do
           takeTMVar creatingCheckpointVar
           runReaderT genSyncStore s
         storeCheckpoint state
         atomically (putTMVar creatingCheckpointVar ())
+        log' "Checkpoint written"
 
-  (needsCheckpointVar :: TVar Bool) <- newTVarIO False
+  (needsCheckpointVar :: TVar Bool) <- newTVarIO True
 
   void . forkIO $ do
     case checkpointEveryOffset of
@@ -171,10 +204,11 @@ main = withStderrLogging $ do
       Just offset -> threadDelay (1_000_000 * toSeconds offset)
     forever $ do
       threadDelay (1_000_000 * toSeconds (fromJust checkpointEvery)) -- every hour?
-      needsCheckpoint <- atomically (readTVar needsCheckpointVar)
+      needsCheckpoint <- readTVarIO needsCheckpointVar
       when needsCheckpoint $ do
         log' "Writing checkpoint"
         createCheckpoint
+      atomically $ writeTVar needsCheckpointVar False
 
   log' $ "Running on port " <> T.pack (show (port http))
   loggerMiddleware <- mkRequestLogger defaultRequestLoggerSettings
