@@ -31,10 +31,11 @@ import Control.Concurrent.STM (
   putTMVar,
   readTMVar,
   readTVar,
+  readTVarIO,
   takeTMVar,
-  writeTVar, readTVarIO,
+  writeTVar,
  )
-import Control.Logging (log', warn', withStderrLogging, errorL')
+import Control.Logging (errorL', log', warn', withStderrLogging)
 import Control.Monad (forever, void, when)
 import Control.Monad.Catch (Handler (..), MonadThrow, catch, catches)
 import Control.Monad.IO.Class (MonadIO)
@@ -54,6 +55,7 @@ import qualified Data.Text.Lazy as LT
 import qualified Data.Text.Lazy.Encoding as LT
 import Data.Word (Word64)
 import qualified Data.Yaml as Yaml
+import qualified DeferredFolds.UnfoldlM as UnfoldlM
 import Lib.Api (
   Action,
   Authorize (..),
@@ -67,11 +69,23 @@ import Lib.Api (
 import Lib.Async.Types.Monad (TerseM)
 import Lib.Async.Types.Store (newShared)
 import Lib.Async.Types.Store.Iso (genSyncStore)
-import Lib.Class (TerseDB (unsafeReadGroupsEager, unsafeReadMembersLazy, unsafeReadUniversePermission, unsafeReadOrganizationPermission, unsafeReadRecruiterPermission), commit, loadSyncShared, runTerseDB)
+import Lib.Class (
+  TerseDB (
+    unsafeReadGroupsEager,
+    unsafeReadMembersLazy,
+    unsafeReadOrganizationPermission,
+    unsafeReadRecruiterPermission,
+    unsafeReadUniversePermission
+  ),
+  commit,
+  loadSyncShared,
+  runTerseDB,
+ )
 import Lib.Sync.Actions.Safe (emptyShared)
 import qualified Lib.Sync.Types.Store as Sync
 import Lib.Types.Errors (CycleDetected (..), UnauthorizedAction (..))
-import Lib.Types.Id (ActorId, actorIdParser, GroupId)
+import Lib.Types.Id (ActorId, GroupId, actorIdParser)
+import qualified ListT
 import Main.Backends.File (mkCheckpointFunctionsAndLoad)
 import Main.Options (
   CLIOptions (..),
@@ -114,8 +128,6 @@ import Network.Wai.Middleware.RequestLogger (
 import qualified Options.Applicative as OptParse
 import System.Exit (exitSuccess)
 import System.Random.Stateful (globalStdGen, uniformM)
-import qualified DeferredFolds.UnfoldlM as UnfoldlM
-import qualified ListT
 
 main :: IO ()
 main = withStderrLogging $ do
@@ -134,7 +146,7 @@ main = withStderrLogging $ do
   when currentConfig $ do
     BS.putStr (Yaml.encode cfg)
     exitSuccess
-      
+
   s <- atomically newShared
 
   ( storeCheckpoint :: Sync.Store -> IO ()
@@ -152,38 +164,38 @@ main = withStderrLogging $ do
 
   (adminActor, adminGroup) <-
     if loadedCheckpoint
-    then do
-      let getAdminGroupAndMember :: TerseM STM (ActorId, GroupId)
-          getAdminGroupAndMember = do
-            gs <- unsafeReadGroupsEager
-            let gs' = flip UnfoldlM.filter gs $ \gId -> do
-                  u <- unsafeReadUniversePermission gId
-                  o <- unsafeReadOrganizationPermission gId
-                  r <- unsafeReadRecruiterPermission gId
-                  pure (u == maxBound && o == maxBound && r == maxBound)
-                getFirst :: Maybe (ActorId, GroupId) -> GroupId -> TerseM STM (Maybe (ActorId, GroupId))
-                getFirst (Just xs) _ = pure (Just xs)
-                getFirst Nothing gId = do
-                  ms <- unsafeReadMembersLazy gId
-                  mAId <- ListT.head ms
-                  case mAId of
-                    Nothing -> pure Nothing
-                    Just aId -> pure (Just (aId, gId))
-            mAdmin <- UnfoldlM.foldlM' getFirst Nothing gs'
-            case mAdmin of
-              Nothing -> errorL' "Admin group and actor not found!"
-              Just xs -> pure xs
-      flip runReaderT s $ commit getAdminGroupAndMember
-    else do
-      (aA, aG) <- uniformM globalStdGen
-      let init :: TerseM STM ()
-          init = loadSyncShared $ emptyShared aA aG
-      runReaderT (commit init) s
-      pure (aA, aG)
+      then do
+        let getAdminGroupAndMember :: TerseM STM (ActorId, GroupId)
+            getAdminGroupAndMember = do
+              gs <- unsafeReadGroupsEager
+              let gs' = flip UnfoldlM.filter gs $ \gId -> do
+                    u <- unsafeReadUniversePermission gId
+                    o <- unsafeReadOrganizationPermission gId
+                    r <- unsafeReadRecruiterPermission gId
+                    pure (u == maxBound && o == maxBound && r == maxBound)
+                  getFirst
+                    :: Maybe (ActorId, GroupId) -> GroupId -> TerseM STM (Maybe (ActorId, GroupId))
+                  getFirst (Just xs) _ = pure (Just xs)
+                  getFirst Nothing gId = do
+                    ms <- unsafeReadMembersLazy gId
+                    mAId <- ListT.head ms
+                    case mAId of
+                      Nothing -> pure Nothing
+                      Just aId -> pure (Just (aId, gId))
+              mAdmin <- UnfoldlM.foldlM' getFirst Nothing gs'
+              case mAdmin of
+                Nothing -> errorL' "Admin group and actor not found!"
+                Just xs -> pure xs
+        flip runReaderT s $ commit getAdminGroupAndMember
+      else do
+        (aA, aG) <- uniformM globalStdGen
+        let init :: TerseM STM ()
+            init = loadSyncShared $ emptyShared aA aG
+        runReaderT (commit init) s
+        pure (aA, aG)
 
   log' . T.pack $ "Admin Actor: " <> show adminActor
   log' . T.pack $ "Admin Group: " <> show adminGroup
-
 
   (creatingCheckpointVar :: TMVar ()) <- newTMVarIO () -- prevents mutations while checkout is happening
   let createCheckpoint :: IO ()

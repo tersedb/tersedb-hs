@@ -1,9 +1,10 @@
 module Main.Backends.File where
 
 import Control.Applicative ((<|>))
-import Control.Concurrent.STM (STM, newTVarIO, writeTVar, readTVarIO)
+import Control.Concurrent.STM (STM, newTVarIO, readTVarIO, writeTVar)
 import Control.Logging (errorL')
 import Control.Monad (forM_)
+import Control.Monad.Base (MonadBase (liftBase))
 import Control.Monad.Reader (runReaderT)
 import Data.Aeson (FromJSON (..), ToJSON (..), object, withObject, (.:), (.=))
 import qualified Data.Aeson as Aeson
@@ -21,8 +22,13 @@ import Lib.Async.Types.Store.Iso (loadSyncStore)
 import Lib.Class (commit, resetTabulation)
 import qualified Lib.Sync.Types.Store as Sync
 import Lib.Types.Id (ActorId)
-import Main.Options (Configuration (Configuration, purgeCheckpointsOnCheckpoint, purgeDiffsOnCheckpoint))
-import Control.Monad.Base (MonadBase(liftBase))
+import Main.Options (
+  Configuration (
+    Configuration,
+    purgeCheckpointsOnCheckpoint,
+    purgeDiffsOnCheckpoint
+  ),
+ )
 
 data CheckpointOrDiff
   = Checkpoint Sync.Store
@@ -86,20 +92,26 @@ mkCheckpointFunctionsAndLoad fileBackendPath Configuration{purgeDiffsOnCheckpoin
       flip runReaderT s . commit $ forM_ entries load
       let addCheckpoint :: Sync.Store -> IO ()
           addCheckpoint x
-            | purgeCheckpointsOnCheckpoint = LBS.writeFile fileBackendPath $ Aeson.encode (Checkpoint x) <> "\n"
+            | purgeCheckpointsOnCheckpoint =
+                LBS.writeFile fileBackendPath $ Aeson.encode (Checkpoint x) <> "\n"
             | purgeDiffsOnCheckpoint = do
-                eEntries <- mapM (Aeson.eitherDecode . LT.encodeUtf8) . reverse . LT.lines <$> LT.readFile fileBackendPath
+                eEntries <-
+                  mapM (Aeson.eitherDecode . LT.encodeUtf8) . reverse . LT.lines
+                    <$> LT.readFile fileBackendPath
                 case eEntries of
                   Left e -> errorL' $ "Couldn't parse file backend on checkpoint: " <> T.pack e
                   Right entries -> do
                     let everythingTilLastCheckpoint = dropWhile (not . aCheckpoint) entries
-                          where
-                            aCheckpoint x = case x of
-                              Checkpoint _ -> True
-                              _ -> False
+                         where
+                          aCheckpoint x = case x of
+                            Checkpoint _ -> True
+                            _ -> False
                         newEntries = reverse (Checkpoint x : everythingTilLastCheckpoint)
-                    LT.writeFile fileBackendPath (LT.unlines (LT.decodeUtf8 . Aeson.encode <$> newEntries))
-            | otherwise = LBS.appendFile fileBackendPath $ Aeson.encode (Checkpoint x) <> "\n"
+                    LT.writeFile
+                      fileBackendPath
+                      (LT.unlines (LT.decodeUtf8 . Aeson.encode <$> newEntries))
+            | otherwise =
+                LBS.appendFile fileBackendPath $ Aeson.encode (Checkpoint x) <> "\n"
       loadedCheckpoint <- readTVarIO loadedCheckpointVar
       pure
         ( addCheckpoint

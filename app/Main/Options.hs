@@ -16,6 +16,7 @@ import Data.Aeson (
 import qualified Data.Attoparsec.Text as Atto
 import Data.Char (toLower, toUpper)
 import Data.Default (Default (..))
+import Data.Functor (void)
 import Data.Maybe (fromJust, fromMaybe)
 import qualified Data.Text as T
 import Data.Word (Word16, Word32, Word64, Word8)
@@ -48,7 +49,6 @@ import Options.Applicative (
  )
 import qualified Options.Applicative as OptParse
 import Text.Read (readMaybe)
-import Data.Functor (void)
 
 class ToSeconds a where
   toSeconds :: a -> Int
