@@ -110,6 +110,7 @@ import Network.HTTP.Types (
   unauthorized401,
   unsupportedMediaType415,
  )
+import Network.Wai.Middleware.Cors (simpleCors, cors, simpleCorsResourcePolicy, CorsResourcePolicy (corsRequestHeaders))
 import Network.Wai (
   RequestBodyLength (KnownLength),
   ResponseReceived,
@@ -128,6 +129,7 @@ import Network.Wai.Middleware.RequestLogger (
 import qualified Options.Applicative as OptParse
 import System.Exit (exitSuccess)
 import System.Random.Stateful (globalStdGen, uniformM)
+import Debug.Trace (traceShow)
 
 main :: IO ()
 main = withStderrLogging $ do
@@ -224,7 +226,9 @@ main = withStderrLogging $ do
 
   log' $ "Running on port " <> T.pack (show (port http))
   loggerMiddleware <- mkRequestLogger defaultRequestLoggerSettings
-  run (fromIntegral $ port http) . loggerMiddleware $ \req respond ->
+  let corsPolicy _req = Just simpleCorsResourcePolicy
+        { corsRequestHeaders = ["Authorization", "Content-Type"]}
+  run (fromIntegral $ port http) . loggerMiddleware . cors corsPolicy $ \req respond ->
     let headers = requestHeaders req
         route
           :: forall mutMany respMany mutSingle respSingle
@@ -295,12 +299,13 @@ main = withStderrLogging $ do
                         case lookup "Content-Type" headers of
                           Just "application/json" -> case Aeson.eitherDecode body of
                             Left e -> case Aeson.eitherDecode body of
-                              Left e' ->
-                                respond . responseLBS badRequest400 [] . LT.encodeUtf8 $
+                              Left e' -> do
+                                warn' $
                                   "List of Actions Parsing Failure: "
-                                    <> LT.pack e
+                                    <> T.pack e
                                     <> ", Single Action Parsing Failure: "
-                                    <> LT.pack e'
+                                    <> T.pack e'
+                                respond $ responseLBS badRequest400 [] ""
                               Right (action :: Action) -> onAction actors action
                             Right (actions :: [Action]) -> onActions actors actions
                           _ -> respond $ responseLBS unsupportedMediaType415 [] ""

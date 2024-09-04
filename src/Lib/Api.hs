@@ -81,7 +81,7 @@ import Lib.Class (
   unlinkGroups,
   updateFork,
   updateGroupParent,
-  versionExists,
+  versionExists, readRootGroups,
  )
 import Lib.Types.Errors (UnauthorizedAction (UnauthorizedAction))
 import Lib.Types.Id (ActorId, AnyId (..), EntityId, GroupId, SpaceId, VersionId)
@@ -92,6 +92,7 @@ import Lib.Types.Permission (
  )
 import System.Random.Stateful (Uniform (uniformM), globalStdGen)
 import Test.QuickCheck (Arbitrary (arbitrary), oneof)
+import Data.Foldable (for_)
 
 data ReadAction
   = ReadAllActors
@@ -101,6 +102,7 @@ data ReadAction
   | ReadAllMembers GroupId
   | ReadAllMemberOf ActorId
   | ReadMember GroupId ActorId
+  | ReadRootGroups
   | ReadPrevGroup GroupId
   | ReadNextGroups GroupId
   | ReadAllSpaces
@@ -133,6 +135,7 @@ instance Arbitrary ReadAction where
       , ReadAllMembers <$> arbitrary
       , ReadAllMemberOf <$> arbitrary
       , ReadMember <$> arbitrary <*> arbitrary
+      , pure ReadRootGroups
       , ReadPrevGroup <$> arbitrary
       , ReadNextGroups <$> arbitrary
       , pure ReadAllSpaces
@@ -164,6 +167,7 @@ instance ToJSON ReadAction where
     ReadAllMembers gId -> object ["m" .= gId]
     ReadAllMemberOf aId -> object ["m" .= aId]
     ReadMember gId aId -> object ["m" .= object ["g" .= gId, "a" .= aId]]
+    ReadRootGroups -> String "rg"
     ReadPrevGroup gId -> object ["g" .= object ["p" .= gId]]
     ReadNextGroups gId -> object ["g" .= object ["n" .= gId]]
     ReadAllSpaces -> String "s"
@@ -190,6 +194,7 @@ instance FromJSON ReadAction where
     "a" -> pure ReadAllActors
     "g" -> pure ReadAllGroups
     "s" -> pure ReadAllSpaces
+    "rg" -> pure ReadRootGroups
     _ -> typeMismatch "ReadAction" (String t)
   parseJSON json = flip (withObject "ReadAction") json $ \o ->
     (ReadActor <$> o .: "a")
@@ -519,19 +524,9 @@ data ReadResponse
   | DoesNotExist
   | Actors (Vector ActorId)
   | Groups (Vector GroupId)
-  | Members (Vector ActorId)
-  | MemberOf (Vector GroupId)
-  | PrevGroup (Maybe GroupId)
-  | NextGroups (Vector GroupId)
   | Spaces (Vector SpaceId)
   | Entities (Vector EntityId)
   | Versions (Vector VersionId)
-  | References (Vector VersionId)
-  | ReferencesOf (Vector VersionId)
-  | Subscriptions (Vector EntityId)
-  | SubscriptionsOf (Vector VersionId)
-  | ForkOf (Maybe VersionId)
-  | ForkedBy (Vector EntityId)
   | PermissionWithExemption CollectionPermissionWithExemption
   | Permission CollectionPermission
   deriving (Eq, Show, Read)
@@ -542,19 +537,9 @@ instance Arbitrary ReadResponse where
       , pure DoesNotExist
       , Actors <$> arbitrary
       , Groups <$> arbitrary
-      , Members <$> arbitrary
-      , MemberOf <$> arbitrary
-      , PrevGroup <$> arbitrary
-      , NextGroups <$> arbitrary
       , Spaces <$> arbitrary
       , Entities <$> arbitrary
       , Versions <$> arbitrary
-      , References <$> arbitrary
-      , ReferencesOf <$> arbitrary
-      , Subscriptions <$> arbitrary
-      , SubscriptionsOf <$> arbitrary
-      , ForkOf <$> arbitrary
-      , ForkedBy <$> arbitrary
       , PermissionWithExemption <$> arbitrary
       , Permission <$> arbitrary
       ]
@@ -564,19 +549,9 @@ instance ToJSON ReadResponse where
     DoesNotExist -> String "n"
     Actors as -> object ["a" .= as]
     Groups gs -> object ["g" .= gs]
-    Members as -> object ["m" .= as]
-    MemberOf gs -> object ["m" .= gs]
-    PrevGroup mG -> object ["g" .= object ["p" .= mG]]
-    NextGroups gs -> object ["g" .= object ["n" .= gs]]
     Spaces ss -> object ["s" .= ss]
     Entities es -> object ["e" .= es]
     Versions vs -> object ["v" .= vs]
-    References vs -> object ["ref" .= vs]
-    ReferencesOf vs -> object ["refOf" .= vs]
-    Subscriptions es -> object ["sub" .= es]
-    SubscriptionsOf vs -> object ["sub" .= vs]
-    ForkOf mV -> object ["f" .= mV]
-    ForkedBy es -> object ["f" .= es]
     PermissionWithExemption p -> object ["p" .= p]
     Permission p -> object ["p" .= p]
 instance FromJSON ReadResponse where
@@ -590,27 +565,9 @@ instance FromJSON ReadResponse where
       <|> (Spaces <$> o .: "s")
       <|> (Entities <$> o .: "e")
       <|> (Versions <$> o .: "v")
-      <|> (References <$> o .: "ref")
-      <|> (ReferencesOf <$> o .: "refOf")
-      <|> (goG =<< o .: "g")
-      <|> (goM =<< o .: "m")
-      <|> (goSub =<< o .: "sub")
-      <|> (goF =<< o .: "f")
+      <|> (Groups <$> o .: "g")
       <|> (goP =<< o .: "p")
    where
-    goG json =
-      (Groups <$> parseJSON json)
-        <|> ((\o -> PrevGroup <$> o .: "p") =<< parseJSON json)
-        <|> ((\o -> NextGroups <$> o .: "n") =<< parseJSON json)
-    goM json =
-      (Members <$> parseJSON json)
-        <|> (MemberOf <$> parseJSON json)
-    goSub json =
-      (Subscriptions <$> parseJSON json)
-        <|> (SubscriptionsOf <$> parseJSON json)
-    goF json =
-      (ForkOf <$> parseJSON json)
-        <|> (ForkedBy <$> parseJSON json)
     goP json =
       (PermissionWithExemption <$> parseJSON json)
         <|> (Permission <$> parseJSON json)
@@ -702,7 +659,7 @@ actMany
   :: forall m n
    . (TerseDB n m, MonadIO n)
   => Proxy m
-  -> (m ())
+  -> m ()
   -- ^ Conditional action to perform when mutating
   -> (MutableAction -> n ())
   -- ^ Each mutation performed that's authorized
@@ -718,8 +675,7 @@ actMany Proxy beforeMutate onAuthorized actors xs = do
           :: (Action, Maybe AnyId) -> m (Authorize (Maybe Response, Maybe MutableAction))
         go (x, mId) = makeResponse actors x mId
   rs <- commit $ do
-    when (any isMutable xs) $
-      beforeMutate
+    when (any isMutable xs) beforeMutate
     ys
   for rs $ \mAuth -> do
     case mAuth of
@@ -731,7 +687,7 @@ act
   :: forall m n
    . (TerseDB n m, MonadIO n)
   => Proxy m
-  -> (m ())
+  -> m ()
   -> (MutableAction -> n ())
   -> NonEmpty ActorId
   -> Action
@@ -741,8 +697,7 @@ act Proxy beforeMutate onAuthorized actors x = do
   let y :: m (Authorize (Maybe Response, Maybe MutableAction))
       y = makeResponse actors x mId
   mAuth <- commit $ do
-    when (isMutable x) $
-      beforeMutate
+    when (isMutable x) beforeMutate
     y
   case mAuth of
     Authorized (_, Just action') -> onAuthorized action'
@@ -754,7 +709,7 @@ actManyStrict
   :: forall m n
    . (TerseDB n m, MonadIO n, MonadThrow m)
   => Proxy m
-  -> (m ())
+  -> m ()
   -- ^ Conditional action to perform when mutating
   -> ([MutableAction] -> n ())
   -- ^ Mutations performed, in the same order as the actions supplied
@@ -773,8 +728,7 @@ actManyStrict Proxy beforeMutate onAuthorized actors xs = do
             Unauthorized -> throwM UnauthorizedAction
             Authorized y -> pure y
   (rs, as) <- fmap unzip . commit $ do
-    when (any isMutable xs) $
-      beforeMutate
+    when (any isMutable xs) beforeMutate
     ys
   onAuthorized (catMaybes as)
   pure rs
@@ -783,26 +737,23 @@ actStrict
   :: forall m n
    . (TerseDB n m, MonadIO n, MonadThrow m)
   => Proxy m
-  -> (m ())
+  -> m ()
   -> (MutableAction -> n ())
   -> NonEmpty ActorId
   -> Action
   -> n (Maybe Response)
 actStrict Proxy beforeMutate onAuthorized actors x = do
   mId <- genId x
-  let y :: m ((Maybe Response, Maybe MutableAction))
+  let y :: m (Maybe Response, Maybe MutableAction)
       y = do
         mAuth <- makeResponse actors x mId
         case mAuth of
           Unauthorized -> throwM UnauthorizedAction
           Authorized z -> pure z
   (r, mA) <- commit $ do
-    when (isMutable x) $
-      beforeMutate
+    when (isMutable x) beforeMutate
     y
-  case mA of
-    Nothing -> pure ()
-    Just a -> onAuthorized a
+  for_ mA onAuthorized
   pure r
 
 genId :: forall n. (MonadIO n) => Action -> n (Maybe AnyId)
@@ -903,15 +854,17 @@ makeResponse actors action mId = case action of
         ReadGroup gId ->
           fmap boolToExists <$> groupExists actors gId
         ReadAllMembers gId ->
-          traverse (fmap Members . unfoldlMToVector) =<< readMembers actors gId
+          traverse (fmap Actors . unfoldlMToVector) =<< readMembers actors gId
         ReadAllMemberOf aId ->
-          traverse (fmap MemberOf . unfoldlMToVector) =<< readMembersOf actors aId
+          traverse (fmap Groups . unfoldlMToVector) =<< readMembersOf actors aId
         ReadMember gId aId ->
           fmap boolToExists <$> memberExists actors gId aId
+        ReadRootGroups ->
+          Just . Groups <$> (unfoldlMToVector =<< readRootGroups actors)
         ReadPrevGroup gId ->
-          fmap PrevGroup <$> readPrevGroup actors gId
+          fmap (Groups . maybe V.empty V.singleton) <$> readPrevGroup actors gId
         ReadNextGroups gId ->
-          traverse (fmap NextGroups . unfoldlMToVector) =<< readNextGroups actors gId
+          traverse (fmap Groups . unfoldlMToVector) =<< readNextGroups actors gId
         ReadAllSpaces ->
           traverse (fmap Spaces . unfoldlMToVector) =<< readSpaces actors
         ReadSpace sId ->
@@ -925,20 +878,20 @@ makeResponse actors action mId = case action of
         ReadVersion vId ->
           fmap boolToExists <$> versionExists actors vId
         ReadReferences vId ->
-          traverse (fmap References . unfoldlMToVector) =<< readReferences actors vId
+          traverse (fmap Versions . unfoldlMToVector) =<< readReferences actors vId
         ReadReferencesOf vId ->
-          traverse (fmap ReferencesOf . unfoldlMToVector)
+          traverse (fmap Versions . unfoldlMToVector)
             =<< readReferencesFrom actors vId
         ReadSubscriptions vId ->
-          traverse (fmap Subscriptions . unfoldlMToVector)
+          traverse (fmap Entities . unfoldlMToVector)
             =<< readSubscriptions actors vId
         ReadSubscriptionsOf eId ->
-          traverse (fmap SubscriptionsOf . unfoldlMToVector)
+          traverse (fmap Versions . unfoldlMToVector)
             =<< readSubscriptionsFrom actors eId
         ReadForkOf eId ->
-          fmap ForkOf <$> readForkOf actors eId
+          fmap (Versions . maybe V.empty V.singleton) <$> readForkOf actors eId
         ReadForkedBy vId ->
-          traverse (fmap ForkedBy . unfoldlMToVector) =<< readForkedBy actors vId
+          traverse (fmap Entities . unfoldlMToVector) =<< readForkedBy actors vId
         ReadUniversePermission gId ->
           fmap PermissionWithExemption <$> readUniversePermission actors gId
         ReadOrganizationPermission gId ->

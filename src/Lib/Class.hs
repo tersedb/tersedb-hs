@@ -166,6 +166,8 @@ class (Monad m) => TerseDB n m | m -> n where
   unsafeReadEntityPermission :: GroupId -> SpaceId -> m CollectionPermission
   unsafeReadGroupPermission :: GroupId -> GroupId -> m CollectionPermission
   unsafeReadMemberPermission :: GroupId -> GroupId -> m CollectionPermission
+  unsafeReadRootGroupsEager :: m (UnfoldlM m GroupId)
+  unsafeReadRootGroupsLazy :: m (ListT m GroupId)
   unsafeReadPrevGroup :: GroupId -> m (Maybe GroupId)
   unsafeReadNextGroupsEager :: GroupId -> m (UnfoldlM m GroupId)
   unsafeReadNextGroupsLazy :: GroupId -> m (ListT m GroupId)
@@ -292,6 +294,16 @@ instance (MonadThrow m) => TerseDB (Sync.TerseM m) (Sync.TerseM m) where
   unsafeVersionExists vId = do
     s <- get
     pure . isJust $ s ^? Sync.store . Sync.toVersions . ix vId
+  unsafeReadRootGroupsEager = do
+    s <- get
+    let gs =
+          s ^. Sync.store . Sync.toGroups . Sync.roots
+    pure $ UnfoldlM.foldable gs
+  unsafeReadRootGroupsLazy = do
+    s <- get
+    let gs =
+          s ^. Sync.store . Sync.toGroups . Sync.roots
+    pure $ ListT.fromFoldable gs
   unsafeReadPrevGroup gId = do
     s <- get
     pure $ s ^? Sync.store . Sync.toGroups . Sync.nodes . ix gId . Sync.prev . _Just
@@ -450,6 +462,15 @@ instance TerseDB (Async.TerseM IO) (Async.TerseM STM) where
   unsafeVersionExists vId = do
     s <- ask
     liftBase $ Set.lookup vId (s ^. Async.store . Async.toVersions)
+  unsafeReadRootGroupsEager = do
+    s <- ask
+    let x = Set.unfoldlM (s ^. Async.store . Async.toRoots)
+    pure $ UnfoldlM.hoist liftBase (`runReaderT` s) x
+  unsafeReadRootGroupsLazy = do
+    s <- ask
+    let x :: ListT STM GroupId
+        x = Set.listT (s ^. Async.store . Async.toRoots)
+    pure $ hoist liftBase x
   unsafeReadPrevGroup gId = do
     s <- ask
     liftBase $ Map.lookup gId (s ^. Async.store . Async.toGroupsPrev)
@@ -673,6 +694,12 @@ readMemberPermission readers gId gId' = do
   if not canRead
     then pure Nothing
     else Just <$> unsafeReadMemberPermission gId gId'
+
+readRootGroups
+  :: (TerseDB n m) => NonEmpty ActorId -> m (UnfoldlM m GroupId)
+readRootGroups readers = do
+  UnfoldlM.filter (anyCanReadGroup readers)
+    <$> unsafeReadRootGroupsEager
 
 readPrevGroup
   :: (TerseDB n m) => NonEmpty ActorId -> GroupId -> m (Maybe (Maybe GroupId))

@@ -204,6 +204,7 @@ executable tersedb-hs
     , utility-ht
     , vector
     , wai
+    , wai-cors
     , wai-extra
     , warp
     , yaml
