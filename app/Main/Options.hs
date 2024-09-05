@@ -733,6 +733,7 @@ data CLIOptions = CLIOptions
   , currentConfig :: Bool
   , defaultConfig :: Bool
   , cliConfig :: Configuration
+  , verbose :: Bool
   }
 
 cliOptions :: OptParse.Parser CLIOptions
@@ -742,6 +743,7 @@ cliOptions =
     <*> showCurrentConfig
     <*> showDefaultConfig
     <*> configParser
+    <*> verboseParser
  where
   configPath =
     strOption $
@@ -757,6 +759,11 @@ cliOptions =
     switch $
       long "default-config"
         <> help "Print the default configuration to stdout"
+  verboseParser =
+    switch $
+      long "verbose"
+        <> short 'v'
+        <> help "Use verbose logs"
 
 programOptions :: ParserInfo CLIOptions
 programOptions =

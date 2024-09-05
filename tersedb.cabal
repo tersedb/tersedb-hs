@@ -193,6 +193,7 @@ executable tersedb-hs
     , monad-control
     , mtl
     , optparse-applicative
+    , prettyprinter
     , quickcheck-instances
     , random
     , stm

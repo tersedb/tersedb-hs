@@ -104,6 +104,7 @@ executables:
       - http-types
       - logging
       - optparse-applicative
+      - prettyprinter
       - wai
       - wai-cors
       - wai-extra

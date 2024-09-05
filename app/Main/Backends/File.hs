@@ -2,8 +2,8 @@ module Main.Backends.File where
 
 import Control.Applicative ((<|>))
 import Control.Concurrent.STM (STM, newTVarIO, readTVarIO, writeTVar)
-import Control.Logging (errorL')
-import Control.Monad (forM_)
+import Control.Logging (errorL', log')
+import Control.Monad (forM_, when)
 import Control.Monad.Base (MonadBase (liftBase))
 import Control.Monad.Reader (runReaderT)
 import Data.Aeson (FromJSON (..), ToJSON (..), object, withObject, (.:), (.=))
@@ -18,7 +18,8 @@ import qualified Data.Text.Lazy.IO as LT
 import Lib.Api (Authorize (..), MutableAction, mutate)
 import Lib.Async.Types.Monad (TerseM)
 import qualified Lib.Async.Types.Store as Async
-import Lib.Async.Types.Store.Iso (loadSyncStore)
+import Lib.Async.Actions.Tabulation (loadTempFromStore)
+import Lib.Async.Types.Store.Iso (loadSyncStore, genSyncStore)
 import Lib.Class (commit, resetTabulation)
 import qualified Lib.Sync.Types.Store as Sync
 import Lib.Types.Id (ActorId)
@@ -87,7 +88,7 @@ mkCheckpointFunctionsAndLoad fileBackendPath Configuration{purgeDiffsOnCheckpoin
                 Unauthorized -> errorL' $ "Tried to load unauthorized action: " <> T.pack (show y)
             Checkpoint y -> do
               loadSyncStore y
-              resetTabulation
+              loadTempFromStore
               liftBase $ writeTVar loadedCheckpointVar True
       flip runReaderT s . commit $ forM_ entries load
       let addCheckpoint :: Sync.Store -> IO ()

@@ -124,12 +124,14 @@ import Network.Wai (
 import Network.Wai.Handler.Warp (run)
 import Network.Wai.Middleware.RequestLogger (
   defaultRequestLoggerSettings,
-  mkRequestLogger,
+  mkRequestLogger, RequestLoggerSettings (outputFormat), OutputFormat (Detailed, CustomOutputFormatWithDetailsAndHeaders),
  )
 import qualified Options.Applicative as OptParse
 import System.Exit (exitSuccess)
 import System.Random.Stateful (globalStdGen, uniformM)
 import Debug.Trace (traceShow)
+import Prettyprinter (viaShow, vsep, pretty, line, nest, indent)
+import Data.String (IsString (fromString))
 
 main :: IO ()
 main = withStderrLogging $ do
@@ -164,9 +166,16 @@ main = withStderrLogging $ do
     Postgres p -> do
       pure (\_ -> pure (), \_ _ -> pure (), \_ _ -> pure (), False)
 
+  when (verbose && loadedCheckpoint) $ do
+    let go :: TerseM STM Sync.Store
+        go = genSyncStore
+    s' <- runReaderT (commit go) s
+    log' $ "Current Sync.Store: " <> T.pack (show s')
+
   (adminActor, adminGroup) <-
     if loadedCheckpoint
       then do
+        log' "Checkpoint loaded"
         let getAdminGroupAndMember :: TerseM STM (ActorId, GroupId)
             getAdminGroupAndMember = do
               gs <- unsafeReadGroupsEager
@@ -190,6 +199,7 @@ main = withStderrLogging $ do
                 Just xs -> pure xs
         flip runReaderT s $ commit getAdminGroupAndMember
       else do
+        log' "Checkpoint not loaded"
         (aA, aG) <- uniformM globalStdGen
         let init :: TerseM STM ()
             init = loadSyncShared $ emptyShared aA aG
@@ -225,7 +235,28 @@ main = withStderrLogging $ do
       atomically $ writeTVar needsCheckpointVar False
 
   log' $ "Running on port " <> T.pack (show (port http))
-  loggerMiddleware <- mkRequestLogger defaultRequestLoggerSettings
+  loggerMiddleware <- mkRequestLogger $
+    if verbose
+    then defaultRequestLoggerSettings
+            { outputFormat = CustomOutputFormatWithDetailsAndHeaders $ \z req stat mSize dur reqBody resp heads ->
+                fromString . show $ vsep
+                  [ "Timestamp: " <> viaShow z
+                  , "Request: " <> line <> indent 4 (vsep
+                    [ "Method: " <> viaShow (requestMethod req)
+                    , "Headers: " <> line <> indent 4 (vsep $ map (\(k, v) -> viaShow k <> ": " <> viaShow v) $ requestHeaders req)
+                    , "Body: " <> viaShow reqBody
+                    , "Body Size: " <> viaShow mSize
+                    ])
+                  , "Response: " <> line <> indent 4 (vsep
+                    [ "Status: " <> viaShow stat
+                    , "Headers: " <> line <> indent 4 (vsep $ map (\(k, v) -> viaShow k <> ": " <> viaShow v) heads)
+                    , "Body: " <> viaShow resp
+                    ])
+                  , "Duration: " <> viaShow dur
+                  , line
+                  ]
+            }
+    else defaultRequestLoggerSettings
   let corsPolicy _req = Just simpleCorsResourcePolicy
         { corsRequestHeaders = ["Authorization", "Content-Type"]}
   run (fromIntegral $ port http) . loggerMiddleware . cors corsPolicy $ \req respond ->
@@ -289,7 +320,9 @@ main = withStderrLogging $ do
             -> (NonEmpty ActorId -> Action -> IO ResponseReceived)
             -> IO ResponseReceived
           getActions onActions onAction = case getActors =<< lookup "Authorization" headers of
-            Nothing -> respond $ responseLBS unauthorized401 [] ""
+            Nothing -> do
+              warn' "No authorization header"
+              respond $ responseLBS unauthorized401 [] ""
             Just actors ->
               if requestMethod req /= methodPost
                 then respond $ responseLBS methodNotAllowed405 [] ""
@@ -325,7 +358,9 @@ main = withStderrLogging $ do
           ["act"] ->
             let go = route actMany storeSingleDiff act storeSingleDiff $ \mAuth action ->
                   case mAuth of
-                    Unauthorized -> respond $ responseLBS unauthorized401 [] ""
+                    Unauthorized -> do
+                      warn' $ "Actors not authorized for action " <> T.pack (show action)
+                      respond $ responseLBS unauthorized401 [] ""
                     Authorized mResp -> case mResp of
                       Nothing -> respond $ responseLBS noContent204 [] ""
                       Just r ->
