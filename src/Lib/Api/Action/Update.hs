@@ -59,13 +59,13 @@ instance ToJSON UpdateAction where
     MoveEntity eId sId -> object ["mvE" .= object ["e" .= eId, "s" .= sId]]
     OffsetVersion vId offset -> object ["ofV" .= object ["v" .= vId, "o" .= offset]]
     SetVersionIndex vId idx -> object ["stV" .= object ["v" .= vId, "i" .= idx]]
-    SetUniversePermission gId p -> object ["stU" .= object ["g" .= gId, "p" .= p]]
-    SetOrganizationPermission gId p -> object ["stO" .= object ["g" .= gId, "p" .= p]]
-    SetRecruiterPermission gId p -> object ["stR" .= object ["g" .= gId, "p" .= p]]
-    SetSpacePermission gId sId mP -> object ["stS" .= object ["g" .= gId, "s" .= sId, "p" .= mP]]
-    SetEntityPermission gId sId p -> object ["stE" .= object ["g" .= gId, "s" .= sId, "p" .= p]]
-    SetGroupPermission gId gId' mP -> object ["stG" .= object ["g" .= gId, "s" .= gId', "p" .= mP]]
-    SetMemberPermission gId gId' p -> object ["stM" .= object ["g" .= gId, "s" .= gId', "p" .= p]]
+    SetUniversePermission gId p -> object ["p" .= object ["u" .= object ["g" .= gId, "p" .= p]]]
+    SetOrganizationPermission gId p -> object ["p" .= object ["o" .= object ["g" .= gId, "p" .= p]]]
+    SetRecruiterPermission gId p -> object ["p" .= object ["r" .= object ["g" .= gId, "p" .= p]]]
+    SetSpacePermission gId sId mP -> object ["p" .= object ["s" .= object ["g" .= gId, "s" .= sId, "p" .= mP]]]
+    SetEntityPermission gId sId p -> object ["p" .= object ["e" .= object ["g" .= gId, "s" .= sId, "p" .= p]]]
+    SetGroupPermission gId gId' mP -> object ["p" .= object ["g" .= object ["g" .= gId, "s" .= gId', "p" .= mP]]]
+    SetMemberPermission gId gId' p -> object ["p" .= object ["m" .= object ["g" .= gId, "s" .= gId', "p" .= p]]]
     LinkGroups gId gId' -> object ["lkG" .= object ["f" .= gId, "t" .= gId']]
     UnlinkGroups gId gId' -> object ["unG" .= object ["f" .= gId, "t" .= gId']]
     UpdateGroupPrev gId mPrev -> object ["pvG" .= object ["g" .= gId, "p" .= mPrev]]
@@ -79,19 +79,22 @@ instance FromJSON UpdateAction where
       <|> ((\o -> MoveEntity <$> o .: "e" <*> o .: "s") =<< o .: "mvE")
       <|> ((\o -> OffsetVersion <$> o .: "v" <*> o .: "o") =<< o .: "ofV")
       <|> ((\o -> SetVersionIndex <$> o .: "v" <*> o .: "i") =<< o .: "stV")
-      <|> ((\o -> SetUniversePermission <$> o .: "g" <*> o .: "p") =<< o .: "stU")
-      <|> ((\o -> SetOrganizationPermission <$> o .: "g" <*> o .: "p") =<< o .: "stO")
-      <|> ((\o -> SetRecruiterPermission <$> o .: "g" <*> o .: "p") =<< o .: "stR")
-      <|> ( (\o -> SetSpacePermission <$> o .: "g" <*> o .: "s" <*> o .: "p") =<< o .: "stS"
-          )
-      <|> ( (\o -> SetEntityPermission <$> o .: "g" <*> o .: "s" <*> o .: "p")
-              =<< o .: "stE"
-          )
-      <|> ( (\o -> SetGroupPermission <$> o .: "g" <*> o .: "s" <*> o .: "p") =<< o .: "stG"
-          )
-      <|> ( (\o -> SetMemberPermission <$> o .: "g" <*> o .: "s" <*> o .: "p")
-              =<< o .: "stM"
-          )
       <|> ((\o -> LinkGroups <$> o .: "f" <*> o .: "t") =<< o .: "lkG")
       <|> ((\o -> UnlinkGroups <$> o .: "f" <*> o .: "t") =<< o .: "unG")
       <|> ((\o -> UpdateGroupPrev <$> o .: "g" <*> o .: "p") =<< o .: "pvG")
+      <|> (goP =<< o .: "p")
+    where
+      goP o =
+        ((\o -> SetUniversePermission <$> o .: "g" <*> o .: "p") =<< o .: "u")
+          <|> ((\o -> SetOrganizationPermission <$> o .: "g" <*> o .: "p") =<< o .: "o")
+          <|> ((\o -> SetRecruiterPermission <$> o .: "g" <*> o .: "p") =<< o .: "r")
+          <|> ( (\o -> SetSpacePermission <$> o .: "g" <*> o .: "s" <*> o .: "p") =<< o .: "s"
+              )
+          <|> ( (\o -> SetEntityPermission <$> o .: "g" <*> o .: "s" <*> o .: "p")
+                  =<< o .: "e"
+              )
+          <|> ( (\o -> SetGroupPermission <$> o .: "g" <*> o .: "s" <*> o .: "p") =<< o .: "g"
+              )
+          <|> ( (\o -> SetMemberPermission <$> o .: "g" <*> o .: "s" <*> o .: "p")
+                  =<< o .: "m"
+              )
