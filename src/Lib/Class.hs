@@ -9,6 +9,8 @@ import Control.Monad.IO.Class (MonadIO)
 import Control.Monad.Morph (hoist)
 import Control.Monad.Reader (MonadReader (ask), ReaderT (runReaderT))
 import Control.Monad.State (evalStateT, get, put)
+import Control.Monad.Trans.Control (liftBaseWith)
+import qualified Data.HashMap.Strict as HM
 import Data.List.NonEmpty (NonEmpty)
 import qualified Data.List.NonEmpty as NE
 import Data.Maybe (fromMaybe, isJust)
@@ -162,10 +164,37 @@ class (Monad m) => TerseDB n m | m -> n where
   unsafeReadOrganizationPermission
     :: GroupId -> m CollectionPermissionWithExemption
   unsafeReadRecruiterPermission :: GroupId -> m CollectionPermission
-  unsafeReadSpacePermission :: GroupId -> SpaceId -> m CollectionPermission
-  unsafeReadEntityPermission :: GroupId -> SpaceId -> m CollectionPermission
-  unsafeReadGroupPermission :: GroupId -> GroupId -> m CollectionPermission
-  unsafeReadMemberPermission :: GroupId -> GroupId -> m CollectionPermission
+  unsafeReadSpacePermission :: GroupId -> SpaceId -> m (Maybe SinglePermission)
+  unsafeReadEntityPermission
+    :: GroupId -> SpaceId -> m (Maybe CollectionPermission)
+  unsafeReadGroupPermission :: GroupId -> GroupId -> m (Maybe SinglePermission)
+  unsafeReadMemberPermission
+    :: GroupId -> GroupId -> m (Maybe CollectionPermission)
+  unsafeReadTabUniversePermission
+    :: GroupId -> m CollectionPermissionWithExemption
+  unsafeReadTabOrganizationPermission
+    :: GroupId -> m CollectionPermissionWithExemption
+  unsafeReadTabRecruiterPermission :: GroupId -> m CollectionPermission
+  unsafeReadTabSpacePermission :: GroupId -> SpaceId -> m CollectionPermission
+  unsafeReadTabEntityPermission :: GroupId -> SpaceId -> m CollectionPermission
+  unsafeReadTabGroupPermission :: GroupId -> GroupId -> m CollectionPermission
+  unsafeReadTabMemberPermission :: GroupId -> GroupId -> m CollectionPermission
+  unsafeReadAllSpacePermissionEager
+    :: GroupId -> m (UnfoldlM m (SpaceId, SinglePermission))
+  unsafeReadAllSpacePermissionLazy
+    :: GroupId -> m (ListT m (SpaceId, SinglePermission))
+  unsafeReadAllEntityPermissionEager
+    :: GroupId -> m (UnfoldlM m (SpaceId, CollectionPermission))
+  unsafeReadAllEntityPermissionLazy
+    :: GroupId -> m (ListT m (SpaceId, CollectionPermission))
+  unsafeReadAllGroupPermissionEager
+    :: GroupId -> m (UnfoldlM m (GroupId, SinglePermission))
+  unsafeReadAllGroupPermissionLazy
+    :: GroupId -> m (ListT m (GroupId, SinglePermission))
+  unsafeReadAllMemberPermissionEager
+    :: GroupId -> m (UnfoldlM m (GroupId, CollectionPermission))
+  unsafeReadAllMemberPermissionLazy
+    :: GroupId -> m (ListT m (GroupId, CollectionPermission))
   unsafeReadRootGroupsEager :: m (UnfoldlM m GroupId)
   unsafeReadRootGroupsLazy :: m (ListT m GroupId)
   unsafeReadPrevGroup :: GroupId -> m (Maybe GroupId)
@@ -322,31 +351,88 @@ instance (MonadThrow m) => TerseDB (Sync.TerseM m) (Sync.TerseM m) where
   unsafeReadUniversePermission gId = do
     s <- get
     pure . fromMaybe minBound $
-      s ^? Sync.temp . Sync.toTabulatedGroups . ix gId . Sync.forUniverse
+      s ^? Sync.store . Sync.toGroups . Sync.nodes . ix gId . Sync.universePermission
   unsafeReadOrganizationPermission gId = do
     s <- get
     pure . fromMaybe minBound $
-      s ^? Sync.temp . Sync.toTabulatedGroups . ix gId . Sync.forOrganization
+      s
+        ^? Sync.store . Sync.toGroups . Sync.nodes . ix gId . Sync.organizationPermission
   unsafeReadRecruiterPermission gId = do
     s <- get
     pure . fromMaybe minBound $
-      s ^? Sync.temp . Sync.toTabulatedGroups . ix gId . Sync.forRecruiter
+      s ^? Sync.store . Sync.toGroups . Sync.nodes . ix gId . Sync.recruiterPermission
   unsafeReadSpacePermission gId sId = do
+    s <- get
+    pure $ s ^? Sync.store . Sync.toSpacePermissions . ix gId . ix sId
+  unsafeReadEntityPermission gId sId = do
+    s <- get
+    pure $ s ^? Sync.store . Sync.toEntityPermissions . ix gId . ix sId
+  unsafeReadGroupPermission gId gId' = do
+    s <- get
+    pure $ s ^? Sync.store . Sync.toGroupPermissions . ix gId . ix gId'
+  unsafeReadMemberPermission gId gId' = do
+    s <- get
+    pure $ s ^? Sync.store . Sync.toMemberPermissions . ix gId . ix gId'
+  unsafeReadTabUniversePermission gId = do
+    s <- get
+    pure . fromMaybe minBound $
+      s ^? Sync.temp . Sync.toTabulatedGroups . ix gId . Sync.forUniverse
+  unsafeReadTabOrganizationPermission gId = do
+    s <- get
+    pure . fromMaybe minBound $
+      s ^? Sync.temp . Sync.toTabulatedGroups . ix gId . Sync.forOrganization
+  unsafeReadTabRecruiterPermission gId = do
+    s <- get
+    pure . fromMaybe minBound $
+      s ^? Sync.temp . Sync.toTabulatedGroups . ix gId . Sync.forRecruiter
+  unsafeReadTabSpacePermission gId sId = do
     s <- get
     pure . fromMaybe minBound $
       s ^? Sync.temp . Sync.toTabulatedGroups . ix gId . Sync.forSpaces . ix sId
-  unsafeReadEntityPermission gId sId = do
+  unsafeReadTabEntityPermission gId sId = do
     s <- get
     pure . fromMaybe minBound $
       s ^? Sync.temp . Sync.toTabulatedGroups . ix gId . Sync.forEntities . ix sId
-  unsafeReadGroupPermission gId gId' = do
+  unsafeReadTabGroupPermission gId gId' = do
     s <- get
     pure . fromMaybe minBound $
       s ^? Sync.temp . Sync.toTabulatedGroups . ix gId . Sync.forGroups . ix gId'
-  unsafeReadMemberPermission gId gId' = do
+  unsafeReadTabMemberPermission gId gId' = do
     s <- get
     pure . fromMaybe minBound $
       s ^? Sync.temp . Sync.toTabulatedGroups . ix gId . Sync.forMembers . ix gId'
+  unsafeReadAllSpacePermissionEager gId = do
+    s <- get
+    pure . UnfoldlM.foldable . maybe [] HM.toList $
+      s ^? Sync.store . Sync.toSpacePermissions . ix gId
+  unsafeReadAllSpacePermissionLazy gId = do
+    s <- get
+    pure . ListT.fromFoldable . maybe [] HM.toList $
+      s ^? Sync.store . Sync.toSpacePermissions . ix gId
+  unsafeReadAllEntityPermissionEager gId = do
+    s <- get
+    pure . UnfoldlM.foldable . maybe [] HM.toList $
+      s ^? Sync.store . Sync.toEntityPermissions . ix gId
+  unsafeReadAllEntityPermissionLazy gId = do
+    s <- get
+    pure . ListT.fromFoldable . maybe [] HM.toList $
+      s ^? Sync.store . Sync.toEntityPermissions . ix gId
+  unsafeReadAllGroupPermissionEager gId = do
+    s <- get
+    pure . UnfoldlM.foldable . maybe [] HM.toList $
+      s ^? Sync.store . Sync.toGroupPermissions . ix gId
+  unsafeReadAllGroupPermissionLazy gId = do
+    s <- get
+    pure . ListT.fromFoldable . maybe [] HM.toList $
+      s ^? Sync.store . Sync.toGroupPermissions . ix gId
+  unsafeReadAllMemberPermissionEager gId = do
+    s <- get
+    pure . UnfoldlM.foldable . maybe [] HM.toList $
+      s ^? Sync.store . Sync.toMemberPermissions . ix gId
+  unsafeReadAllMemberPermissionLazy gId = do
+    s <- get
+    pure . ListT.fromFoldable . maybe [] HM.toList $
+      s ^? Sync.store . Sync.toMemberPermissions . ix gId
   unsafeReadReferencesEager = Sync.unsafeReadReferencesEager
   unsafeReadReferencesLazy = Sync.unsafeReadReferencesLazy
   unsafeReadReferencesFromEager = Sync.unsafeReadReferencesFromEager
@@ -476,50 +562,172 @@ instance TerseDB (Async.TerseM IO) (Async.TerseM STM) where
     liftBase $ Map.lookup gId (s ^. Async.store . Async.toGroupsPrev)
   unsafeReadUniversePermission gId = do
     s <- ask
+    liftBase
+      . fmap (fromMaybe minBound)
+      . Map.lookup gId
+      $ s ^. Async.store . Async.toPermUniverse
+  unsafeReadOrganizationPermission gId = do
+    s <- ask
+    liftBase
+      . fmap (fromMaybe minBound)
+      . Map.lookup gId
+      $ s ^. Async.store . Async.toPermOrganization
+  unsafeReadRecruiterPermission gId = do
+    s <- ask
+    liftBase
+      . fmap (fromMaybe minBound)
+      . Map.lookup gId
+      $ s ^. Async.store . Async.toPermRecruiter
+  unsafeReadSpacePermission gId sId = do
+    s <- ask
+    liftBase $ do
+      mPerm <- Map.lookup gId $ s ^. Async.store . Async.toPermOther
+      case mPerm of
+        Nothing -> pure Nothing
+        Just perm -> Map.lookup sId $ perm ^. Async.spacePermission
+  unsafeReadEntityPermission gId sId = do
+    s <- ask
+    liftBase $ do
+      mPerm <- Map.lookup gId $ s ^. Async.store . Async.toPermOther
+      case mPerm of
+        Nothing -> pure Nothing
+        Just perm -> Map.lookup sId $ perm ^. Async.entityPermission
+  unsafeReadGroupPermission gId gId' = do
+    s <- ask
+    liftBase $ do
+      mPerm <- Map.lookup gId $ s ^. Async.store . Async.toPermOther
+      case mPerm of
+        Nothing -> pure Nothing
+        Just perm -> Map.lookup gId' $ perm ^. Async.groupPermission
+  unsafeReadMemberPermission gId gId' = do
+    s <- ask
+    liftBase $ do
+      mPerm <- Map.lookup gId $ s ^. Async.store . Async.toPermOther
+      case mPerm of
+        Nothing -> pure Nothing
+        Just perm -> Map.lookup gId' $ perm ^. Async.memberPermission
+  unsafeReadTabUniversePermission gId = do
+    s <- ask
     liftBase $
       fmap (fromMaybe minBound) $
         Map.lookup gId $
           s ^. Async.temp . Async.toTabUniverse
-  unsafeReadOrganizationPermission gId = do
+  unsafeReadTabOrganizationPermission gId = do
     s <- ask
     liftBase $
       fmap (fromMaybe minBound) $
         Map.lookup gId $
           s ^. Async.temp . Async.toTabOrganization
-  unsafeReadRecruiterPermission gId = do
+  unsafeReadTabRecruiterPermission gId = do
     s <- ask
     liftBase $
       fmap (fromMaybe minBound) $
         Map.lookup gId $
           s ^. Async.temp . Async.toTabRecruiter
-  unsafeReadSpacePermission gId sId = do
+  unsafeReadTabSpacePermission gId sId = do
     s <- ask
     liftBase $ fmap (fromMaybe minBound) $ do
       mTab <- Map.lookup gId $ s ^. Async.temp . Async.toTabOther
       case mTab of
         Nothing -> pure Nothing
         Just tab -> Map.lookup sId $ tab ^. Async.forSpaces
-  unsafeReadEntityPermission gId sId = do
+  unsafeReadTabEntityPermission gId sId = do
     s <- ask
     liftBase $ fmap (fromMaybe minBound) $ do
       mTab <- Map.lookup gId $ s ^. Async.temp . Async.toTabOther
       case mTab of
         Nothing -> pure Nothing
         Just tab -> Map.lookup sId $ tab ^. Async.forEntities
-  unsafeReadGroupPermission gId gId' = do
+  unsafeReadTabGroupPermission gId gId' = do
     s <- ask
     liftBase $ fmap (fromMaybe minBound) $ do
       mTab <- Map.lookup gId $ s ^. Async.temp . Async.toTabOther
       case mTab of
         Nothing -> pure Nothing
         Just tab -> Map.lookup gId' $ tab ^. Async.forGroups
-  unsafeReadMemberPermission gId gId' = do
+  unsafeReadTabMemberPermission gId gId' = do
     s <- ask
     liftBase $ fmap (fromMaybe minBound) $ do
       mTab <- Map.lookup gId $ s ^. Async.temp . Async.toTabOther
       case mTab of
         Nothing -> pure Nothing
         Just tab -> Map.lookup gId' $ tab ^. Async.forMembers
+  unsafeReadAllSpacePermissionEager gId = do
+    s <- ask
+    liftBaseWith $ \runInBase -> do
+      mPerm <- Map.lookup gId $ s ^. Async.store . Async.toPermOther
+      case mPerm of
+        Nothing -> pure (UnfoldlM.foldable [])
+        Just perm ->
+          pure
+            . UnfoldlM.hoist liftBase runInBase
+            . Map.unfoldlM
+            $ perm ^. Async.spacePermission
+  unsafeReadAllSpacePermissionLazy gId = do
+    s <- ask
+    liftBase $ do
+      mPerm <- Map.lookup gId $ s ^. Async.store . Async.toPermOther
+      case mPerm of
+        Nothing -> pure (ListT.fromFoldable [])
+        Just perm ->
+          pure . hoist liftBase . Map.listT $ perm ^. Async.spacePermission
+  unsafeReadAllEntityPermissionEager gId = do
+    s <- ask
+    liftBaseWith $ \runInBase -> do
+      mPerm <- Map.lookup gId $ s ^. Async.store . Async.toPermOther
+      case mPerm of
+        Nothing -> pure (UnfoldlM.foldable [])
+        Just perm ->
+          pure
+            . UnfoldlM.hoist liftBase runInBase
+            . Map.unfoldlM
+            $ perm ^. Async.entityPermission
+  unsafeReadAllEntityPermissionLazy gId = do
+    s <- ask
+    liftBase $ do
+      mPerm <- Map.lookup gId $ s ^. Async.store . Async.toPermOther
+      case mPerm of
+        Nothing -> pure (ListT.fromFoldable [])
+        Just perm ->
+          pure . hoist liftBase . Map.listT $ perm ^. Async.entityPermission
+  unsafeReadAllGroupPermissionEager gId = do
+    s <- ask
+    liftBaseWith $ \runInBase -> do
+      mPerm <- Map.lookup gId $ s ^. Async.store . Async.toPermOther
+      case mPerm of
+        Nothing -> pure (UnfoldlM.foldable [])
+        Just perm ->
+          pure
+            . UnfoldlM.hoist liftBase runInBase
+            . Map.unfoldlM
+            $ perm ^. Async.groupPermission
+  unsafeReadAllGroupPermissionLazy gId = do
+    s <- ask
+    liftBase $ do
+      mPerm <- Map.lookup gId $ s ^. Async.store . Async.toPermOther
+      case mPerm of
+        Nothing -> pure (ListT.fromFoldable [])
+        Just perm ->
+          pure . hoist liftBase . Map.listT $ perm ^. Async.groupPermission
+  unsafeReadAllMemberPermissionEager gId = do
+    s <- ask
+    liftBaseWith $ \runInBase -> do
+      mPerm <- Map.lookup gId $ s ^. Async.store . Async.toPermOther
+      case mPerm of
+        Nothing -> pure (UnfoldlM.foldable [])
+        Just perm ->
+          pure
+            . UnfoldlM.hoist liftBase runInBase
+            . Map.unfoldlM
+            $ perm ^. Async.memberPermission
+  unsafeReadAllMemberPermissionLazy gId = do
+    s <- ask
+    liftBase $ do
+      mPerm <- Map.lookup gId $ s ^. Async.store . Async.toPermOther
+      case mPerm of
+        Nothing -> pure (ListT.fromFoldable [])
+        Just perm ->
+          pure . hoist liftBase . Map.listT $ perm ^. Async.memberPermission
   unsafeReadNextGroupsEager = Async.unsafeReadNextGroupsEager
   unsafeReadNextGroupsLazy = Async.unsafeReadNextGroupsLazy
   unsafeReadReferencesEager = Async.unsafeReadReferencesEager
@@ -657,7 +865,7 @@ readSpacePermission
   => NonEmpty ActorId
   -> GroupId
   -> SpaceId
-  -> m (Maybe CollectionPermission)
+  -> m (Maybe (Maybe SinglePermission))
 readSpacePermission readers gId sId = do
   canRead <- anyCanReadGroup readers gId
   if not canRead then pure Nothing else Just <$> unsafeReadSpacePermission gId sId
@@ -666,7 +874,7 @@ readEntityPermission
   => NonEmpty ActorId
   -> GroupId
   -> SpaceId
-  -> m (Maybe CollectionPermission)
+  -> m (Maybe (Maybe CollectionPermission))
 readEntityPermission readers gId sId = do
   canRead <- anyCanReadGroup readers gId
   if not canRead
@@ -677,7 +885,7 @@ readGroupPermission
   => NonEmpty ActorId
   -> GroupId
   -> GroupId
-  -> m (Maybe CollectionPermission)
+  -> m (Maybe (Maybe SinglePermission))
 readGroupPermission readers gId gId' = do
   canRead <- anyCanReadGroup readers gId
   if not canRead
@@ -688,12 +896,125 @@ readMemberPermission
   => NonEmpty ActorId
   -> GroupId
   -> GroupId
-  -> m (Maybe CollectionPermission)
+  -> m (Maybe (Maybe CollectionPermission))
 readMemberPermission readers gId gId' = do
   canRead <- anyCanReadGroup readers gId
   if not canRead
     then pure Nothing
     else Just <$> unsafeReadMemberPermission gId gId'
+
+readTabUniversePermission
+  :: (TerseDB n m)
+  => NonEmpty ActorId
+  -> GroupId
+  -> m (Maybe CollectionPermissionWithExemption)
+readTabUniversePermission readers gId = do
+  canRead <- anyCanReadGroup readers gId
+  if not canRead
+    then pure Nothing
+    else Just <$> unsafeReadTabUniversePermission gId
+readTabOrganizationPermission
+  :: (TerseDB n m)
+  => NonEmpty ActorId
+  -> GroupId
+  -> m (Maybe CollectionPermissionWithExemption)
+readTabOrganizationPermission readers gId = do
+  canRead <- anyCanReadGroup readers gId
+  if not canRead
+    then pure Nothing
+    else Just <$> unsafeReadTabOrganizationPermission gId
+readTabRecruiterPermission
+  :: (TerseDB n m) => NonEmpty ActorId -> GroupId -> m (Maybe CollectionPermission)
+readTabRecruiterPermission readers gId = do
+  canRead <- anyCanReadGroup readers gId
+  if not canRead
+    then pure Nothing
+    else Just <$> unsafeReadTabRecruiterPermission gId
+readTabSpacePermission
+  :: (TerseDB n m)
+  => NonEmpty ActorId
+  -> GroupId
+  -> SpaceId
+  -> m (Maybe CollectionPermission)
+readTabSpacePermission readers gId sId = do
+  canRead <- anyCanReadGroup readers gId
+  if not canRead
+    then pure Nothing
+    else Just <$> unsafeReadTabSpacePermission gId sId
+readTabEntityPermission
+  :: (TerseDB n m)
+  => NonEmpty ActorId
+  -> GroupId
+  -> SpaceId
+  -> m (Maybe CollectionPermission)
+readTabEntityPermission readers gId sId = do
+  canRead <- anyCanReadGroup readers gId
+  if not canRead
+    then pure Nothing
+    else Just <$> unsafeReadTabEntityPermission gId sId
+readTabGroupPermission
+  :: (TerseDB n m)
+  => NonEmpty ActorId
+  -> GroupId
+  -> GroupId
+  -> m (Maybe CollectionPermission)
+readTabGroupPermission readers gId gId' = do
+  canRead <- anyCanReadGroup readers gId
+  if not canRead
+    then pure Nothing
+    else Just <$> unsafeReadTabGroupPermission gId gId'
+readTabMemberPermission
+  :: (TerseDB n m)
+  => NonEmpty ActorId
+  -> GroupId
+  -> GroupId
+  -> m (Maybe CollectionPermission)
+readTabMemberPermission readers gId gId' = do
+  canRead <- anyCanReadGroup readers gId
+  if not canRead
+    then pure Nothing
+    else Just <$> unsafeReadTabMemberPermission gId gId'
+
+readAllSpacePermission
+  :: (TerseDB n m)
+  => NonEmpty ActorId
+  -> GroupId
+  -> m (Maybe (UnfoldlM m (SpaceId, SinglePermission)))
+readAllSpacePermission readers gId = do
+  canRead <- anyCanReadGroup readers gId
+  if not canRead
+    then pure Nothing
+    else Just <$> unsafeReadAllSpacePermissionEager gId
+readAllEntityPermission
+  :: (TerseDB n m)
+  => NonEmpty ActorId
+  -> GroupId
+  -> m (Maybe (UnfoldlM m (SpaceId, CollectionPermission)))
+readAllEntityPermission readers gId = do
+  canRead <- anyCanReadGroup readers gId
+  if not canRead
+    then pure Nothing
+    else Just <$> unsafeReadAllEntityPermissionEager gId
+readAllGroupPermission
+  :: (TerseDB n m)
+  => NonEmpty ActorId
+  -> GroupId
+  -> m (Maybe (UnfoldlM m (GroupId, SinglePermission)))
+readAllGroupPermission readers gId = do
+  canRead <- anyCanReadGroup readers gId
+  if not canRead
+    then pure Nothing
+    else Just <$> unsafeReadAllGroupPermissionEager gId
+readAllMemberPermission
+  :: (TerseDB n m)
+  => NonEmpty ActorId
+  -> GroupId
+  -> m (Maybe (UnfoldlM m (GroupId, CollectionPermission)))
+readAllMemberPermission readers gId = do
+  canRead <- anyCanReadGroup readers gId
+  if not canRead
+    then pure Nothing
+    else Just <$> unsafeReadAllMemberPermissionEager gId
 
 readRootGroups
   :: (TerseDB n m) => NonEmpty ActorId -> m (UnfoldlM m GroupId)

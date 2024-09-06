@@ -122,6 +122,6 @@ tests:
     dependencies:
       - tersedb
       - pretty-simple
-      - sydtest
+      - sydtest >= 0.17
       - topograph
       - QuickCheck

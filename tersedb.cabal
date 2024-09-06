@@ -29,6 +29,15 @@ library
   exposed-modules:
       Lib.Actions.Safe.Utils
       Lib.Api
+      Lib.Api.Action
+      Lib.Api.Action.Create
+      Lib.Api.Action.Delete
+      Lib.Api.Action.Read
+      Lib.Api.Action.Store
+      Lib.Api.Action.Update
+      Lib.Api.Response
+      Lib.Api.Response.Create
+      Lib.Api.Response.Read
       Lib.Async.Actions.Safe.Store
       Lib.Async.Actions.Safe.Verify
       Lib.Async.Actions.Safe.Verify.Actor
@@ -284,7 +293,7 @@ test-suite tersedb-test
     , random
     , stm
     , stm-containers
-    , sydtest
+    , sydtest >=0.17
     , tersedb
     , text
     , topograph

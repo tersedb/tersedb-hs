@@ -49,23 +49,23 @@ import Data.Default (Default (def))
 import Data.List.NonEmpty (NonEmpty)
 import qualified Data.List.NonEmpty as NE
 import Data.Maybe (fromJust)
+import Data.String (IsString (fromString))
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.Text.Lazy as LT
 import qualified Data.Text.Lazy.Encoding as LT
 import Data.Word (Word64)
 import qualified Data.Yaml as Yaml
+import Debug.Trace (traceShow)
 import qualified DeferredFolds.UnfoldlM as UnfoldlM
 import Lib.Api (
-  Action,
-  Authorize (..),
-  MutableAction,
   act,
   actMany,
   actManyStrict,
   actStrict,
-  isCreate,
  )
+import Lib.Api.Action (Action, MutableAction, isCreate)
+import Lib.Api.Response (Authorize (..))
 import Lib.Async.Types.Monad (TerseM)
 import Lib.Async.Types.Store (newShared)
 import Lib.Async.Types.Store.Iso (genSyncStore)
@@ -110,7 +110,6 @@ import Network.HTTP.Types (
   unauthorized401,
   unsupportedMediaType415,
  )
-import Network.Wai.Middleware.Cors (simpleCors, cors, simpleCorsResourcePolicy, CorsResourcePolicy (corsRequestHeaders))
 import Network.Wai (
   RequestBodyLength (KnownLength),
   ResponseReceived,
@@ -122,16 +121,22 @@ import Network.Wai (
   responseLBS,
  )
 import Network.Wai.Handler.Warp (run)
+import Network.Wai.Middleware.Cors (
+  CorsResourcePolicy (corsRequestHeaders),
+  cors,
+  simpleCors,
+  simpleCorsResourcePolicy,
+ )
 import Network.Wai.Middleware.RequestLogger (
+  OutputFormat (CustomOutputFormatWithDetailsAndHeaders, Detailed),
+  RequestLoggerSettings (outputFormat),
   defaultRequestLoggerSettings,
-  mkRequestLogger, RequestLoggerSettings (outputFormat), OutputFormat (Detailed, CustomOutputFormatWithDetailsAndHeaders),
+  mkRequestLogger,
  )
 import qualified Options.Applicative as OptParse
+import Prettyprinter (indent, line, nest, pretty, viaShow, vsep)
 import System.Exit (exitSuccess)
 import System.Random.Stateful (globalStdGen, uniformM)
-import Debug.Trace (traceShow)
-import Prettyprinter (viaShow, vsep, pretty, line, nest, indent)
-import Data.String (IsString (fromString))
 
 main :: IO ()
 main = withStderrLogging $ do
@@ -235,30 +240,52 @@ main = withStderrLogging $ do
       atomically $ writeTVar needsCheckpointVar False
 
   log' $ "Running on port " <> T.pack (show (port http))
-  loggerMiddleware <- mkRequestLogger $
-    if verbose
-    then defaultRequestLoggerSettings
+  loggerMiddleware <-
+    mkRequestLogger $
+      if verbose
+        then
+          defaultRequestLoggerSettings
             { outputFormat = CustomOutputFormatWithDetailsAndHeaders $ \z req stat mSize dur reqBody resp heads ->
-                fromString . show $ vsep
-                  [ "Timestamp: " <> viaShow z
-                  , "Request: " <> line <> indent 4 (vsep
-                    [ "Method: " <> viaShow (requestMethod req)
-                    , "Headers: " <> line <> indent 4 (vsep $ map (\(k, v) -> viaShow k <> ": " <> viaShow v) $ requestHeaders req)
-                    , "Body: " <> viaShow reqBody
-                    , "Body Size: " <> viaShow mSize
-                    ])
-                  , "Response: " <> line <> indent 4 (vsep
-                    [ "Status: " <> viaShow stat
-                    , "Headers: " <> line <> indent 4 (vsep $ map (\(k, v) -> viaShow k <> ": " <> viaShow v) heads)
-                    , "Body: " <> viaShow resp
-                    ])
-                  , "Duration: " <> viaShow dur
-                  , line
-                  ]
+                fromString . show $
+                  vsep
+                    [ "Timestamp: " <> viaShow z
+                    , "Request: "
+                        <> line
+                        <> indent
+                          4
+                          ( vsep
+                              [ "Method: " <> viaShow (requestMethod req)
+                              , "Headers: "
+                                  <> line
+                                  <> indent
+                                    4
+                                    (vsep $ map (\(k, v) -> viaShow k <> ": " <> viaShow v) $ requestHeaders req)
+                              , "Body: " <> viaShow reqBody
+                              , "Body Size: " <> viaShow mSize
+                              ]
+                          )
+                    , "Response: "
+                        <> line
+                        <> indent
+                          4
+                          ( vsep
+                              [ "Status: " <> viaShow stat
+                              , "Headers: "
+                                  <> line
+                                  <> indent 4 (vsep $ map (\(k, v) -> viaShow k <> ": " <> viaShow v) heads)
+                              , "Body: " <> viaShow resp
+                              ]
+                          )
+                    , "Duration: " <> viaShow dur
+                    , line
+                    ]
             }
-    else defaultRequestLoggerSettings
-  let corsPolicy _req = Just simpleCorsResourcePolicy
-        { corsRequestHeaders = ["Authorization", "Content-Type"]}
+        else defaultRequestLoggerSettings
+  let corsPolicy _req =
+        Just
+          simpleCorsResourcePolicy
+            { corsRequestHeaders = ["Authorization", "Content-Type"]
+            }
   run (fromIntegral $ port http) . loggerMiddleware . cors corsPolicy $ \req respond ->
     let headers = requestHeaders req
         route

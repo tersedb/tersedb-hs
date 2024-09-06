@@ -15,11 +15,12 @@ import qualified Data.Text as T
 import qualified Data.Text.Lazy as LT
 import qualified Data.Text.Lazy.Encoding as LT
 import qualified Data.Text.Lazy.IO as LT
-import Lib.Api (Authorize (..), MutableAction, mutate)
+import Lib.Api.Action (MutableAction)
+import Lib.Api.Response (Authorize (..), mutate)
+import Lib.Async.Actions.Tabulation (loadTempFromStore)
 import Lib.Async.Types.Monad (TerseM)
 import qualified Lib.Async.Types.Store as Async
-import Lib.Async.Actions.Tabulation (loadTempFromStore)
-import Lib.Async.Types.Store.Iso (loadSyncStore, genSyncStore)
+import Lib.Async.Types.Store.Iso (genSyncStore, loadSyncStore)
 import Lib.Class (commit, resetTabulation)
 import qualified Lib.Sync.Types.Store as Sync
 import Lib.Types.Id (ActorId)

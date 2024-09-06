@@ -3,7 +3,8 @@ module Spec.Simple where
 import Data.Aeson (FromJSON, ToJSON)
 import qualified Data.Aeson as Aeson
 import Data.Data (Proxy (..))
-import Lib.Api (Action, Authorize, MutableAction, Response)
+import Lib.Api.Action (Action, MutableAction)
+import Lib.Api.Response (Authorize, Response)
 import Lib.Types.Id (AnyId, GroupId, IdWithPfx)
 import Lib.Types.Permission (
   CollectionPermission (..),
