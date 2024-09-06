@@ -1,15 +1,22 @@
 module Lib.Api.Action where
 
-import Lib.Api.Action.Read (ReadAction)
+import Control.Applicative ((<|>))
+import Data.Aeson (
+  FromJSON (parseJSON),
+  ToJSON (toJSON),
+  object,
+  withObject,
+  (.:),
+  (.=),
+ )
+import GHC.Generics (Generic)
 import Lib.Api.Action.Create (CreateAction (..))
+import Lib.Api.Action.Delete (DeleteAction)
+import Lib.Api.Action.Read (ReadAction)
 import Lib.Api.Action.Store (StoreAction (..))
 import Lib.Api.Action.Update (UpdateAction)
-import Lib.Api.Action.Delete (DeleteAction)
 import Lib.Types.Id (AnyId (..))
-import GHC.Generics (Generic)
 import Test.QuickCheck (Arbitrary (arbitrary), oneof)
-import Data.Aeson (ToJSON (toJSON), FromJSON (parseJSON), object, withObject, (.:), (.=))
-import Control.Applicative ((<|>))
 
 data Action
   = ReadAction ReadAction

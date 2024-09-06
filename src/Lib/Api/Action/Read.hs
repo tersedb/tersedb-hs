@@ -1,11 +1,19 @@
 module Lib.Api.Action.Read where
 
-import Lib.Types.Id (GroupId, ActorId, SpaceId, VersionId, EntityId)
-import GHC.Generics (Generic)
-import Test.QuickCheck (Arbitrary (arbitrary), oneof)
-import Data.Aeson (ToJSON (toJSON), FromJSON (parseJSON), object, withObject, (.:), (.=), Value (String))
 import Control.Applicative ((<|>))
+import Data.Aeson (
+  FromJSON (parseJSON),
+  ToJSON (toJSON),
+  Value (String),
+  object,
+  withObject,
+  (.:),
+  (.=),
+ )
 import Data.Aeson.Types (typeMismatch)
+import GHC.Generics (Generic)
+import Lib.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
+import Test.QuickCheck (Arbitrary (arbitrary), oneof)
 
 data ReadAction
   = ReadAllActors

@@ -1,10 +1,17 @@
 module Lib.Api.Action.Delete where
 
-import Lib.Types.Id (GroupId, ActorId, SpaceId, VersionId, EntityId)
-import GHC.Generics (Generic)
-import Test.QuickCheck (Arbitrary (arbitrary), oneof)
-import Data.Aeson (ToJSON (toJSON), FromJSON (parseJSON), object, withObject, (.:), (.=))
 import Control.Applicative ((<|>))
+import Data.Aeson (
+  FromJSON (parseJSON),
+  ToJSON (toJSON),
+  object,
+  withObject,
+  (.:),
+  (.=),
+ )
+import GHC.Generics (Generic)
+import Lib.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
+import Test.QuickCheck (Arbitrary (arbitrary), oneof)
 
 data DeleteAction
   = DeleteVersion VersionId

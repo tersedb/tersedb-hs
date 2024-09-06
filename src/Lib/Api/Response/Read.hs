@@ -1,13 +1,25 @@
 module Lib.Api.Response.Read where
 
-import Lib.Types.Id (GroupId, ActorId, SpaceId, VersionId, EntityId)
-import Lib.Types.Permission (CollectionPermissionWithExemption, CollectionPermission, SinglePermission)
-import GHC.Generics (Generic)
-import Test.QuickCheck (Arbitrary (arbitrary), oneof)
-import Data.Aeson (ToJSON (toJSON), FromJSON (parseJSON), object, withObject, (.:), (.=), Value (String))
 import Control.Applicative ((<|>))
+import Data.Aeson (
+  FromJSON (parseJSON),
+  ToJSON (toJSON),
+  Value (String),
+  object,
+  withObject,
+  (.:),
+  (.=),
+ )
 import Data.Aeson.Types (typeMismatch)
 import Data.Vector (Vector)
+import GHC.Generics (Generic)
+import Lib.Types.Id (ActorId, EntityId, GroupId, SpaceId, VersionId)
+import Lib.Types.Permission (
+  CollectionPermission,
+  CollectionPermissionWithExemption,
+  SinglePermission,
+ )
+import Test.QuickCheck (Arbitrary (arbitrary), oneof)
 
 data ReadResponse
   = DoesExist
@@ -80,8 +92,10 @@ instance FromJSON ReadResponse where
       (PermissionWithExemption <$> parseJSON json)
         <|> (Permission <$> parseJSON json)
     goGP json =
-      (do (Nothing :: Maybe ()) <- parseJSON json
-          pure (GroupPermission Nothing))
+      ( do
+          (Nothing :: Maybe ()) <- parseJSON json
+          pure (GroupPermission Nothing)
+      )
         <|> (GroupPermission . Just . Left <$> parseJSON json)
         <|> (GroupPermission . Just . Right <$> parseJSON json)
     goPS o =

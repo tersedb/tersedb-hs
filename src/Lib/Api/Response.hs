@@ -1,23 +1,30 @@
 module Lib.Api.Response where
 
+import Control.Applicative ((<|>))
+import Data.Aeson (
+  FromJSON (parseJSON),
+  ToJSON (toJSON),
+  Value (String),
+  object,
+  withObject,
+  (.:),
+  (.=),
+ )
+import Data.Aeson.Types (typeMismatch)
+import Data.List.NonEmpty (NonEmpty)
+import Data.Vector (Vector)
+import qualified Data.Vector as V
+import qualified DeferredFolds.UnfoldlM as UnfoldlM
+import GHC.Generics (Generic)
 import Lib.Api.Action (Action (..), MutableAction (..), toMutate)
+import Lib.Api.Action.Delete (DeleteAction (..))
 import Lib.Api.Action.Read (ReadAction (..))
 import Lib.Api.Action.Store (StoreAction (..))
 import Lib.Api.Action.Update (UpdateAction (..))
-import Lib.Api.Action.Delete (DeleteAction (..))
-import Lib.Api.Response.Read (ReadResponse (..))
 import Lib.Api.Response.Create (CreateResponse, toCreateResponse)
-import Lib.Types.Id (ActorId, AnyId)
-import GHC.Generics (Generic)
-import Test.QuickCheck (Arbitrary (arbitrary), oneof)
-import Data.Aeson (ToJSON (toJSON), FromJSON (parseJSON), object, withObject, (.:), (.=), Value (String))
-import Control.Applicative ((<|>))
-import Data.Aeson.Types (typeMismatch)
-import Data.List.NonEmpty (NonEmpty)
-import qualified DeferredFolds.UnfoldlM as UnfoldlM
-import Data.Vector (Vector)
-import qualified Data.Vector as V
+import Lib.Api.Response.Read (ReadResponse (..))
 import Lib.Class (
+  TerseDB,
   actorExists,
   addMember,
   addReference,
@@ -29,33 +36,38 @@ import Lib.Class (
   moveEntity,
   offsetVersionIndex,
   readActors,
+  readAllEntityPermission,
+  readAllGroupPermission,
+  readAllMemberPermission,
+  readAllSpacePermission,
   readEntities,
   readEntityPermission,
-  readTabEntityPermission,
   readForkOf,
   readForkedBy,
   readGroupPermission,
-  readTabGroupPermission,
   readGroups,
   readMemberPermission,
-  readTabMemberPermission,
   readMembers,
   readMembersOf,
   readNextGroups,
   readOrganizationPermission,
-  readTabOrganizationPermission,
   readPrevGroup,
   readRecruiterPermission,
-  readTabRecruiterPermission,
   readReferences,
   readReferencesFrom,
+  readRootGroups,
   readSpacePermission,
-  readTabSpacePermission,
   readSpaces,
   readSubscriptions,
   readSubscriptionsFrom,
-  readUniversePermission,
+  readTabEntityPermission,
+  readTabGroupPermission,
+  readTabMemberPermission,
+  readTabOrganizationPermission,
+  readTabRecruiterPermission,
+  readTabSpacePermission,
   readTabUniversePermission,
+  readUniversePermission,
   readVersions,
   removeActor,
   removeEntity,
@@ -82,8 +94,10 @@ import Lib.Class (
   unlinkGroups,
   updateFork,
   updateGroupParent,
-  versionExists, readRootGroups, TerseDB, readAllSpacePermission, readAllEntityPermission, readAllGroupPermission, readAllMemberPermission,
+  versionExists,
  )
+import Lib.Types.Id (ActorId, AnyId)
+import Test.QuickCheck (Arbitrary (arbitrary), oneof)
 
 data Response
   = ReadResponse ReadResponse

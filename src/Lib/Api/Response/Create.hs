@@ -1,11 +1,18 @@
 module Lib.Api.Response.Create where
 
-import Lib.Api.Action.Create (CreateAction (..))
-import Lib.Types.Id (GroupId, ActorId, SpaceId, VersionId, EntityId, AnyId (..))
-import GHC.Generics (Generic)
-import Test.QuickCheck (Arbitrary (arbitrary), oneof)
-import Data.Aeson (ToJSON (toJSON), FromJSON (parseJSON), object, withObject, (.:), (.=))
 import Control.Applicative ((<|>))
+import Data.Aeson (
+  FromJSON (parseJSON),
+  ToJSON (toJSON),
+  object,
+  withObject,
+  (.:),
+  (.=),
+ )
+import GHC.Generics (Generic)
+import Lib.Api.Action.Create (CreateAction (..))
+import Lib.Types.Id (ActorId, AnyId (..), EntityId, GroupId, SpaceId, VersionId)
+import Test.QuickCheck (Arbitrary (arbitrary), oneof)
 
 data CreateResponse
   = NewActor ActorId

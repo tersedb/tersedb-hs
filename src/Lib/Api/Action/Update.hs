@@ -1,11 +1,22 @@
 module Lib.Api.Action.Update where
 
-import Lib.Types.Id (GroupId, SpaceId, VersionId, EntityId)
-import Lib.Types.Permission (CollectionPermissionWithExemption, CollectionPermission, SinglePermission)
-import GHC.Generics (Generic)
-import Test.QuickCheck (Arbitrary (arbitrary), oneof)
-import Data.Aeson (ToJSON (toJSON), FromJSON (parseJSON), object, withObject, (.:), (.=))
 import Control.Applicative ((<|>))
+import Data.Aeson (
+  FromJSON (parseJSON),
+  ToJSON (toJSON),
+  object,
+  withObject,
+  (.:),
+  (.=),
+ )
+import GHC.Generics (Generic)
+import Lib.Types.Id (EntityId, GroupId, SpaceId, VersionId)
+import Lib.Types.Permission (
+  CollectionPermission,
+  CollectionPermissionWithExemption,
+  SinglePermission,
+ )
+import Test.QuickCheck (Arbitrary (arbitrary), oneof)
 
 data UpdateAction
   = AddReference VersionId VersionId
@@ -83,18 +94,18 @@ instance FromJSON UpdateAction where
       <|> ((\o -> UnlinkGroups <$> o .: "f" <*> o .: "t") =<< o .: "unG")
       <|> ((\o -> UpdateGroupPrev <$> o .: "g" <*> o .: "p") =<< o .: "pvG")
       <|> (goP =<< o .: "p")
-    where
-      goP o =
-        ((\o -> SetUniversePermission <$> o .: "g" <*> o .: "p") =<< o .: "u")
-          <|> ((\o -> SetOrganizationPermission <$> o .: "g" <*> o .: "p") =<< o .: "o")
-          <|> ((\o -> SetRecruiterPermission <$> o .: "g" <*> o .: "p") =<< o .: "r")
-          <|> ( (\o -> SetSpacePermission <$> o .: "g" <*> o .: "s" <*> o .: "p") =<< o .: "s"
-              )
-          <|> ( (\o -> SetEntityPermission <$> o .: "g" <*> o .: "s" <*> o .: "p")
-                  =<< o .: "e"
-              )
-          <|> ( (\o -> SetGroupPermission <$> o .: "g" <*> o .: "s" <*> o .: "p") =<< o .: "g"
-              )
-          <|> ( (\o -> SetMemberPermission <$> o .: "g" <*> o .: "s" <*> o .: "p")
-                  =<< o .: "m"
-              )
+   where
+    goP o =
+      ((\o -> SetUniversePermission <$> o .: "g" <*> o .: "p") =<< o .: "u")
+        <|> ((\o -> SetOrganizationPermission <$> o .: "g" <*> o .: "p") =<< o .: "o")
+        <|> ((\o -> SetRecruiterPermission <$> o .: "g" <*> o .: "p") =<< o .: "r")
+        <|> ( (\o -> SetSpacePermission <$> o .: "g" <*> o .: "s" <*> o .: "p") =<< o .: "s"
+            )
+        <|> ( (\o -> SetEntityPermission <$> o .: "g" <*> o .: "s" <*> o .: "p")
+                =<< o .: "e"
+            )
+        <|> ( (\o -> SetGroupPermission <$> o .: "g" <*> o .: "s" <*> o .: "p") =<< o .: "g"
+            )
+        <|> ( (\o -> SetMemberPermission <$> o .: "g" <*> o .: "s" <*> o .: "p")
+                =<< o .: "m"
+            )
