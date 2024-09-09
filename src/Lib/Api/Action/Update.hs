@@ -66,8 +66,8 @@ instance ToJSON UpdateAction where
     RemoveReference vId ref -> object ["rmR" .= object ["v" .= vId, "r" .= ref]]
     AddSubscription vId sub -> object ["addS" .= object ["v" .= vId, "s" .= sub]]
     RemoveSubscription vId sub -> object ["rmS" .= object ["v" .= vId, "s" .= sub]]
-    ChangeFork eId mFork -> object ["chF" .= object ["e" .= eId, "f" .= mFork]]
-    MoveEntity eId sId -> object ["mvE" .= object ["e" .= eId, "s" .= sId]]
+    ChangeFork eId mFork -> object ["e" .= object ["e" .= eId, "f" .= mFork]]
+    MoveEntity eId sId -> object ["e" .= object ["e" .= eId, "s" .= sId]]
     OffsetVersion vId offset -> object ["ofV" .= object ["v" .= vId, "o" .= offset]]
     SetVersionIndex vId idx -> object ["stV" .= object ["v" .= vId, "i" .= idx]]
     SetUniversePermission gId p -> object ["p" .= object ["u" .= object ["g" .= gId, "p" .= p]]]
@@ -86,8 +86,7 @@ instance FromJSON UpdateAction where
       <|> ((\o -> RemoveReference <$> o .: "v" <*> o .: "r") =<< o .: "rmR")
       <|> ((\o -> AddSubscription <$> o .: "v" <*> o .: "s") =<< o .: "addS")
       <|> ((\o -> RemoveSubscription <$> o .: "v" <*> o .: "s") =<< o .: "rmS")
-      <|> ((\o -> ChangeFork <$> o .: "e" <*> o .: "f") =<< o .: "chF")
-      <|> ((\o -> MoveEntity <$> o .: "e" <*> o .: "s") =<< o .: "mvE")
+      <|> (goE =<< o .: "e")
       <|> ((\o -> OffsetVersion <$> o .: "v" <*> o .: "o") =<< o .: "ofV")
       <|> ((\o -> SetVersionIndex <$> o .: "v" <*> o .: "i") =<< o .: "stV")
       <|> ((\o -> LinkGroups <$> o .: "f" <*> o .: "t") =<< o .: "lkG")
@@ -95,6 +94,9 @@ instance FromJSON UpdateAction where
       <|> ((\o -> UpdateGroupPrev <$> o .: "g" <*> o .: "p") =<< o .: "pvG")
       <|> (goP =<< o .: "p")
    where
+    goE o =
+      (ChangeFork <$> o .: "e" <*> o .: "f")
+        <|> (MoveEntity <$> o .: "e" <*> o .: "s")
     goP o =
       ((\o -> SetUniversePermission <$> o .: "g" <*> o .: "p") =<< o .: "u")
         <|> ((\o -> SetOrganizationPermission <$> o .: "g" <*> o .: "p") =<< o .: "o")

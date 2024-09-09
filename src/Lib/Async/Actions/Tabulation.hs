@@ -152,7 +152,7 @@ updateTabulatedPermissionsStartingAt gId = do
   liftBaseWith $ \runInBase ->
     forM_
       (Multimap.unfoldlMByKey gId (s ^. store . toGroupsNext))
-      (void . runInBase . updateTabulatedPermissionsStartingAt)
+      (runInBase . updateTabulatedPermissionsStartingAt)
 
 resetTabulation :: TerseM STM ()
 resetTabulation = do
@@ -160,7 +160,7 @@ resetTabulation = do
   liftBaseWith $ \runInBase ->
     forM_
       (Set.unfoldlM (s ^. store . toRoots))
-      (void . runInBase . updateTabulatedPermissionsStartingAt)
+      (runInBase . updateTabulatedPermissionsStartingAt)
 
 loadRefsAndSubs :: VersionId -> TerseM STM ()
 loadRefsAndSubs vId = do

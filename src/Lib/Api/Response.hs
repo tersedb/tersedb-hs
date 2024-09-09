@@ -94,7 +94,7 @@ import Lib.Class (
   unlinkGroups,
   updateFork,
   updateGroupParent,
-  versionExists,
+  versionExists, readEntitySpace,
  )
 import Lib.Types.Id (ActorId, AnyId)
 import Test.QuickCheck (Arbitrary (arbitrary), oneof)
@@ -193,6 +193,8 @@ makeResponse actors action mId = case action of
           traverse (fmap Entities . unfoldlMToVector) =<< readEntities actors sId
         ReadEntity eId ->
           fmap boolToExists <$> entityExists actors eId
+        ReadEntitySpace eId ->
+          fmap (maybe DoesNotExist (Spaces . V.singleton)) <$> readEntitySpace actors eId
         ReadAllVersions eId ->
           traverse (fmap Versions . unfoldlMToVector) =<< readVersions actors eId
         ReadVersion vId ->
