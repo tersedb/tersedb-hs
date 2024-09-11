@@ -69,6 +69,7 @@ import Lib.Class (
   readTabUniversePermission,
   readUniversePermission,
   readVersions,
+  readVersionEntity,
   removeActor,
   removeEntity,
   removeGroup,
@@ -199,6 +200,8 @@ makeResponse actors action mId = case action of
           traverse (fmap Versions . unfoldlMToVector) =<< readVersions actors eId
         ReadVersion vId ->
           fmap boolToExists <$> versionExists actors vId
+        ReadVersionEntity vId ->
+          fmap (maybe DoesNotExist (Entities . V.singleton)) <$> readVersionEntity actors vId
         ReadReferences vId ->
           traverse (fmap Versions . unfoldlMToVector) =<< readReferences actors vId
         ReadReferencesOf vId ->

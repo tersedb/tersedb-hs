@@ -226,6 +226,7 @@ class (Monad m) => TerseDB n m | m -> n where
   unsafeReadEntitySpace :: EntityId -> m (Maybe SpaceId)
   unsafeReadVersionsEager :: EntityId -> m (UnfoldlM m VersionId)
   unsafeReadVersionsLazy :: EntityId -> m (ListT m VersionId)
+  unsafeReadVersionEntity :: VersionId -> m (Maybe EntityId)
   unsafeStoreGroup :: GroupId -> m ()
   unsafeStoreActor :: ActorId -> m ()
   unsafeAddMember :: GroupId -> ActorId -> m ()
@@ -464,6 +465,9 @@ instance (MonadThrow m) => TerseDB (Sync.TerseM m) (Sync.TerseM m) where
     pure $ s ^? Sync.temp . Sync.toSpaceOf . ix eId
   unsafeReadVersionsEager = Sync.unsafeReadVersionsEager
   unsafeReadVersionsLazy = Sync.unsafeReadVersionsLazy
+  unsafeReadVersionEntity vId = do
+    s <- get
+    pure $ s ^? Sync.temp . Sync.toEntityOf . ix vId
   unsafeStoreGroup = Sync.unsafeStoreGroup
   unsafeStoreActor = Sync.unsafeStoreActor
   unsafeAddMember = Sync.unsafeAddMember
@@ -764,6 +768,9 @@ instance TerseDB (Async.TerseM IO) (Async.TerseM STM) where
     liftBase $ Map.lookup eId $ s ^. Async.temp . Async.toSpaceOf
   unsafeReadVersionsEager = Async.unsafeReadVersionsEager
   unsafeReadVersionsLazy = Async.unsafeReadVersionsLazy
+  unsafeReadVersionEntity vId = do
+    s <- ask
+    liftBase $ Map.lookup vId $ s ^. Async.temp . Async.toEntityOf
   unsafeStoreGroup = Async.unsafeStoreGroup
   unsafeStoreActor = Async.unsafeStoreActor
   unsafeAddMember = Async.unsafeAddMember
@@ -1213,6 +1220,14 @@ readVersions readers eId = do
   if not canAdjust
     then pure Nothing
     else Just <$> unsafeReadVersionsEager eId
+
+readVersionEntity
+  :: (TerseDB n m) => NonEmpty ActorId -> VersionId -> m (Maybe (Maybe EntityId))
+readVersionEntity readers vId = do
+  canAdjust <- anyCanReadVersion readers vId
+  if not canAdjust
+    then pure Nothing
+    else Just <$> unsafeReadVersionEntity vId
 
 -- * Store
 

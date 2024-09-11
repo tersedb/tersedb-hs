@@ -33,6 +33,7 @@ data ReadAction
   | ReadEntitySpace EntityId
   | ReadAllVersions EntityId
   | ReadVersion VersionId
+  | ReadVersionEntity VersionId
   | ReadReferences VersionId
   | ReadReferencesOf VersionId
   | ReadSubscriptions VersionId
@@ -78,6 +79,7 @@ instance Arbitrary ReadAction where
       , ReadEntitySpace <$> arbitrary
       , ReadAllVersions <$> arbitrary
       , ReadVersion <$> arbitrary
+      , ReadVersionEntity <$> arbitrary
       , ReadReferences <$> arbitrary
       , ReadReferencesOf <$> arbitrary
       , ReadSubscriptions <$> arbitrary
@@ -122,6 +124,7 @@ instance ToJSON ReadAction where
     ReadEntitySpace eId -> object ["e" .= object ["s" .= eId]]
     ReadAllVersions eId -> object ["v" .= eId]
     ReadVersion vId -> object ["v" .= vId]
+    ReadVersionEntity vId -> object ["v" .= object ["e" .= vId]]
     ReadReferences vId -> object ["ref" .= vId]
     ReadReferencesOf vId -> object ["refOf" .= vId]
     ReadSubscriptions vId -> object ["sub" .= vId]
@@ -204,6 +207,7 @@ instance FromJSON ReadAction where
     onV json =
       (ReadAllVersions <$> parseJSON json)
         <|> (ReadVersion <$> parseJSON json)
+        <|> ((\o -> ReadVersionEntity <$> o .: "e") =<< parseJSON json)
     onSub json =
       (ReadSubscriptions <$> parseJSON json)
         <|> (ReadSubscriptionsOf <$> parseJSON json)
