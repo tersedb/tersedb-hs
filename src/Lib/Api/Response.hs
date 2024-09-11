@@ -42,6 +42,7 @@ import Lib.Class (
   readAllSpacePermission,
   readEntities,
   readEntityPermission,
+  readEntitySpace,
   readForkOf,
   readForkedBy,
   readGroupPermission,
@@ -68,8 +69,8 @@ import Lib.Class (
   readTabSpacePermission,
   readTabUniversePermission,
   readUniversePermission,
-  readVersions,
   readVersionEntity,
+  readVersions,
   removeActor,
   removeEntity,
   removeGroup,
@@ -95,7 +96,7 @@ import Lib.Class (
   unlinkGroups,
   updateFork,
   updateGroupParent,
-  versionExists, readEntitySpace,
+  versionExists,
  )
 import Lib.Types.Id (ActorId, AnyId)
 import Test.QuickCheck (Arbitrary (arbitrary), oneof)
@@ -201,7 +202,8 @@ makeResponse actors action mId = case action of
         ReadVersion vId ->
           fmap boolToExists <$> versionExists actors vId
         ReadVersionEntity vId ->
-          fmap (maybe DoesNotExist (Entities . V.singleton)) <$> readVersionEntity actors vId
+          fmap (maybe DoesNotExist (Entities . V.singleton))
+            <$> readVersionEntity actors vId
         ReadReferences vId ->
           traverse (fmap Versions . unfoldlMToVector) =<< readReferences actors vId
         ReadReferencesOf vId ->
